@@ -10,6 +10,9 @@ technically was data quality: stations move, and I had to splice their series."
 
 ## The demo (5 minutes)
 
+Live site: https://meteoreading-fqwbevysja-ew.a.run.app (open it a minute before the interview: the first visit
+after a quiet period wakes the instance up).
+
 1. **Overview**: the 4 key figures, then the warming stripes. Hover over 2022.
 2. **Explore a city**: Paris vs Marseille, then switch to "Anomaly": the two curves overlap, the warming is the
    same despite very different climates. Point to the p-value under the chart.
