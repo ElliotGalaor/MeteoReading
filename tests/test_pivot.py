@@ -88,3 +88,17 @@ def test_filter_choices_and_year_bounds(con):
     assert filter_values(con, "yearly", "city") == ["A", "B"]
     assert year_range(con, "yearly") == (1990, 1993)
     assert year_range(con, "stations") is None
+
+
+def test_empty_cells_keep_the_page_colour(con, monkeypatch):
+    """A colour map paints missing values in transparent black, which pandas writes as opaque black (#000000)."""
+    monkeypatch.syspath_prepend("dashboard")
+    import pivot_page
+
+    r = run_pivot(con, spec(column="year", years=(1990, 1992)))     # city B has no value for 1992
+    styler = pivot_page._style(r, pivot_page.CATALOG["yearly"].measures["tmean"], colour=True)
+    styler._compute()
+    cols = list(r.table.columns)
+    empty = dict(styler.ctx[(1, cols.index("1992"))])
+    assert empty["background-color"] == pivot_page.SURFACE
+    assert dict(styler.ctx[(0, cols.index("1992"))])["background-color"] not in ("#000000", pivot_page.SURFACE)
