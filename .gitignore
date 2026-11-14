@@ -1,0 +1,13 @@
+# Environnement
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Données : régénérées par `python -m meteo all` (~270 Mo bruts, ~300 Mo d'entrepôt)
+data/
+
+# Les résultats (reports/) sont versionnés pour être consultables sans relancer le pipeline
+
+# Réglages locaux de l outil d aperçu
+.claude/

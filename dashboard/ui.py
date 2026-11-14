@@ -1,0 +1,195 @@
+"""Briques communes du dashboard : accès aux données, thème Plotly, mise en forme."""
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+import duckdb
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.io as pio
+import streamlit as st
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from meteo.config import load_config  # noqa: E402
+from meteo.fmt import fr, pvalue, sfr  # noqa: E402,F401
+from meteo.palette import (  # noqa: E402,F401
+    AXIS, COOL, DIVERGING_STOPS, GRID, HEAT_STOPS, INK, INK2, MUTED, NEUTRAL, RAIN_STOPS,
+    SERIES, SURFACE, WARM,
+)
+
+CFG = load_config(ROOT / "config.yaml")
+A = CFG.analysis
+START, END = A["start_year"], A["end_year"]
+REF = tuple(A["reference_period"])
+OLD = tuple(A["old_period"])
+RECENT = tuple(A["recent_period"])
+TH = CFG.thresholds
+
+
+# --- Données -----------------------------------------------------------------
+def warehouse_ready() -> bool:
+    return CFG.warehouse.exists() and (CFG.reports_dir / "resultats.json").exists()
+
+
+def _connect() -> duckdb.DuckDBPyConnection:
+    """Lecture seule et sans accès aux fichiers du disque : le dashboard ne peut rien modifier."""
+    return duckdb.connect(str(CFG.warehouse), read_only=True, config={"enable_external_access": False})
+
+
+@st.cache_data(show_spinner=False)
+def query(sql: str) -> pd.DataFrame:
+    with _connect() as con:
+        return con.sql(sql).df()
+
+
+@st.cache_data(show_spinner=False)
+def table(name: str) -> pd.DataFrame:
+    df = query(f"SELECT * FROM {name}")
+    for col in ("date", "start_date", "end_date", "first_date", "last_date"):
+        if col in df:
+            df[col] = pd.to_datetime(df[col])
+    return df
+
+
+@st.cache_data(show_spinner=False)
+def results() -> dict:
+    return json.loads((CFG.reports_dir / "resultats.json").read_text(encoding="utf-8"))
+
+
+@st.cache_data(show_spinner=False)
+def era5() -> pd.DataFrame | None:
+    p = CFG.reports_dir / "tables" / "era5_validation.csv"
+    return pd.read_csv(p) if p.exists() else None
+
+
+def run_user_sql(sql: str, max_rows: int = 10_000) -> pd.DataFrame:
+    """Requête libre saisie dans la page SQL (même connexion protégée)."""
+    with _connect() as con:
+        rel = con.sql(sql)
+        if rel is None:
+            raise ValueError("Seules les requêtes de lecture (SELECT, WITH, PIVOT…) sont acceptées.")
+        return rel.limit(max_rows).df()
+
+
+def example_queries() -> dict[str, str]:
+    """Découpe sql/analyses_exemples.sql en {titre: requête}."""
+    text = (ROOT / "sql" / "analyses_exemples.sql").read_text(encoding="utf-8")
+    out = {}
+    for block in [b.strip() for b in text.split(";") if b.strip()]:
+        lines = block.splitlines()
+        title = lines[0][2:].strip() if lines[0].startswith("--") else block[:60]
+        out[title] = "\n".join(lines[1:] if lines[0].startswith("--") else lines).strip()
+    return out
+
+
+# --- Couleurs stables par ville (la couleur suit la ville, pas son rang) --------
+def city_colors(selected: list[str], key: str) -> dict[str, str]:
+    slots: dict[str, int] = st.session_state.setdefault(f"slots_{key}", {})
+    for c in list(slots):
+        if c not in selected:
+            del slots[c]
+    for c in selected:
+        if c not in slots:
+            slots[c] = min(set(range(len(SERIES))) - set(slots.values()))
+    return {c: SERIES[slots[c]] for c in selected}
+
+
+# --- Thème Plotly --------------------------------------------------------------
+FONT = "Segoe UI, system-ui, -apple-system, Helvetica, Arial, sans-serif"
+pio.templates["meteo"] = go.layout.Template(layout=dict(
+    font=dict(family=FONT, color=INK2, size=13),
+    paper_bgcolor=SURFACE, plot_bgcolor=SURFACE,
+    colorway=SERIES,
+    separators=", ",
+    xaxis=dict(gridcolor=GRID, linecolor=AXIS, showline=True, zeroline=False, ticks="", automargin=True,
+               tickfont=dict(color=INK2), title=dict(font=dict(color=INK2))),
+    yaxis=dict(gridcolor=GRID, linecolor=AXIS, showline=False, zeroline=False, ticks="", automargin=True,
+               tickfont=dict(color=INK2), title=dict(font=dict(color=INK2))),
+    hoverlabel=dict(bgcolor="#ffffff", bordercolor=AXIS, font=dict(family=FONT, color=INK, size=13)),
+    legend=dict(orientation="h", yanchor="bottom", y=1.01, x=0, title_text="", font=dict(color=INK)),
+    margin=dict(l=64, r=16, t=40, b=44),
+))
+pio.templates.default = "meteo"
+
+PLOTLY_CONFIG = {"displaylogo": False, "locale": "fr",
+                 "modeBarButtonsToRemove": ["lasso2d", "select2d", "autoScale2d"]}
+
+
+def colorscale(stops: list[str]) -> list[list]:
+    return [[i / (len(stops) - 1), c] for i, c in enumerate(stops)]
+
+
+DIVERGING = colorscale(DIVERGING_STOPS)
+HEAT = colorscale(HEAT_STOPS)
+RAIN = colorscale(RAIN_STOPS)
+
+
+def chart(fig: go.Figure, height: int = 420, title: str | None = None, subtitle: str | None = None,
+          margin: dict | None = None) -> None:
+    """Titre et sous-titre en HTML au-dessus du graphique : ils se replient sur petit écran."""
+    if title:
+        sub = f"<div class='chart-sub'>{subtitle}</div>" if subtitle else ""
+        st.markdown(f"<div class='chart-title'>{title}</div>{sub}", unsafe_allow_html=True)
+    has_legend = any(t.showlegend is not False for t in fig.data) and len(fig.data) > 1
+    fig.update_layout(height=height, margin={"t": 40 if has_legend else 12, **(margin or {})})
+    st.plotly_chart(fig, theme=None, config=PLOTLY_CONFIG)
+
+
+def signed_color(values) -> list[str]:
+    return [WARM if v >= 0 else COOL for v in values]
+
+
+# --- Style de la page ------------------------------------------------------------
+CSS = f"""
+<style>
+  .block-container {{ padding-top: 2.2rem; max-width: 1280px; }}
+  h1, h2, h3 {{ color: {INK}; letter-spacing: -0.01em; }}
+  [data-testid="stMetricValue"] {{ font-size: 1.9rem; color: {INK}; }}
+  [data-testid="stMetricLabel"] p {{ color: {INK2}; font-size: 0.9rem; }}
+  .kpi-note {{ color: {INK2}; font-size: 0.82rem; margin-top: -0.6rem; }}
+  .lead {{ color: {INK2}; font-size: 1.05rem; margin-top: -0.6rem; margin-bottom: 1.2rem; }}
+  .finding {{ border-left: 3px solid {SERIES[0]}; padding: 0.35rem 0 0.35rem 0.8rem; margin: 0.45rem 0;
+              color: {INK}; }}
+  .finding b {{ color: {INK}; }}
+  .source {{ color: {MUTED}; font-size: 0.78rem; }}
+  .stTextArea textarea {{ font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 0.88rem; }}
+  .chart-title {{ color: {INK}; font-weight: 600; font-size: 1.08rem; margin-top: 0.8rem; line-height: 1.35; }}
+  .chart-sub {{ color: {INK2}; font-size: 0.88rem; margin-top: 0.1rem; line-height: 1.4; }}
+</style>
+"""
+
+
+def page_header(title: str, lead: str) -> None:
+    st.markdown(CSS, unsafe_allow_html=True)
+    st.title(title)
+    st.markdown(f"<div class='lead'>{lead}</div>", unsafe_allow_html=True)
+
+
+def source_note(extra: str = "") -> None:
+    st.markdown(f"<div class='source'>Source : Météo-France, données climatologiques quotidiennes "
+                f"(data.gouv.fr, licence Etalab 2.0){extra}.</div>", unsafe_allow_html=True)
+
+
+def rolling(series: pd.Series, window: int = 10) -> pd.Series:
+    return series.rolling(window, center=True, min_periods=max(3, window // 2 + 1)).mean()
+
+
+def doy_climatology(daily: pd.DataFrame, col: str, ref: tuple[int, int], half_window: int = 15) -> pd.DataFrame:
+    """Normale journalière lissée (moyenne, 10e et 90e centiles) sur une fenêtre de ±15 jours."""
+    d = daily[daily["date"].dt.year.between(*ref)][["date", col]].dropna()
+    d = d[~((d["date"].dt.month == 2) & (d["date"].dt.day == 29))]
+    doy = d["date"].dt.day_of_year - ((d["date"].dt.is_leap_year) & (d["date"].dt.month > 2)).astype(int)
+    values = [[] for _ in range(365)]
+    for day, v in zip(doy.to_numpy() - 1, d[col].to_numpy()):
+        values[day].append(v)
+    rows = []
+    for i in range(365):
+        window = np.concatenate([values[(i + k) % 365] for k in range(-half_window, half_window + 1)])
+        rows.append((i + 1, window.mean(), np.percentile(window, 10), np.percentile(window, 90)))
+    return pd.DataFrame(rows, columns=["doy", "mean", "p10", "p90"])

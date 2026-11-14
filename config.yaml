@@ -1,0 +1,78 @@
+# ---------------------------------------------------------------------------
+# Configuration du pipeline Météo Analytics
+# Tout le comportement du projet se règle ici : aucune valeur "en dur" dans le code.
+# ---------------------------------------------------------------------------
+
+source:
+  # Jeu de données officiel Météo-France publié sur data.gouv.fr
+  # "Données climatologiques de base - quotidiennes" (licence Etalab 2.0)
+  dataset_api: https://www.data.gouv.fr/api/1/datasets/donnees-climatologiques-de-base-quotidiennes/
+  # Fichiers à récupérer par département :
+  #   previous = 1950 → année N-2, latest = année N-1 → aujourd'hui, avant = avant 1949
+  periods: [previous, latest]
+  # Départements téléchargés EN PLUS de ceux des villes ci-dessous ("all" = toute la France)
+  extra_departments: []
+  # Nombre de téléchargements simultanés
+  workers: 6
+
+paths:
+  raw: data/raw                    # couche "bronze" : fichiers bruts immuables + manifeste
+  warehouse: data/warehouse.duckdb # base analytique (couches silver / gold)
+  reports: reports                 # rapport HTML, figures, résultats JSON
+
+analysis:
+  start_year: 1951                 # première année analysée
+  end_year: 2025                   # dernière année complète
+  reference_period: [1991, 2020]   # normale climatique OMM actuelle
+  old_period: [1961, 1990]         # ancienne normale, pour comparer
+  recent_period: [2011, 2025]      # 15 dernières années
+  station_min_completeness: 0.85   # part minimale de jours avec TN et TX sur la période
+  station_max_distance_km: 40      # rayon de recherche autour du centre-ville
+  station_max_altitude_diff_m: 200 # écart d'altitude max entre station et centre-ville
+  month_min_completeness: 0.90     # un mois est valide si >= 90 % des jours sont renseignés
+  year_min_completeness: 0.95      # une année est valide si >= 95 % des jours sont renseignés
+
+thresholds:                        # seuils des indicateurs d'extrêmes (°C ou mm)
+  hot_day: 30                      # journée chaude : TX >= 30 °C
+  very_hot_day: 35                 # journée très chaude : TX >= 35 °C
+  tropical_night: 20               # nuit tropicale : TN >= 20 °C
+  frost_day: 0                     # jour de gel : TN < 0 °C
+  rain_day: 1                      # jour de pluie : RR >= 1 mm
+  heavy_rain: 20                   # forte pluie : RR >= 20 mm
+  heatwave_min_days: 3             # épisode de chaleur : >= 3 jours consécutifs avec TX >= 30 °C
+
+era5:                              # validation croisée avec la réanalyse ERA5 (API Open-Meteo)
+  api: https://archive-api.open-meteo.com/v1/archive
+  start: "2015-01-01"
+  end: "2024-12-31"
+  max_weighted_calls_per_minute: 400  # quota gratuit = 600/min, on garde une marge
+
+# 20 grandes villes couvrant les principaux climats français.
+# alt : altitude du centre-ville (m), pour écarter les stations de montagne voisines.
+# stations (facultatif) : impose la station de référence, ou une CHAÎNE de stations
+#   par ordre de priorité quand une station a déménagé. Les stations secondaires
+#   sont corrigées du biais moyen mesuré sur la période où elles recouvrent la principale.
+#   - Reims : Reims-Courcy ferme en 2014 -> relais par Reims-Prunay (ouverte en 2012)
+#   - Grenoble : St-Geoirs a des trous avant 1970 -> complétée par Grenoble-Eybens (1950-1968)
+#   - Limoges : Le Palais-sur-Vienne a des jours manquants -> comblés par Limoges-Bellegarde puis Feytiat
+cities:
+  - {name: Paris,            dep: "75", lat: 48.8566, lon: 2.3522, alt: 35}
+  - {name: Marseille,        dep: "13", lat: 43.2965, lon: 5.3698, alt: 12}
+  - {name: Lyon,             dep: "69", lat: 45.7640, lon: 4.8357, alt: 175}
+  - {name: Toulouse,         dep: "31", lat: 43.6047, lon: 1.4442, alt: 146}
+  - {name: Nice,             dep: "06", lat: 43.7102, lon: 7.2620, alt: 10}
+  - {name: Nantes,           dep: "44", lat: 47.2184, lon: -1.5536, alt: 20}
+  - {name: Strasbourg,       dep: "67", lat: 48.5734, lon: 7.7521, alt: 142}
+  - {name: Montpellier,      dep: "34", lat: 43.6108, lon: 3.8767, alt: 27}
+  - {name: Bordeaux,         dep: "33", lat: 44.8378, lon: -0.5792, alt: 15}
+  - {name: Lille,            dep: "59", lat: 50.6292, lon: 3.0573, alt: 25}
+  - {name: Rennes,           dep: "35", lat: 48.1173, lon: -1.6778, alt: 40}
+  - {name: Brest,            dep: "29", lat: 48.3904, lon: -4.4861, alt: 50}
+  - {name: Clermont-Ferrand, dep: "63", lat: 45.7772, lon: 3.0870, alt: 358}
+  - {name: Dijon,            dep: "21", lat: 47.3220, lon: 5.0415, alt: 245}
+  - {name: Ajaccio,          dep: "20", lat: 41.9192, lon: 8.7386, alt: 20}
+  - {name: Grenoble,         dep: "38", lat: 45.1885, lon: 5.7245, alt: 212, stations: ["38384001", "38158001"]}
+  - {name: Limoges,          dep: "87", lat: 45.8336, lon: 1.2611, alt: 294, stations: ["87113001", "87085006", "87085001"]}
+  - {name: Perpignan,        dep: "66", lat: 42.6887, lon: 2.8948, alt: 30}
+  - {name: Reims,            dep: "51", lat: 49.2583, lon: 4.0317, alt: 83, stations: ["51449002", "51183001"]}
+  - {name: Biarritz,         dep: "64", lat: 43.4832, lon: -1.5586, alt: 30}

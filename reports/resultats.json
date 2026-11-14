@@ -1,0 +1,2040 @@
+{
+  "warming": {
+    "france_trend_1951": {
+      "slope": 0.3315,
+      "ci_low": 0.278,
+      "ci_high": 0.385,
+      "p_value": 0.0,
+      "r2": 0.6763,
+      "sen_slope": 0.3345,
+      "mk_tau": 0.6115,
+      "mk_p_value": 0.0,
+      "n": 75,
+      "significant": true
+    },
+    "france_trend_1981": {
+      "slope": 0.4275,
+      "ci_low": 0.3141,
+      "ci_high": 0.5409,
+      "p_value": 0.0,
+      "r2": 0.5734,
+      "sen_slope": 0.4253,
+      "mk_tau": 0.5495,
+      "mk_p_value": 0.0,
+      "n": 45,
+      "significant": true
+    },
+    "delta_recent_vs_old": 1.75,
+    "warmest_years": [
+      {
+        "year": 2022,
+        "anomaly": 1.53
+      },
+      {
+        "year": 2023,
+        "anomaly": 1.4
+      },
+      {
+        "year": 2025,
+        "anomaly": 1.11
+      },
+      {
+        "year": 2020,
+        "anomaly": 1.04
+      },
+      {
+        "year": 2018,
+        "anomaly": 0.95
+      }
+    ],
+    "n_top10_since_2011": 10,
+    "coldest_year": {
+      "year": 1956,
+      "anomaly": -2.43
+    },
+    "tmax_trend": {
+      "slope": 0.3393,
+      "ci_low": 0.2727,
+      "ci_high": 0.4059,
+      "p_value": 0.0,
+      "r2": 0.5852,
+      "sen_slope": 0.3471,
+      "mk_tau": 0.5351,
+      "mk_p_value": 0.0,
+      "n": 75,
+      "significant": true
+    },
+    "tmin_trend": {
+      "slope": 0.3235,
+      "ci_low": 0.2774,
+      "ci_high": 0.3697,
+      "p_value": 0.0,
+      "r2": 0.7281,
+      "sen_slope": 0.3248,
+      "mk_tau": 0.6505,
+      "mk_p_value": 0.0,
+      "n": 75,
+      "significant": true
+    }
+  },
+  "heterogeneity": {
+    "cities": [
+      {
+        "city": "Ajaccio",
+        "slope": 0.338,
+        "ci_low": 0.289,
+        "ci_high": 0.386,
+        "mk_p_value": 0.0,
+        "significant": true,
+        "tmean_old": 14.843,
+        "tmean_recent": 16.659,
+        "delta": 1.817
+      },
+      {
+        "city": "Biarritz",
+        "slope": 0.349,
+        "ci_low": 0.296,
+        "ci_high": 0.403,
+        "mk_p_value": 0.0,
+        "significant": true,
+        "tmean_old": 13.957,
+        "tmean_recent": 15.723,
+        "delta": 1.766
+      },
+      {
+        "city": "Bordeaux",
+        "slope": 0.422,
+        "ci_low": 0.36,
+        "ci_high": 0.483,
+        "mk_p_value": 0.0,
+        "significant": true,
+        "tmean_old": 12.766,
+        "tmean_recent": 14.842,
+        "delta": 2.076
+      },
+      {
+        "city": "Brest",
+        "slope": 0.238,
+        "ci_low": 0.188,
+        "ci_high": 0.288,
+        "mk_p_value": 0.0,
+        "significant": true,
+        "tmean_old": 10.959,
+        "tmean_recent": 12.175,
+        "delta": 1.217
+      },
+      {
+        "city": "Clermont-Ferrand",
+        "slope": 0.347,
+        "ci_low": 0.276,
+        "ci_high": 0.418,
+        "mk_p_value": 0.0,
+        "significant": true,
+        "tmean_old": 10.938,
+        "tmean_recent": 12.94,
+        "delta": 2.002
+      },
+      {
+        "city": "Dijon",
+        "slope": 0.251,
+        "ci_low": 0.182,
+        "ci_high": 0.32,
+        "mk_p_value": 0.0,
+        "significant": true,
+        "tmean_old": 10.573,
+        "tmean_recent": 12.165,
+        "delta": 1.592
+      },
+      {
+        "city": "Grenoble",
+        "slope": 0.296,
+        "ci_low": 0.23,
+        "ci_high": 0.362,
+        "mk_p_value": 0.0,
+        "significant": true,
+        "tmean_old": 10.428,
+        "tmean_recent": 11.945,
+        "delta": 1.517
+      },
+      {
+        "city": "Lille",
+        "slope": 0.381,
+        "ci_low": 0.315,
+        "ci_high": 0.447,
+        "mk_p_value": 0.0,
+        "significant": true,
+        "tmean_old": 9.888,
+        "tmean_recent": 11.933,
+        "delta": 2.045
+      },
+      {
+        "city": "Limoges",
+        "slope": 0.392,
+        "ci_low": 0.336,
+        "ci_high": 0.449,
+        "mk_p_value": 0.0,
+        "significant": true,
+        "tmean_old": 10.478,
+        "tmean_recent": 12.461,
+        "delta": 1.982
+      },
+      {
+        "city": "Lyon",
+        "slope": 0.425,
+        "ci_low": 0.355,
+        "ci_high": 0.495,
+        "mk_p_value": 0.0,
+        "significant": true,
+        "tmean_old": 11.461,
+        "tmean_recent": 13.814,
+        "delta": 2.353
+      },
+      {
+        "city": "Marseille",
+        "slope": 0.357,
+        "ci_low": 0.307,
+        "ci_high": 0.408,
+        "mk_p_value": 0.0,
+        "significant": true,
+        "tmean_old": 14.811,
+        "tmean_recent": 16.473,
+        "delta": 1.663
+      },
+      {
+        "city": "Montpellier",
+        "slope": 0.386,
+        "ci_low": 0.339,
+        "ci_high": 0.432,
+        "mk_p_value": 0.0,
+        "significant": true,
+        "tmean_old": 14.229,
+        "tmean_recent": 16.092,
+        "delta": 1.863
+      },
+      {
+        "city": "Nantes",
+        "slope": 0.266,
+        "ci_low": 0.203,
+        "ci_high": 0.328,
+        "mk_p_value": 0.0,
+        "significant": true,
+        "tmean_old": 11.94,
+        "tmean_recent": 13.339,
+        "delta": 1.4
+      },
+      {
+        "city": "Nice",
+        "slope": 0.33,
+        "ci_low": 0.286,
+        "ci_high": 0.373,
+        "mk_p_value": 0.0,
+        "significant": true,
+        "tmean_old": 15.342,
+        "tmean_recent": 17.005,
+        "delta": 1.663
+      },
+      {
+        "city": "Paris",
+        "slope": 0.343,
+        "ci_low": 0.281,
+        "ci_high": 0.405,
+        "mk_p_value": 0.0,
+        "significant": true,
+        "tmean_old": 11.718,
+        "tmean_recent": 13.515,
+        "delta": 1.797
+      },
+      {
+        "city": "Perpignan",
+        "slope": 0.246,
+        "ci_low": 0.189,
+        "ci_high": 0.304,
+        "mk_p_value": 0.0,
+        "significant": true,
+        "tmean_old": 15.283,
+        "tmean_recent": 16.819,
+        "delta": 1.535
+      },
+      {
+        "city": "Reims",
+        "slope": 0.291,
+        "ci_low": 0.225,
+        "ci_high": 0.358,
+        "mk_p_value": 0.0,
+        "significant": true,
+        "tmean_old": 9.737,
+        "tmean_recent": 11.454,
+        "delta": 1.717
+      },
+      {
+        "city": "Rennes",
+        "slope": 0.27,
+        "ci_low": 0.206,
+        "ci_high": 0.333,
+        "mk_p_value": 0.0,
+        "significant": true,
+        "tmean_old": 11.391,
+        "tmean_recent": 12.77,
+        "delta": 1.379
+      },
+      {
+        "city": "Strasbourg",
+        "slope": 0.308,
+        "ci_low": 0.243,
+        "ci_high": 0.374,
+        "mk_p_value": 0.0,
+        "significant": true,
+        "tmean_old": 11.13,
+        "tmean_recent": 12.774,
+        "delta": 1.644
+      },
+      {
+        "city": "Toulouse",
+        "slope": 0.394,
+        "ci_low": 0.335,
+        "ci_high": 0.453,
+        "mk_p_value": 0.0,
+        "significant": true,
+        "tmean_old": 12.971,
+        "tmean_recent": 14.975,
+        "delta": 2.004
+      }
+    ],
+    "fastest_city": "Lyon",
+    "slowest_city": "Brest",
+    "n_significant": 20,
+    "season_trends": {
+      "Hiver": {
+        "slope": 0.3033,
+        "ci_low": 0.1802,
+        "ci_high": 0.4264,
+        "p_value": 0.0,
+        "r2": 0.251,
+        "sen_slope": 0.2857,
+        "mk_tau": 0.3373,
+        "mk_p_value": 0.0,
+        "n": 74,
+        "significant": true
+      },
+      "Printemps": {
+        "slope": 0.296,
+        "ci_low": 0.213,
+        "ci_high": 0.379,
+        "p_value": 0.0,
+        "r2": 0.4092,
+        "sen_slope": 0.3235,
+        "mk_tau": 0.4479,
+        "mk_p_value": 0.0,
+        "n": 75,
+        "significant": true
+      },
+      "Été": {
+        "slope": 0.4314,
+        "ci_low": 0.3462,
+        "ci_high": 0.5167,
+        "p_value": 0.0,
+        "r2": 0.5822,
+        "sen_slope": 0.4332,
+        "mk_tau": 0.5906,
+        "mk_p_value": 0.0,
+        "n": 75,
+        "significant": true
+      },
+      "Automne": {
+        "slope": 0.3018,
+        "ci_low": 0.2216,
+        "ci_high": 0.3819,
+        "p_value": 0.0,
+        "r2": 0.4353,
+        "sen_slope": 0.2857,
+        "mk_tau": 0.4991,
+        "mk_p_value": 0.0,
+        "n": 75,
+        "significant": true
+      }
+    },
+    "fastest_season": "Été",
+    "season_by_city": [
+      {
+        "city": "Ajaccio",
+        "Hiver": 0.243,
+        "Printemps": 0.3,
+        "Été": 0.479,
+        "Automne": 0.327
+      },
+      {
+        "city": "Biarritz",
+        "Hiver": 0.298,
+        "Printemps": 0.329,
+        "Été": 0.424,
+        "Automne": 0.342
+      },
+      {
+        "city": "Bordeaux",
+        "Hiver": 0.339,
+        "Printemps": 0.396,
+        "Été": 0.549,
+        "Automne": 0.406
+      },
+      {
+        "city": "Brest",
+        "Hiver": 0.215,
+        "Printemps": 0.267,
+        "Été": 0.275,
+        "Automne": 0.202
+      },
+      {
+        "city": "Clermont-Ferrand",
+        "Hiver": 0.336,
+        "Printemps": 0.3,
+        "Été": 0.453,
+        "Automne": 0.308
+      },
+      {
+        "city": "Dijon",
+        "Hiver": 0.271,
+        "Printemps": 0.164,
+        "Été": 0.365,
+        "Automne": 0.214
+      },
+      {
+        "city": "Grenoble",
+        "Hiver": 0.283,
+        "Printemps": 0.25,
+        "Été": 0.393,
+        "Automne": 0.268
+      },
+      {
+        "city": "Lille",
+        "Hiver": 0.369,
+        "Printemps": 0.381,
+        "Été": 0.465,
+        "Automne": 0.325
+      },
+      {
+        "city": "Limoges",
+        "Hiver": 0.355,
+        "Printemps": 0.346,
+        "Été": 0.498,
+        "Automne": 0.373
+      },
+      {
+        "city": "Lyon",
+        "Hiver": 0.389,
+        "Printemps": 0.381,
+        "Été": 0.569,
+        "Automne": 0.372
+      },
+      {
+        "city": "Marseille",
+        "Hiver": 0.296,
+        "Printemps": 0.317,
+        "Été": 0.503,
+        "Automne": 0.315
+      },
+      {
+        "city": "Montpellier",
+        "Hiver": 0.313,
+        "Printemps": 0.339,
+        "Été": 0.529,
+        "Automne": 0.363
+      },
+      {
+        "city": "Nantes",
+        "Hiver": 0.257,
+        "Printemps": 0.253,
+        "Été": 0.311,
+        "Automne": 0.246
+      },
+      {
+        "city": "Nice",
+        "Hiver": 0.238,
+        "Printemps": 0.289,
+        "Été": 0.487,
+        "Automne": 0.305
+      },
+      {
+        "city": "Paris",
+        "Hiver": 0.338,
+        "Printemps": 0.329,
+        "Été": 0.428,
+        "Automne": 0.284
+      },
+      {
+        "city": "Perpignan",
+        "Hiver": 0.198,
+        "Printemps": 0.18,
+        "Été": 0.37,
+        "Automne": 0.237
+      },
+      {
+        "city": "Reims",
+        "Hiver": 0.349,
+        "Printemps": 0.228,
+        "Été": 0.344,
+        "Automne": 0.259
+      },
+      {
+        "city": "Rennes",
+        "Hiver": 0.256,
+        "Printemps": 0.259,
+        "Été": 0.311,
+        "Automne": 0.259
+      },
+      {
+        "city": "Strasbourg",
+        "Hiver": 0.428,
+        "Printemps": 0.244,
+        "Été": 0.339,
+        "Automne": 0.244
+      },
+      {
+        "city": "Toulouse",
+        "Hiver": 0.296,
+        "Printemps": 0.359,
+        "Été": 0.537,
+        "Automne": 0.387
+      }
+    ]
+  },
+  "extremes": {
+    "france_old_vs_recent": {
+      "hot_days": {
+        "old": 11.7,
+        "recent": 26.9,
+        "ratio": 2.3
+      },
+      "very_hot_days": {
+        "old": 0.7,
+        "recent": 3.9,
+        "ratio": 5.55
+      },
+      "tropical_nights": {
+        "old": 5.0,
+        "recent": 15.4,
+        "ratio": 3.11
+      },
+      "frost_days": {
+        "old": 40.0,
+        "recent": 26.4,
+        "ratio": 0.66
+      },
+      "heatwave_days": {
+        "old": 6.1,
+        "recent": 18.4,
+        "ratio": 3.04
+      }
+    },
+    "by_decade": [
+      {
+        "decade": "1951-59",
+        "hot_days": 10.04,
+        "very_hot_days": 0.64,
+        "tropical_nights": 3.38,
+        "frost_days": 45.62,
+        "heatwave_days": 5.31
+      },
+      {
+        "decade": "1960-69",
+        "hot_days": 9.78,
+        "very_hot_days": 0.42,
+        "tropical_nights": 3.55,
+        "frost_days": 42.62,
+        "heatwave_days": 4.66
+      },
+      {
+        "decade": "1970-79",
+        "hot_days": 11.02,
+        "very_hot_days": 0.57,
+        "tropical_nights": 4.14,
+        "frost_days": 38.02,
+        "heatwave_days": 6.14
+      },
+      {
+        "decade": "1980-89",
+        "hot_days": 12.78,
+        "very_hot_days": 0.92,
+        "tropical_nights": 6.54,
+        "frost_days": 39.74,
+        "heatwave_days": 6.26
+      },
+      {
+        "decade": "1990-99",
+        "hot_days": 16.83,
+        "very_hot_days": 1.1,
+        "tropical_nights": 9.3,
+        "frost_days": 32.65,
+        "heatwave_days": 9.56
+      },
+      {
+        "decade": "2000-09",
+        "hot_days": 19.85,
+        "very_hot_days": 2.27,
+        "tropical_nights": 11.36,
+        "frost_days": 33.4,
+        "heatwave_days": 12.1
+      },
+      {
+        "decade": "2010-19",
+        "hot_days": 23.59,
+        "very_hot_days": 2.76,
+        "tropical_nights": 13.23,
+        "frost_days": 30.0,
+        "heatwave_days": 15.65
+      },
+      {
+        "decade": "2020-25",
+        "hot_days": 30.93,
+        "very_hot_days": 5.41,
+        "tropical_nights": 18.32,
+        "frost_days": 24.85,
+        "heatwave_days": 21.84
+      }
+    ],
+    "per_city": [
+      {
+        "city": "Ajaccio",
+        "hot_days_old": 12.0,
+        "hot_days_recent": 40.0,
+        "tropical_nights_old": 4.6,
+        "tropical_nights_recent": 22.3,
+        "frost_days_old": 10.3,
+        "frost_days_recent": 3.2,
+        "heatwave_days_old": 4.3,
+        "heatwave_days_recent": 29.2
+      },
+      {
+        "city": "Biarritz",
+        "hot_days_old": 6.2,
+        "hot_days_recent": 12.3,
+        "tropical_nights_old": 4.6,
+        "tropical_nights_recent": 16.6,
+        "frost_days_old": 12.7,
+        "frost_days_recent": 4.8,
+        "heatwave_days_old": 0.6,
+        "heatwave_days_recent": 2.5
+      },
+      {
+        "city": "Bordeaux",
+        "hot_days_old": 14.7,
+        "hot_days_recent": 31.3,
+        "tropical_nights_old": 1.2,
+        "tropical_nights_recent": 8.2,
+        "frost_days_old": 35.8,
+        "frost_days_recent": 18.3,
+        "heatwave_days_old": 6.6,
+        "heatwave_days_recent": 19.0
+      },
+      {
+        "city": "Brest",
+        "hot_days_old": 0.9,
+        "hot_days_recent": 2.1,
+        "tropical_nights_old": 0.1,
+        "tropical_nights_recent": 0.1,
+        "frost_days_old": 15.4,
+        "frost_days_recent": 10.9,
+        "heatwave_days_old": 0.3,
+        "heatwave_days_recent": 0.4
+      },
+      {
+        "city": "Clermont-Ferrand",
+        "hot_days_old": 14.4,
+        "hot_days_recent": 30.1,
+        "tropical_nights_old": 0.3,
+        "tropical_nights_recent": 4.3,
+        "frost_days_old": 68.8,
+        "frost_days_recent": 47.1,
+        "heatwave_days_old": 7.0,
+        "heatwave_days_recent": 20.9
+      },
+      {
+        "city": "Dijon",
+        "hot_days_old": 9.7,
+        "hot_days_recent": 24.9,
+        "tropical_nights_old": 0.6,
+        "tropical_nights_recent": 2.9,
+        "frost_days_old": 64.3,
+        "frost_days_recent": 50.5,
+        "heatwave_days_old": 5.8,
+        "heatwave_days_recent": 18.9
+      },
+      {
+        "city": "Grenoble",
+        "hot_days_old": 11.5,
+        "hot_days_recent": 27.0,
+        "tropical_nights_old": 0.4,
+        "tropical_nights_recent": 0.8,
+        "frost_days_old": 76.0,
+        "frost_days_recent": 63.1,
+        "heatwave_days_old": 6.0,
+        "heatwave_days_recent": 19.0
+      },
+      {
+        "city": "Lille",
+        "hot_days_old": 3.3,
+        "hot_days_recent": 9.0,
+        "tropical_nights_old": 0.1,
+        "tropical_nights_recent": 1.5,
+        "frost_days_old": 53.8,
+        "frost_days_recent": 29.5,
+        "heatwave_days_old": 1.4,
+        "heatwave_days_recent": 4.1
+      },
+      {
+        "city": "Limoges",
+        "hot_days_old": 12.0,
+        "hot_days_recent": 27.1,
+        "tropical_nights_old": 0.0,
+        "tropical_nights_recent": 0.5,
+        "frost_days_old": 79.6,
+        "frost_days_recent": 55.0,
+        "heatwave_days_old": 5.5,
+        "heatwave_days_recent": 18.3
+      },
+      {
+        "city": "Lyon",
+        "hot_days_old": 15.8,
+        "hot_days_recent": 40.7,
+        "tropical_nights_old": 2.2,
+        "tropical_nights_recent": 13.8,
+        "frost_days_old": 56.6,
+        "frost_days_recent": 33.5,
+        "heatwave_days_old": 9.0,
+        "heatwave_days_recent": 31.3
+      },
+      {
+        "city": "Marseille",
+        "hot_days_old": 27.7,
+        "hot_days_recent": 62.7,
+        "tropical_nights_old": 17.2,
+        "tropical_nights_recent": 42.0,
+        "frost_days_old": 24.6,
+        "frost_days_recent": 16.1,
+        "heatwave_days_old": 20.0,
+        "heatwave_days_recent": 55.1
+      },
+      {
+        "city": "Montpellier",
+        "hot_days_old": 19.4,
+        "hot_days_recent": 42.3,
+        "tropical_nights_old": 9.2,
+        "tropical_nights_recent": 34.1,
+        "frost_days_old": 30.3,
+        "frost_days_recent": 17.4,
+        "heatwave_days_old": 10.3,
+        "heatwave_days_recent": 30.1
+      },
+      {
+        "city": "Nantes",
+        "hot_days_old": 7.2,
+        "hot_days_recent": 15.7,
+        "tropical_nights_old": 1.3,
+        "tropical_nights_recent": 2.3,
+        "frost_days_old": 33.4,
+        "frost_days_recent": 22.3,
+        "heatwave_days_old": 3.3,
+        "heatwave_days_recent": 9.1
+      },
+      {
+        "city": "Nice",
+        "hot_days_old": 3.9,
+        "hot_days_recent": 13.7,
+        "tropical_nights_old": 28.9,
+        "tropical_nights_recent": 78.5,
+        "frost_days_old": 2.0,
+        "frost_days_recent": 0.6,
+        "heatwave_days_old": 0.6,
+        "heatwave_days_recent": 7.5
+      },
+      {
+        "city": "Paris",
+        "hot_days_old": 6.4,
+        "hot_days_recent": 17.6,
+        "tropical_nights_old": 2.6,
+        "tropical_nights_recent": 7.7,
+        "frost_days_old": 27.4,
+        "frost_days_recent": 14.6,
+        "heatwave_days_old": 3.0,
+        "heatwave_days_recent": 10.3
+      },
+      {
+        "city": "Perpignan",
+        "hot_days_old": 24.3,
+        "hot_days_recent": 48.6,
+        "tropical_nights_old": 20.7,
+        "tropical_nights_recent": 46.3,
+        "frost_days_old": 12.8,
+        "frost_days_recent": 4.8,
+        "heatwave_days_old": 14.1,
+        "heatwave_days_recent": 35.5
+      },
+      {
+        "city": "Reims",
+        "hot_days_old": 5.1,
+        "hot_days_recent": 14.9,
+        "tropical_nights_old": 0.1,
+        "tropical_nights_recent": 0.6,
+        "frost_days_old": 70.5,
+        "frost_days_recent": 55.7,
+        "heatwave_days_old": 2.4,
+        "heatwave_days_recent": 9.4
+      },
+      {
+        "city": "Rennes",
+        "hot_days_old": 5.0,
+        "hot_days_recent": 11.1,
+        "tropical_nights_old": 0.4,
+        "tropical_nights_recent": 0.7,
+        "frost_days_old": 37.3,
+        "frost_days_recent": 25.5,
+        "heatwave_days_old": 2.3,
+        "heatwave_days_recent": 5.7
+      },
+      {
+        "city": "Strasbourg",
+        "hot_days_old": 13.2,
+        "hot_days_recent": 23.4,
+        "tropical_nights_old": 1.8,
+        "tropical_nights_recent": 6.9,
+        "frost_days_old": 51.9,
+        "frost_days_recent": 34.4,
+        "heatwave_days_old": 6.8,
+        "heatwave_days_recent": 13.9
+      },
+      {
+        "city": "Toulouse",
+        "hot_days_old": 21.3,
+        "hot_days_recent": 42.9,
+        "tropical_nights_old": 2.8,
+        "tropical_nights_recent": 17.7,
+        "frost_days_old": 35.8,
+        "frost_days_recent": 19.9,
+        "heatwave_days_old": 11.9,
+        "heatwave_days_recent": 28.9
+      }
+    ],
+    "hottest_day": {
+      "city": "Montpellier",
+      "date": "2019-06-28",
+      "tx": 43.5
+    },
+    "longest_heatwaves": [
+      {
+        "city": "Marseille",
+        "start": "2022-07-02",
+        "days": 46,
+        "tx_peak": 39.1
+      },
+      {
+        "city": "Marseille",
+        "start": "2006-06-20",
+        "days": 44,
+        "tx_peak": 37.3
+      },
+      {
+        "city": "Ajaccio",
+        "start": "2022-07-13",
+        "days": 37,
+        "tx_peak": 36.4
+      },
+      {
+        "city": "Marseille",
+        "start": "2015-06-26",
+        "days": 30,
+        "tx_peak": 35.7
+      },
+      {
+        "city": "Marseille",
+        "start": "2003-08-01",
+        "days": 29,
+        "tx_peak": 37.7
+      }
+    ],
+    "hot_days_trend": {
+      "slope": 2.8237,
+      "ci_low": 2.1408,
+      "ci_high": 3.5066,
+      "p_value": 0.0,
+      "r2": 0.4819,
+      "sen_slope": 2.6818,
+      "mk_tau": 0.5119,
+      "mk_p_value": 0.0,
+      "n": 75,
+      "significant": true
+    },
+    "frost_days_trend": {
+      "slope": -2.7211,
+      "ci_low": -3.6848,
+      "ci_high": -1.7575,
+      "p_value": 0.0,
+      "r2": 0.3026,
+      "sen_slope": -2.7625,
+      "mk_tau": -0.3916,
+      "mk_p_value": 0.0,
+      "n": 75,
+      "significant": true
+    }
+  },
+  "records": {
+    "by_decade": [
+      {
+        "decade": "1961-69",
+        "hot": 4098,
+        "cold": 3981,
+        "ratio": 1.03
+      },
+      {
+        "decade": "1970-79",
+        "hot": 2818,
+        "cold": 2487,
+        "ratio": 1.13
+      },
+      {
+        "decade": "1980-89",
+        "hot": 2656,
+        "cold": 1490,
+        "ratio": 1.78
+      },
+      {
+        "decade": "1990-99",
+        "hot": 2262,
+        "cold": 796,
+        "ratio": 2.84
+      },
+      {
+        "decade": "2000-09",
+        "hot": 2341,
+        "cold": 548,
+        "ratio": 4.27
+      },
+      {
+        "decade": "2010-19",
+        "hot": 2149,
+        "cold": 440,
+        "ratio": 4.88
+      },
+      {
+        "decade": "2020-25",
+        "hot": 1630,
+        "cold": 106,
+        "ratio": 15.38
+      }
+    ],
+    "last_ratio": 15.4
+  },
+  "precipitation": {
+    "annual_trend_pct": {
+      "slope": -0.4141,
+      "ci_low": -1.6046,
+      "ci_high": 0.7763,
+      "p_value": 0.4903,
+      "r2": 0.0065,
+      "sen_slope": -0.344,
+      "mk_tau": -0.0422,
+      "mk_p_value": 0.5925,
+      "n": 75,
+      "significant": false
+    },
+    "season_trends_pct": {
+      "Hiver": {
+        "slope": -1.4891,
+        "ci_low": -4.1696,
+        "ci_high": 1.1914,
+        "p_value": 0.2718,
+        "r2": 0.0167,
+        "sen_slope": -1.3525,
+        "mk_tau": -0.0811,
+        "mk_p_value": 0.3068,
+        "n": 74,
+        "significant": false
+      },
+      "Printemps": {
+        "slope": 0.614,
+        "ci_low": -1.9558,
+        "ci_high": 3.1838,
+        "p_value": 0.6354,
+        "r2": 0.0031,
+        "sen_slope": 0.6215,
+        "mk_tau": 0.0357,
+        "mk_p_value": 0.6507,
+        "n": 75,
+        "significant": false
+      },
+      "Été": {
+        "slope": -2.3247,
+        "ci_low": -5.0332,
+        "ci_high": 0.3839,
+        "p_value": 0.0914,
+        "r2": 0.0385,
+        "sen_slope": -2.8462,
+        "mk_tau": -0.1575,
+        "mk_p_value": 0.0456,
+        "n": 75,
+        "significant": false
+      },
+      "Automne": {
+        "slope": 0.399,
+        "ci_low": -2.0721,
+        "ci_high": 2.8701,
+        "p_value": 0.7485,
+        "r2": 0.0014,
+        "sen_slope": 0.5962,
+        "mk_tau": 0.0486,
+        "mk_p_value": 0.5369,
+        "n": 75,
+        "significant": false
+      }
+    },
+    "heavy_rain_trend": {
+      "slope": -0.0217,
+      "ci_low": -0.1507,
+      "ci_high": 0.1074,
+      "p_value": 0.7392,
+      "r2": 0.0015,
+      "sen_slope": -0.0116,
+      "mk_tau": -0.0189,
+      "mk_p_value": 0.8119,
+      "n": 75,
+      "significant": false
+    },
+    "dry_spell_trend": {
+      "slope": 0.1369,
+      "ci_low": -0.276,
+      "ci_high": 0.5497,
+      "p_value": 0.5109,
+      "r2": 0.0059,
+      "sen_slope": 0.2368,
+      "mk_tau": 0.0827,
+      "mk_p_value": 0.2948,
+      "n": 75,
+      "significant": false
+    },
+    "wettest_year": 1960,
+    "driest_year": 2022,
+    "driest_year_anomaly_pct": -23.7
+  },
+  "profiles": {
+    "silhouette": {
+      "2": 0.373,
+      "3": 0.402,
+      "4": 0.364,
+      "5": 0.29,
+      "6": 0.26
+    },
+    "k": 3,
+    "explained_variance": [
+      0.513,
+      0.35
+    ],
+    "groups": {
+      "Façade atlantique : très arrosée, faible amplitude": [
+        "Biarritz",
+        "Brest"
+      ],
+      "Sud : chaud, été sec": [
+        "Ajaccio",
+        "Bordeaux",
+        "Marseille",
+        "Montpellier",
+        "Nice",
+        "Perpignan",
+        "Toulouse"
+      ],
+      "Nord et Centre : plus frais, amplitude marquée": [
+        "Clermont-Ferrand",
+        "Dijon",
+        "Grenoble",
+        "Lille",
+        "Limoges",
+        "Lyon",
+        "Nantes",
+        "Paris",
+        "Reims",
+        "Rennes",
+        "Strasbourg"
+      ]
+    },
+    "profiles": [
+      {
+        "group": "Façade atlantique : très arrosée, faible amplitude",
+        "t_annual": 13.4,
+        "amplitude": 10.5,
+        "summer_rain": 237.8,
+        "annual_rain": 1375.5
+      },
+      {
+        "group": "Nord et Centre : plus frais, amplitude marquée",
+        "t_annual": 12.0,
+        "amplitude": 16.0,
+        "summer_rain": 187.7,
+        "annual_rain": 757.6
+      },
+      {
+        "group": "Sud : chaud, été sec",
+        "t_annual": 15.4,
+        "amplitude": 15.6,
+        "summer_rain": 93.3,
+        "annual_rain": 675.4
+      }
+    ]
+  },
+  "outliers": {
+    "hottest_vs_normal": [
+      {
+        "city": "Ajaccio",
+        "date": "1974-03-21",
+        "tmean": 24.0,
+        "normal": 11.3,
+        "anomaly": 12.7,
+        "z": 6.3
+      },
+      {
+        "city": "Brest",
+        "date": "2022-07-18",
+        "tmean": 29.1,
+        "normal": 17.0,
+        "anomaly": 12.1,
+        "z": 6.3
+      },
+      {
+        "city": "Ajaccio",
+        "date": "1975-09-17",
+        "tmean": 31.9,
+        "normal": 20.7,
+        "anomaly": 11.3,
+        "z": 5.9
+      },
+      {
+        "city": "Ajaccio",
+        "date": "2008-05-26",
+        "tmean": 30.4,
+        "normal": 18.3,
+        "anomaly": 12.2,
+        "z": 5.8
+      },
+      {
+        "city": "Brest",
+        "date": "1990-08-03",
+        "tmean": 27.9,
+        "normal": 17.4,
+        "anomaly": 10.5,
+        "z": 5.5
+      },
+      {
+        "city": "Brest",
+        "date": "1990-08-02",
+        "tmean": 27.6,
+        "normal": 17.4,
+        "anomaly": 10.2,
+        "z": 5.3
+      },
+      {
+        "city": "Brest",
+        "date": "1955-08-23",
+        "tmean": 27.0,
+        "normal": 16.8,
+        "anomaly": 10.2,
+        "z": 5.2
+      },
+      {
+        "city": "Biarritz",
+        "date": "2022-06-18",
+        "tmean": 31.6,
+        "normal": 18.9,
+        "anomaly": 12.7,
+        "z": 5.0
+      },
+      {
+        "city": "Brest",
+        "date": "2003-08-09",
+        "tmean": 26.6,
+        "normal": 17.3,
+        "anomaly": 9.3,
+        "z": 4.9
+      },
+      {
+        "city": "Biarritz",
+        "date": "2022-07-18",
+        "tmean": 31.1,
+        "normal": 20.9,
+        "anomaly": 10.3,
+        "z": 4.8
+      }
+    ],
+    "coldest_vs_normal": [
+      {
+        "city": "Nice",
+        "date": "1971-03-06",
+        "tmean": -2.1,
+        "normal": 11.1,
+        "anomaly": -13.2,
+        "z": -6.5
+      },
+      {
+        "city": "Nice",
+        "date": "1985-01-08",
+        "tmean": -2.6,
+        "normal": 9.6,
+        "anomaly": -12.2,
+        "z": -6.2
+      },
+      {
+        "city": "Nice",
+        "date": "1985-01-09",
+        "tmean": -2.2,
+        "normal": 9.6,
+        "anomaly": -11.8,
+        "z": -6.0
+      },
+      {
+        "city": "Marseille",
+        "date": "1956-02-10",
+        "tmean": -10.9,
+        "normal": 8.0,
+        "anomaly": -18.9,
+        "z": -5.8
+      },
+      {
+        "city": "Marseille",
+        "date": "1956-02-12",
+        "tmean": -10.4,
+        "normal": 8.1,
+        "anomaly": -18.5,
+        "z": -5.7
+      },
+      {
+        "city": "Perpignan",
+        "date": "1956-02-10",
+        "tmean": -9.1,
+        "normal": 9.0,
+        "anomaly": -18.1,
+        "z": -5.7
+      },
+      {
+        "city": "Montpellier",
+        "date": "1956-02-11",
+        "tmean": -10.0,
+        "normal": 8.1,
+        "anomaly": -18.1,
+        "z": -5.7
+      },
+      {
+        "city": "Montpellier",
+        "date": "1956-02-10",
+        "tmean": -9.8,
+        "normal": 8.1,
+        "anomaly": -17.9,
+        "z": -5.6
+      },
+      {
+        "city": "Limoges",
+        "date": "1985-01-16",
+        "tmean": -15.8,
+        "normal": 4.5,
+        "anomaly": -20.4,
+        "z": -5.6
+      },
+      {
+        "city": "Montpellier",
+        "date": "1956-02-12",
+        "tmean": -9.2,
+        "normal": 8.2,
+        "anomaly": -17.4,
+        "z": -5.4
+      }
+    ],
+    "n_days_z_above_3": 2701,
+    "n_days_total": 547869
+  },
+  "quality": {
+    "by_variable": [
+      {
+        "variable": "FFM",
+        "absente": 21664320.0,
+        "douteuse": 3.0,
+        "valide": 3362207.0,
+        "total": 25026530.0,
+        "pct_absentes": 86.565,
+        "pct_rejetees": 0.0
+      },
+      {
+        "variable": "FXI",
+        "absente": 21820030.0,
+        "douteuse": 16.0,
+        "valide": 3206484.0,
+        "total": 25026530.0,
+        "pct_absentes": 87.188,
+        "pct_rejetees": 0.0
+      },
+      {
+        "variable": "RR",
+        "absente": 295061.0,
+        "douteuse": 151.0,
+        "valide": 24731318.0,
+        "total": 25026530.0,
+        "pct_absentes": 1.179,
+        "pct_rejetees": 0.001
+      },
+      {
+        "variable": "TM",
+        "absente": 20055215.0,
+        "douteuse": 0.0,
+        "valide": 4971315.0,
+        "total": 25026530.0,
+        "pct_absentes": 80.136,
+        "pct_rejetees": 0.0
+      },
+      {
+        "variable": "TN",
+        "absente": 13700906.0,
+        "douteuse": 20.0,
+        "valide": 11325604.0,
+        "total": 25026530.0,
+        "pct_absentes": 54.746,
+        "pct_rejetees": 0.0
+      },
+      {
+        "variable": "TX",
+        "absente": 13713738.0,
+        "douteuse": 14.0,
+        "valide": 11312778.0,
+        "total": 25026530.0,
+        "pct_absentes": 54.797,
+        "pct_rejetees": 0.0
+      }
+    ],
+    "ref_stations": [
+      {
+        "city": "Ajaccio",
+        "priority": 1,
+        "station_id": "20004002",
+        "station_name": "AJACCIO",
+        "dep": "20",
+        "lat": 41.918,
+        "lon": 8.7927,
+        "altitude": 5,
+        "distance_km": 4.5,
+        "first_date": "1950-01-01",
+        "last_date": "2026-11-10",
+        "completeness_temp": 1.0,
+        "completeness_rain": 1.0
+      },
+      {
+        "city": "Biarritz",
+        "priority": 1,
+        "station_id": "64189001",
+        "station_name": "SOCOA",
+        "dep": "64",
+        "lat": 43.3945,
+        "lon": -1.6865,
+        "altitude": 21,
+        "distance_km": 14.3,
+        "first_date": "1950-01-01",
+        "last_date": "2026-11-09",
+        "completeness_temp": 0.9996,
+        "completeness_rain": 1.0
+      },
+      {
+        "city": "Bordeaux",
+        "priority": 1,
+        "station_id": "33281001",
+        "station_name": "BORDEAUX-MERIGNAC",
+        "dep": "33",
+        "lat": 44.8307,
+        "lon": -0.6913,
+        "altitude": 47,
+        "distance_km": 8.9,
+        "first_date": "1950-01-01",
+        "last_date": "2026-11-09",
+        "completeness_temp": 1.0,
+        "completeness_rain": 1.0
+      },
+      {
+        "city": "Brest",
+        "priority": 1,
+        "station_id": "29075001",
+        "station_name": "BREST-GUIPAVAS",
+        "dep": "29",
+        "lat": 48.4538,
+        "lon": -4.3912,
+        "altitude": 92,
+        "distance_km": 9.9,
+        "first_date": "1950-01-01",
+        "last_date": "2026-11-09",
+        "completeness_temp": 1.0,
+        "completeness_rain": 1.0
+      },
+      {
+        "city": "Clermont-Ferrand",
+        "priority": 1,
+        "station_id": "63113001",
+        "station_name": "CLERMONT-FD",
+        "dep": "63",
+        "lat": 45.7868,
+        "lon": 3.1493,
+        "altitude": 331,
+        "distance_km": 5.0,
+        "first_date": "1950-01-01",
+        "last_date": "2026-11-09",
+        "completeness_temp": 1.0,
+        "completeness_rain": 1.0
+      },
+      {
+        "city": "Dijon",
+        "priority": 1,
+        "station_id": "21473001",
+        "station_name": "DIJON-LONGVIC",
+        "dep": "21",
+        "lat": 47.2678,
+        "lon": 5.0883,
+        "altitude": 219,
+        "distance_km": 7.0,
+        "first_date": "1950-01-01",
+        "last_date": "2026-11-09",
+        "completeness_temp": 1.0,
+        "completeness_rain": 1.0
+      },
+      {
+        "city": "Grenoble",
+        "priority": 1,
+        "station_id": "38384001",
+        "station_name": "GRENOBLE-ST GEOIRS",
+        "dep": "38",
+        "lat": 45.3642,
+        "lon": 5.3133,
+        "altitude": 376,
+        "distance_km": 37.6,
+        "first_date": "1950-01-01",
+        "last_date": "2026-11-09",
+        "completeness_temp": 0.7899,
+        "completeness_rain": 0.7944
+      },
+      {
+        "city": "Grenoble",
+        "priority": 2,
+        "station_id": "38158001",
+        "station_name": "GRENOBLE-EYBENS",
+        "dep": "38",
+        "lat": 45.1667,
+        "lon": 5.7333,
+        "altitude": 223,
+        "distance_km": 2.5,
+        "first_date": "1950-01-01",
+        "last_date": "1968-03-31",
+        "completeness_temp": 0.23,
+        "completeness_rain": 0.23
+      },
+      {
+        "city": "Lille",
+        "priority": 1,
+        "station_id": "59343001",
+        "station_name": "LILLE-LESQUIN",
+        "dep": "59",
+        "lat": 50.57,
+        "lon": 3.0975,
+        "altitude": 47,
+        "distance_km": 7.2,
+        "first_date": "1950-01-01",
+        "last_date": "2026-11-09",
+        "completeness_temp": 1.0,
+        "completeness_rain": 1.0
+      },
+      {
+        "city": "Limoges",
+        "priority": 1,
+        "station_id": "87113001",
+        "station_name": "LE PALAIS SUR VIENNE",
+        "dep": "87",
+        "lat": 45.8778,
+        "lon": 1.3425,
+        "altitude": 286,
+        "distance_km": 8.0,
+        "first_date": "1950-01-01",
+        "last_date": "2026-11-09",
+        "completeness_temp": 0.972,
+        "completeness_rain": 0.9626
+      },
+      {
+        "city": "Limoges",
+        "priority": 2,
+        "station_id": "87085006",
+        "station_name": "LIMOGES-BELLEGARDE",
+        "dep": "87",
+        "lat": 45.8612,
+        "lon": 1.175,
+        "altitude": 402,
+        "distance_km": 7.3,
+        "first_date": "1973-01-01",
+        "last_date": "2026-11-09",
+        "completeness_temp": 0.7067,
+        "completeness_rain": 0.7067
+      },
+      {
+        "city": "Limoges",
+        "priority": 3,
+        "station_id": "87085001",
+        "station_name": "FEYTIAT",
+        "dep": "87",
+        "lat": 45.8333,
+        "lon": 1.2667,
+        "altitude": 282,
+        "distance_km": 0.4,
+        "first_date": "1950-01-01",
+        "last_date": "1972-12-31",
+        "completeness_temp": 0.2933,
+        "completeness_rain": 0.2933
+      },
+      {
+        "city": "Lyon",
+        "priority": 1,
+        "station_id": "69029001",
+        "station_name": "LYON-BRON",
+        "dep": "69",
+        "lat": 45.7213,
+        "lon": 4.9492,
+        "altitude": 202,
+        "distance_km": 10.0,
+        "first_date": "1950-01-01",
+        "last_date": "2026-11-09",
+        "completeness_temp": 1.0,
+        "completeness_rain": 1.0
+      },
+      {
+        "city": "Marseille",
+        "priority": 1,
+        "station_id": "13054001",
+        "station_name": "MARIGNANE",
+        "dep": "13",
+        "lat": 43.437,
+        "lon": 5.2115,
+        "altitude": 6,
+        "distance_km": 20.2,
+        "first_date": "1950-01-01",
+        "last_date": "2026-11-09",
+        "completeness_temp": 1.0,
+        "completeness_rain": 1.0
+      },
+      {
+        "city": "Montpellier",
+        "priority": 1,
+        "station_id": "34154001",
+        "station_name": "MONTPELLIER-AEROPORT",
+        "dep": "34",
+        "lat": 43.5762,
+        "lon": 3.9647,
+        "altitude": 1,
+        "distance_km": 8.1,
+        "first_date": "1950-01-01",
+        "last_date": "2026-11-09",
+        "completeness_temp": 1.0,
+        "completeness_rain": 1.0
+      },
+      {
+        "city": "Nantes",
+        "priority": 1,
+        "station_id": "44020001",
+        "station_name": "NANTES-BOUGUENAIS",
+        "dep": "44",
+        "lat": 47.15,
+        "lon": -1.6088,
+        "altitude": 26,
+        "distance_km": 8.7,
+        "first_date": "1950-01-01",
+        "last_date": "2026-11-09",
+        "completeness_temp": 1.0,
+        "completeness_rain": 1.0
+      },
+      {
+        "city": "Nice",
+        "priority": 1,
+        "station_id": "06088001",
+        "station_name": "NICE",
+        "dep": "06",
+        "lat": 43.6488,
+        "lon": 7.209,
+        "altitude": 2,
+        "distance_km": 8.0,
+        "first_date": "1950-01-01",
+        "last_date": "2026-11-09",
+        "completeness_temp": 1.0,
+        "completeness_rain": 1.0
+      },
+      {
+        "city": "Paris",
+        "priority": 1,
+        "station_id": "75114001",
+        "station_name": "PARIS-MONTSOURIS",
+        "dep": "75",
+        "lat": 48.8217,
+        "lon": 2.3378,
+        "altitude": 75,
+        "distance_km": 4.0,
+        "first_date": "1950-01-01",
+        "last_date": "2026-11-09",
+        "completeness_temp": 1.0,
+        "completeness_rain": 1.0
+      },
+      {
+        "city": "Perpignan",
+        "priority": 1,
+        "station_id": "66136001",
+        "station_name": "PERPIGNAN",
+        "dep": "66",
+        "lat": 42.7372,
+        "lon": 2.8728,
+        "altitude": 42,
+        "distance_km": 5.7,
+        "first_date": "1950-01-01",
+        "last_date": "2026-11-09",
+        "completeness_temp": 1.0,
+        "completeness_rain": 1.0
+      },
+      {
+        "city": "Reims",
+        "priority": 1,
+        "station_id": "51449002",
+        "station_name": "REIMS-PRUNAY",
+        "dep": "51",
+        "lat": 49.2098,
+        "lon": 4.1553,
+        "altitude": 95,
+        "distance_km": 10.5,
+        "first_date": "2012-05-07",
+        "last_date": "2026-11-09",
+        "completeness_temp": 0.182,
+        "completeness_rain": 0.182
+      },
+      {
+        "city": "Reims",
+        "priority": 2,
+        "station_id": "51183001",
+        "station_name": "REIMS-COURCY",
+        "dep": "51",
+        "lat": 49.3062,
+        "lon": 4.0507,
+        "altitude": 91,
+        "distance_km": 5.5,
+        "first_date": "1950-01-01",
+        "last_date": "2014-04-24",
+        "completeness_temp": 0.8442,
+        "completeness_rain": 0.8442
+      },
+      {
+        "city": "Rennes",
+        "priority": 1,
+        "station_id": "35281001",
+        "station_name": "RENNES-ST JACQUES",
+        "dep": "35",
+        "lat": 48.0688,
+        "lon": -1.734,
+        "altitude": 36,
+        "distance_km": 6.8,
+        "first_date": "1950-01-01",
+        "last_date": "2026-11-09",
+        "completeness_temp": 1.0,
+        "completeness_rain": 1.0
+      },
+      {
+        "city": "Strasbourg",
+        "priority": 1,
+        "station_id": "67482001",
+        "station_name": "STRASBOURG - BOTANIQUE",
+        "dep": "67",
+        "lat": 48.5818,
+        "lon": 7.7688,
+        "altitude": 139,
+        "distance_km": 1.5,
+        "first_date": "1950-01-01",
+        "last_date": "2026-11-09",
+        "completeness_temp": 1.0,
+        "completeness_rain": 1.0
+      },
+      {
+        "city": "Toulouse",
+        "priority": 1,
+        "station_id": "31069001",
+        "station_name": "TOULOUSE-BLAGNAC",
+        "dep": "31",
+        "lat": 43.621,
+        "lon": 1.3788,
+        "altitude": 151,
+        "distance_km": 5.6,
+        "first_date": "1950-01-01",
+        "last_date": "2026-11-09",
+        "completeness_temp": 1.0,
+        "completeness_rain": 1.0
+      }
+    ],
+    "offsets": [
+      {
+        "city": "Grenoble",
+        "station_id": "38158001",
+        "n_overlap_days": 910,
+        "offset_tn": -0.91,
+        "offset_tx": -0.75,
+        "corr_tx": 0.94
+      },
+      {
+        "city": "Limoges",
+        "station_id": "87085001",
+        "n_overlap_days": 8068,
+        "offset_tn": -1.51,
+        "offset_tx": 0.64,
+        "corr_tx": 0.86
+      },
+      {
+        "city": "Limoges",
+        "station_id": "87085006",
+        "n_overlap_days": 19237,
+        "offset_tn": -1.92,
+        "offset_tx": 1.58,
+        "corr_tx": 0.98
+      },
+      {
+        "city": "Reims",
+        "station_id": "51183001",
+        "n_overlap_days": 717,
+        "offset_tn": -0.32,
+        "offset_tx": -0.25,
+        "corr_tx": 0.99
+      }
+    ]
+  },
+  "era5": {
+    "title": "ERA5 suit bien la météo du jour, mais lisse les effets locaux",
+    "mean_bias_tx": -0.46,
+    "mean_bias_tn": 0.48,
+    "mean_corr_tx": 0.987,
+    "mean_corr_tn": 0.967,
+    "mean_rmse_tx": 1.4,
+    "hot_days_obs": 5973,
+    "hot_days_era5": 5579,
+    "worst_city": "Ajaccio",
+    "worst_bias_tn": 4.71,
+    "cities": [
+      {
+        "city": "Ajaccio",
+        "station": "AJACCIO",
+        "n_days": 3653,
+        "bias_tx": -2.145,
+        "bias_tn": 4.712,
+        "rmse_tx": 2.493,
+        "rmse_tn": 5.171,
+        "corr_tx": 0.979,
+        "corr_tn": 0.929,
+        "bias_tx_hot_days": -3.021,
+        "hot_days_obs": 456,
+        "hot_days_era5": 90
+      },
+      {
+        "city": "Biarritz",
+        "station": "SOCOA",
+        "n_days": 3642,
+        "bias_tx": -1.191,
+        "bias_tn": 0.705,
+        "rmse_tx": 1.765,
+        "rmse_tn": 1.576,
+        "corr_tx": 0.974,
+        "corr_tn": 0.964,
+        "bias_tx_hot_days": -2.098,
+        "hot_days_obs": 121,
+        "hot_days_era5": 81
+      },
+      {
+        "city": "Bordeaux",
+        "station": "BORDEAUX-MERIGNAC",
+        "n_days": 3653,
+        "bias_tx": -0.151,
+        "bias_tn": -0.516,
+        "rmse_tx": 1.06,
+        "rmse_tn": 1.335,
+        "corr_tx": 0.99,
+        "corr_tn": 0.977,
+        "bias_tx_hot_days": -0.091,
+        "hot_days_obs": 337,
+        "hot_days_era5": 325
+      },
+      {
+        "city": "Brest",
+        "station": "BREST-GUIPAVAS",
+        "n_days": 3653,
+        "bias_tx": -1.531,
+        "bias_tn": 1.397,
+        "rmse_tx": 2.024,
+        "rmse_tn": 2.145,
+        "corr_tx": 0.98,
+        "corr_tn": 0.94,
+        "bias_tx_hot_days": -4.754,
+        "hot_days_obs": 26,
+        "hot_days_era5": 3
+      },
+      {
+        "city": "Clermont-Ferrand",
+        "station": "CLERMONT-FD",
+        "n_days": 3653,
+        "bias_tx": -0.38,
+        "bias_tn": 0.333,
+        "rmse_tx": 1.419,
+        "rmse_tn": 1.756,
+        "corr_tx": 0.986,
+        "corr_tn": 0.964,
+        "bias_tx_hot_days": -0.42,
+        "hot_days_obs": 343,
+        "hot_days_era5": 327
+      },
+      {
+        "city": "Dijon",
+        "station": "DIJON-LONGVIC",
+        "n_days": 3653,
+        "bias_tx": -0.162,
+        "bias_tn": 0.642,
+        "rmse_tx": 1.198,
+        "rmse_tn": 1.788,
+        "corr_tx": 0.991,
+        "corr_tn": 0.966,
+        "bias_tx_hot_days": -0.453,
+        "hot_days_obs": 293,
+        "hot_days_era5": 262
+      },
+      {
+        "city": "Grenoble",
+        "station": "GRENOBLE-ST GEOIRS",
+        "n_days": 3653,
+        "bias_tx": 0.203,
+        "bias_tn": 1.267,
+        "rmse_tx": 1.159,
+        "rmse_tn": 2.117,
+        "corr_tx": 0.991,
+        "corr_tn": 0.966,
+        "bias_tx_hot_days": 0.121,
+        "hot_days_obs": 318,
+        "hot_days_era5": 325
+      },
+      {
+        "city": "Lille",
+        "station": "LILLE-LESQUIN",
+        "n_days": 3653,
+        "bias_tx": -0.787,
+        "bias_tn": -0.232,
+        "rmse_tx": 1.21,
+        "rmse_tn": 1.253,
+        "corr_tx": 0.994,
+        "corr_tn": 0.976,
+        "bias_tx_hot_days": -1.842,
+        "hot_days_obs": 105,
+        "hot_days_era5": 58
+      },
+      {
+        "city": "Limoges",
+        "station": "LE PALAIS SUR VIENNE",
+        "n_days": 3653,
+        "bias_tx": -1.159,
+        "bias_tn": 1.147,
+        "rmse_tx": 1.672,
+        "rmse_tn": 2.335,
+        "corr_tx": 0.989,
+        "corr_tn": 0.939,
+        "bias_tx_hot_days": -1.544,
+        "hot_days_obs": 281,
+        "hot_days_era5": 192
+      },
+      {
+        "city": "Lyon",
+        "station": "LYON-BRON",
+        "n_days": 3653,
+        "bias_tx": -0.223,
+        "bias_tn": -0.03,
+        "rmse_tx": 1.099,
+        "rmse_tn": 1.322,
+        "corr_tx": 0.993,
+        "corr_tn": 0.98,
+        "bias_tx_hot_days": -0.176,
+        "hot_days_obs": 471,
+        "hot_days_era5": 448
+      },
+      {
+        "city": "Marseille",
+        "station": "MARIGNANE",
+        "n_days": 3653,
+        "bias_tx": 0.366,
+        "bias_tn": 0.356,
+        "rmse_tx": 1.116,
+        "rmse_tn": 1.402,
+        "corr_tx": 0.99,
+        "corr_tn": 0.98,
+        "bias_tx_hot_days": 0.366,
+        "hot_days_obs": 683,
+        "hot_days_era5": 737
+      },
+      {
+        "city": "Montpellier",
+        "station": "MONTPELLIER-AEROPORT",
+        "n_days": 3653,
+        "bias_tx": 0.688,
+        "bias_tn": 0.15,
+        "rmse_tx": 1.824,
+        "rmse_tn": 1.399,
+        "corr_tx": 0.978,
+        "corr_tn": 0.978,
+        "bias_tx_hot_days": 1.407,
+        "hot_days_obs": 459,
+        "hot_days_era5": 705
+      },
+      {
+        "city": "Nantes",
+        "station": "NANTES-BOUGUENAIS",
+        "n_days": 3653,
+        "bias_tx": -0.738,
+        "bias_tn": -0.042,
+        "rmse_tx": 1.113,
+        "rmse_tn": 1.273,
+        "corr_tx": 0.993,
+        "corr_tn": 0.972,
+        "bias_tx_hot_days": -1.032,
+        "hot_days_obs": 173,
+        "hot_days_era5": 125
+      },
+      {
+        "city": "Nice",
+        "station": "NICE",
+        "n_days": 3653,
+        "bias_tx": 0.355,
+        "bias_tn": 0.236,
+        "rmse_tx": 1.36,
+        "rmse_tn": 1.259,
+        "corr_tx": 0.976,
+        "corr_tn": 0.981,
+        "bias_tx_hot_days": 0.073,
+        "hot_days_obs": 162,
+        "hot_days_era5": 244
+      },
+      {
+        "city": "Paris",
+        "station": "PARIS-MONTSOURIS",
+        "n_days": 3653,
+        "bias_tx": -0.841,
+        "bias_tn": -1.625,
+        "rmse_tx": 1.162,
+        "rmse_tn": 2.075,
+        "corr_tx": 0.995,
+        "corr_tn": 0.974,
+        "bias_tx_hot_days": -1.175,
+        "hot_days_obs": 197,
+        "hot_days_era5": 137
+      },
+      {
+        "city": "Perpignan",
+        "station": "PERPIGNAN",
+        "n_days": 3653,
+        "bias_tx": 0.044,
+        "bias_tn": -0.223,
+        "rmse_tx": 1.614,
+        "rmse_tn": 1.566,
+        "corr_tx": 0.975,
+        "corr_tn": 0.969,
+        "bias_tx_hot_days": 0.095,
+        "hot_days_obs": 523,
+        "hot_days_era5": 579
+      },
+      {
+        "city": "Reims",
+        "station": "REIMS-PRUNAY",
+        "n_days": 3653,
+        "bias_tx": -0.556,
+        "bias_tn": 1.419,
+        "rmse_tx": 1.065,
+        "rmse_tn": 2.437,
+        "corr_tx": 0.993,
+        "corr_tn": 0.943,
+        "bias_tx_hot_days": -0.153,
+        "hot_days_obs": 174,
+        "hot_days_era5": 153
+      },
+      {
+        "city": "Rennes",
+        "station": "RENNES-ST JACQUES",
+        "n_days": 3653,
+        "bias_tx": -0.743,
+        "bias_tn": 0.206,
+        "rmse_tx": 1.143,
+        "rmse_tn": 1.322,
+        "corr_tx": 0.992,
+        "corr_tn": 0.968,
+        "bias_tx_hot_days": -1.501,
+        "hot_days_obs": 124,
+        "hot_days_era5": 81
+      },
+      {
+        "city": "Strasbourg",
+        "station": "STRASBOURG - BOTANIQUE",
+        "n_days": 3653,
+        "bias_tx": -0.275,
+        "bias_tn": -0.462,
+        "rmse_tx": 1.3,
+        "rmse_tn": 1.21,
+        "corr_tx": 0.99,
+        "corr_tn": 0.985,
+        "bias_tx_hot_days": -0.508,
+        "hot_days_obs": 267,
+        "hot_days_era5": 238
+      },
+      {
+        "city": "Toulouse",
+        "station": "TOULOUSE-BLAGNAC",
+        "n_days": 3653,
+        "bias_tx": 0.094,
+        "bias_tn": 0.14,
+        "rmse_tx": 1.108,
+        "rmse_tn": 1.181,
+        "corr_tx": 0.99,
+        "corr_tn": 0.982,
+        "bias_tx_hot_days": -0.228,
+        "hot_days_obs": 460,
+        "hot_days_era5": 469
+      }
+    ]
+  },
+  "pipeline": {
+    "n_files": 40,
+    "raw_bytes": 267691200,
+    "duration_01_staging.sql": 7.75,
+    "duration_02_quality.sql": 1.68,
+    "duration_03_stations.sql": 1.76,
+    "duration_04_gold.sql": 0.57,
+    "n_rows": 25026530,
+    "n_stations": 2433,
+    "first_date": "1950-01-01",
+    "last_date": "2026-11-10",
+    "n_measures": 58909910,
+    "n_valid_measures": 58909706,
+    "n_duplicates": 0,
+    "n_cities": 20
+  },
+  "config": {
+    "start_year": 1951,
+    "end_year": 2025,
+    "reference_period": [
+      1991,
+      2020
+    ],
+    "old_period": [
+      1961,
+      1990
+    ],
+    "recent_period": [
+      2011,
+      2025
+    ],
+    "month_min_completeness": 0.9,
+    "year_min_completeness": 0.95,
+    "thresholds": {
+      "hot_day": 30,
+      "very_hot_day": 35,
+      "tropical_night": 20,
+      "frost_day": 0,
+      "rain_day": 1,
+      "heavy_rain": 20,
+      "heatwave_min_days": 3
+    }
+  }
+}
