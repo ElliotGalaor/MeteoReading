@@ -49,6 +49,7 @@ The full report, with every figure and the method, is in [reports/climate_report
 | **Data visualisation**: colour-blind-safe palette, one idea per chart | [reports/figures/](reports/figures/) |
 | **Dashboard**: 7 interactive pages, including a SQL editor | [dashboard/](dashboard/) |
 | **Geospatial data**: GPX/KML/GeoJSON parsing (safe XML), routing on OpenStreetMap, resampling, elevation, bearings, time interpolation, head/tail wind | [meteo/gps.py](meteo/gps.py), [meteo/routing.py](meteo/routing.py), [meteo/route_weather.py](meteo/route_weather.py) |
+| **Explainable scoring**: danger and comfort indices from documented, per-activity thresholds (piecewise linear, combined as independent risks, time-weighted), rule-based advice | [meteo/route_scores.py](meteo/route_scores.py) |
 | **Software quality**: externalised configuration, automated tests, `ruff` lint, pipeline reproducible in one command | [tests/](tests/), [config.yaml](config.yaml) |
 | **DevOps**: GitHub Actions CI (lint, tests on 3 Python versions, **Docker** image with its data built once, smoke-tested and published to GHCR, weekly data refresh) and CD (that same image promoted on **Google Cloud Run**: staging, then production after approval, keyless authentication through Workload Identity Federation) | [.github/workflows/](.github/workflows/), [Dockerfile](Dockerfile), [docs/DEPLOY.md](docs/DEPLOY.md) |
 
@@ -135,7 +136,7 @@ docker run -p 8080:8080 ghcr.io/elliotgalaor/meteoreading:latest
 | **Extremes and records** | city × decade heatmap, then vs now, records, filterable heat episodes |
 | **Data and quality** | pipeline diagram, quality summary, station network, series splicing, ERA5 validation, limitations |
 | **SQL queries** | live SQL editor on the warehouse (read-only, disk access blocked), CSV export |
-| **Route weather** | weather along a route drawn on the map, uploaded or picked from the samples: map, profile, point-by-point reading, nearby station observations |
+| **Route weather** | weather along a route drawn on the map, uploaded or picked from the samples: danger and comfort scores, advice, map, profile, point-by-point reading, nearby station observations |
 
 ## Route weather reading
 
@@ -161,6 +162,17 @@ Then the tool:
 5. **writes the reading**: where and when it rains, temperature range (coldest point), wind against you, strong
    gusts, thunderstorm or ice risk, plus the observations of the **Météo-France stations within 5 km** of the route
    for past trips (ground truth from the warehouse).
+6. **scores the trip** for the chosen activity (walking, cycling or driving) and gives **advice**:
+   - a **danger score** from 0 to 100: each hazard (thunderstorm, ice, snow, heavy rain, gusts, heat, cold, poor
+     visibility, darkness) is scored at each point between a threshold where it starts to matter and one where it
+     is severe, both set per activity (a 60 km/h gust scores 50 on a bike, 0 in a car); hazards met together add
+     up like independent risks, and the route's score is 70% its worst moment and 30% the average over time;
+   - a **comfort score** from 0 to 100: points taken off for the temperature outside the comfortable range of the
+     activity, muggy air, rain, headwind, snow, strong sun, darkness or fog, averaged over the time on the way;
+   - **advice** from simple rules on what is met, where and when, worded for the activity ("Fog or poor visibility
+     around km 238 (20:58): dipped headlights or fog lights, and slow down"), with a pointer to the official
+     Météo-France warnings when a hazard is at least moderate.
+     The thresholds are in [meteo/route_scores.py](meteo/route_scores.py) and tested.
 
 ![Weather along the Mont Ventoux climb](reports/figures/route_weather_example.png)
 
@@ -241,6 +253,7 @@ MeteoReading/
 │   ├── gps.py             # GPS tracks: parsing, distances, sampling, timing
 │   ├── routing.py         # track from map clicks: routing, resampling, elevation
 │   ├── route_weather.py   # weather reading along a track
+│   ├── route_scores.py    # danger and comfort scores, advice
 │   ├── viz.py, palette.py # static charts
 │   └── report.py, fmt.py  # HTML report
 ├── sql/                   # transformations (01 → 04) and example queries

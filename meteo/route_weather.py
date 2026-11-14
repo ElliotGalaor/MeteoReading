@@ -25,7 +25,9 @@ FORECAST_PAST_DAYS = 90      # the forecast API keeps ~92 days of past data
 FORECAST_FUTURE_DAYS = 15    # and forecasts 16 days ahead (today included)
 ARCHIVE_DELAY_DAYS = 6       # ERA5 is published with a ~5-day delay
 HOURLY = ["temperature_2m", "apparent_temperature", "precipitation", "precipitation_probability",
-          "weather_code", "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "cloud_cover"]
+          "weather_code", "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "cloud_cover",
+          # for the danger and comfort scores (route_scores.py); the archive has no probability, visibility or UV
+          "is_day", "dew_point_2m", "snowfall", "visibility", "uv_index"]
 RAIN_THRESHOLD = 0.2         # mm/h: below this, the hour counts as dry
 
 # WMO weather codes -> (label, icon)
@@ -118,7 +120,8 @@ def interpolate_at(hourly: pd.DataFrame, t: pd.Timestamp) -> dict:
     tx = float(epoch_seconds([t])[0])
     out = {}
     for col in ("temperature_2m", "apparent_temperature", "precipitation", "precipitation_probability",
-                "wind_speed_10m", "wind_gusts_10m", "cloud_cover"):
+                "wind_speed_10m", "wind_gusts_10m", "cloud_cover", "is_day", "dew_point_2m", "snowfall",
+                "visibility", "uv_index"):
         if col in hourly and hourly[col].notna().any():
             y = pd.to_numeric(hourly[col], errors="coerce").to_numpy(dtype=float)
             ok = ~np.isnan(y)

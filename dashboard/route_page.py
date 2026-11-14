@@ -13,9 +13,27 @@ from plotly.subplots import make_subplots
 from streamlit_folium import st_folium
 
 from meteo.gps import ACTIVITIES, Track, parse_track, passage_times, sample_points, summary, to_gpx, with_times
+from meteo.route_scores import DANGER_LEVELS, Assessment, Score, assess, level
 from meteo.route_weather import FORECAST_FUTURE_DAYS, api_weight, nearby_station_obs, read_route
 from meteo.routing import geocode, track_from_waypoints, waypoints_from_drawings
-from ui import COOL, DIVERGING, HEAT, INK, INK2, MUTED, RAIN, ROOT, SERIES, WARM, _connect, chart, num, page_header
+from ui import (
+    AXIS,
+    COOL,
+    DIVERGING,
+    HEAT,
+    INK,
+    INK2,
+    MUTED,
+    RAIN,
+    ROOT,
+    SERIES,
+    STATUS,
+    WARM,
+    _connect,
+    chart,
+    num,
+    page_header,
+)
 
 SAMPLES_DIR = ROOT / "samples"
 TIMEZONES = ["Europe/Paris", "UTC", "Europe/London", "Europe/Madrid", "Europe/Rome", "Europe/Berlin",
@@ -125,6 +143,8 @@ def page_route():
                 st.error(f"Could not read this track: {exc}")
                 return
     track = Track(name=name, points=points)
+    options = list(ACTIVITIES)
+    guessed = st.session_state.get("draw_activity", "Cycling") if mode == "Draw on the map" else _guess_activity(track.name)
 
     with right:
         if track.has_time:
@@ -132,7 +152,11 @@ def page_route():
         else:
             timing = "Plan a new trip"
             st.caption("This track has no timestamps: choose when you set off and how fast you go.")
-        if timing == "Plan a new trip":
+        if timing != "Plan a new trip":
+            activity = st.selectbox("Activity", options, index=options.index(guessed),
+                                    help="Sets the danger and comfort scores: the same gust is a danger on a bike, "
+                                         "not in a car.")
+        else:
             c1, c2 = st.columns(2)
             today = date.today()
             day = c1.date_input("Departure date", today + timedelta(days=1),
@@ -140,8 +164,8 @@ def page_route():
                                 help="Up to 16 days ahead (forecast). Past dates show the weather that actually happened.")
             hour = c2.time_input("Departure time", time(9, 0), step=900)
             c3, c4, c5 = st.columns([1.2, 1, 1.2])
-            options = list(ACTIVITIES)
-            activity = c3.selectbox("Activity", options, index=options.index(_guess_activity(track.name)))
+            activity = c3.selectbox("Activity", options, index=options.index(guessed),
+                                    help="Sets the speed, and the danger and comfort scores.")
             preset = ACTIVITIES[activity]
             speed = c4.number_input("Speed (km/h)", 1.0, 150.0, float(preset["speed"]), step=0.5,
                                     help="Average speed on the flat; time is added for climbs when walking or cycling.")
@@ -170,7 +194,9 @@ def page_route():
 
     local = pts["time"].dt.tz_convert(tz)
     multi_day = local.dt.date.nunique() > 1
-    pts = pts.assign(local=local, local_str=local.dt.strftime("%a %d %b %H:%M" if multi_day else "%H:%M"))
+    scores = assess(pts, activity, tz)
+    pts = pts.assign(local=local, local_str=local.dt.strftime("%a %d %b %H:%M" if multi_day else "%H:%M"),
+                     danger=scores.points["danger"].to_numpy(), comfort=scores.points["comfort"].to_numpy())
 
     st.subheader("The reading")
     k = st.columns(4)
@@ -185,8 +211,11 @@ def page_route():
     for line in insights:
         st.markdown(f"<div class='finding'>{line}</div>", unsafe_allow_html=True)
 
+    _scores_panel(scores, pts, source)
+    st.subheader("Along the route")
     _map(track, pts, tz)
     _profile(track, pts)
+    _scores_chart(scores, pts)
     _table(pts)
     _station_panel(pts, tz)
 
@@ -194,6 +223,97 @@ def page_route():
              if source == "forecast" else "ERA5 reanalysis archive via the Open-Meteo API (what the weather actually was)")
     st.markdown(f"<div class='source'>Weather: {label}. Times in {tz}. Temperatures are adjusted to the altitude "
                 f"of each point (90 m terrain model).</div>", unsafe_allow_html=True)
+
+
+DANGER_STATUS = {"Low": "good", "Moderate": "warning", "High": "serious", "Severe": "critical"}
+COMFORT_STATUS = {"Very pleasant": "good", "Pleasant": "good", "Mixed": "warning", "Unpleasant": "serious",
+                  "Very unpleasant": "critical"}
+METHOD = """
+**Danger** (0 = nothing to worry about, 100 = do not go). At each point, every hazard (thunderstorm, ice, snow,
+heavy rain, gusts, heat, cold, poor visibility, darkness) gets a score from 0 to 100, rising between a threshold
+where it starts to matter and one where it is severe. The thresholds depend on the activity: a 60 km/h gust
+scores 50 on a bike and 0 in a car. Hazards met at the same time add up like independent risks, and the route's
+score is 70% its worst moment and 30% the average over the time on the way.
+
+**Comfort** (100 = ideal for the activity). Points are taken off at each point for the temperature outside the
+comfortable range of the activity, muggy air, rain, wind (the headwind on a bike), snow, strong sun, darkness
+and fog, then averaged over the time on the way.
+
+**Advice**: simple rules on the conditions met, where and when, worded for the activity. They do not replace the
+official warnings. Details and thresholds: `meteo/route_scores.py`.
+"""
+
+
+def _card(title: str, score: Score, status: str, why: str) -> str:
+    color = STATUS[status]
+    return (f"<div class='score-card'><div class='score-label'>{title}</div>"
+            f"<div class='score-value'>{score.value}<small> / 100</small>"
+            f"<span class='chip'><i style='background:{color}'></i>{score.level}</span></div>"
+            f"<div class='meter'><div style='width:{max(score.value, 2)}%;background:{color}'></div></div>"
+            f"<div class='score-why'>{why}</div></div>")
+
+
+def _scores_panel(scores: Assessment, pts: pd.DataFrame, source: str) -> None:
+    st.subheader(f"Safety and comfort · {scores.activity.lower()}")
+    clock = dict(zip(pts["time"], pts["local_str"], strict=True))
+    danger, comfort = scores.danger, scores.comfort
+    if danger.factors:
+        why = "Worst moments: " + " · ".join(f"{f.name.lower()} {f.value:.0f} at km {f.km:.0f} ({clock[f.time]})"
+                                              for f in danger.factors[:3])
+    else:
+        why = "No significant hazard on the way."
+    c1, c2 = st.columns(2)
+    c1.markdown(_card("Danger score", danger, DANGER_STATUS[danger.level], why), unsafe_allow_html=True)
+    if comfort.factors:
+        why = "Points lost on average: " + " · ".join(f"{f.name.lower()} −{f.value:.0f}" for f in comfort.factors[:3])
+    else:
+        why = "Nothing spoils the trip."
+    c2.markdown(_card("Comfort score", comfort, COMFORT_STATUS[comfort.level], why), unsafe_allow_html=True)
+    with st.expander("How are the scores computed?"):
+        st.markdown(METHOD)
+
+    st.markdown("<div class='chart-title'>What to plan for</div>", unsafe_allow_html=True)
+    if source == "archive":
+        st.caption("A past trip: the advice says what those conditions called for.")
+    for a in scores.advice:
+        st.markdown(f"<div class='advice {a.kind}'>{a.icon} <b>{a.title}</b><br><span>{a.text}</span></div>",
+                    unsafe_allow_html=True)
+
+
+def _scores_chart(scores: Assessment, pts: pd.DataFrame) -> None:
+    sp = scores.points
+    h, pen = sp.filter(like="h_"), sp.filter(like="p_")
+    top_h = np.where(h.max(axis=1) >= 10, h.idxmax(axis=1).str[2:].str.lower(), "none")
+    top_p = np.where(pen.max(axis=1) >= 3, pen.idxmax(axis=1).str[2:].str.lower(), "none")
+    d_level = [level(v, DANGER_LEVELS) for v in sp["danger"]]
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.12,
+                        subplot_titles=["Danger (0 = none, 100 = do not go)", "Comfort (100 = ideal)"])
+    fig.add_scatter(x=sp["dist_km"], y=sp["danger"], mode="lines+markers", name="Danger", showlegend=False,
+                    line=dict(color=AXIS, width=2),
+                    marker=dict(size=10, color=[STATUS[DANGER_STATUS[lv]] for lv in d_level],
+                                line=dict(width=2, color="#fcfcfb")),
+                    customdata=np.stack([pts["local_str"], d_level, top_h], axis=1),
+                    hovertemplate="km %{x:.1f} · %{customdata[0]}<br>danger %{y:.0f} (%{customdata[1]})"
+                                  "<br>main hazard: %{customdata[2]}<extra></extra>", row=1, col=1)
+    for y, name in [(25, "moderate"), (50, "high"), (75, "severe")]:
+        fig.add_hline(y=y, line=dict(color=MUTED, width=1, dash="dot"), row=1, col=1,
+                      annotation_text=name, annotation_position="top left",
+                      annotation_font=dict(color=MUTED, size=11))
+    fig.add_scatter(x=sp["dist_km"], y=sp["comfort"], mode="lines+markers", name="Comfort", showlegend=False,
+                    line=dict(color=SERIES[0], width=2), marker=dict(size=8),
+                    customdata=np.stack([pts["local_str"], top_p], axis=1),
+                    hovertemplate="km %{x:.1f} · %{customdata[0]}<br>comfort %{y:.0f}"
+                                  "<br>main discomfort: %{customdata[1]}<extra></extra>", row=2, col=1)
+    fig.update_yaxes(range=[0, 104], tickvals=[0, 25, 50, 75, 100], row=1, col=1)
+    fig.update_yaxes(range=[0, 104], tickvals=[0, 25, 50, 75, 100], row=2, col=1)
+    fig.update_xaxes(title_text="distance (km)", row=2, col=1)
+    fig.update_annotations(selector=dict(text="Danger (0 = none, 100 = do not go)"), font=dict(size=13, color=INK2),
+                           x=0, xanchor="left")
+    fig.update_annotations(selector=dict(text="Comfort (100 = ideal)"), font=dict(size=13, color=INK2),
+                           x=0, xanchor="left")
+    chart(fig, 460, "Danger and comfort along the route",
+          "Danger dots are coloured by level · hover for the main hazard or discomfort at each point",
+          margin=dict(t=34))
 
 
 def _draw_track() -> tuple[pd.DataFrame, str] | None:
@@ -235,10 +355,12 @@ def _draw_track() -> tuple[pd.DataFrame, str] | None:
 
 
 def _map(track: Track, pts: pd.DataFrame, tz: str) -> None:
-    choice = st.segmented_control("Colour the route by", ["Temperature", "Rain", "Headwind"], default="Temperature")
+    choice = st.segmented_control("Colour the route by", ["Temperature", "Rain", "Headwind", "Danger", "Comfort"],
+                                  default="Temperature")
     choice = choice or "Temperature"
     col, scale, unit = {"Temperature": ("temperature_2m", HEAT, "°C"), "Rain": ("precipitation", RAIN, "mm/h"),
-                        "Headwind": ("headwind", DIVERGING, "km/h")}[choice]
+                        "Headwind": ("headwind", DIVERGING, "km/h"), "Danger": ("danger", HEAT, "/ 100"),
+                        "Comfort": ("comfort", RAIN, "/ 100")}[choice]
     vals = pts[col].fillna(0)
     marker = dict(size=13, color=vals, colorscale=scale, colorbar=dict(title=dict(text=unit, side="top"), thickness=12, len=0.6))
     if choice == "Headwind":
@@ -246,17 +368,21 @@ def _map(track: Track, pts: pd.DataFrame, tz: str) -> None:
         marker.update(cmin=-lim, cmax=lim)
     elif choice == "Rain":
         marker.update(cmin=0, cmax=max(vals.max(), 2))
+    elif choice in ("Danger", "Comfort"):
+        marker.update(cmin=0, cmax=100)
     full = track.points
     fig = go.Figure()
     fig.add_trace(go.Scattermap(lat=full["lat"], lon=full["lon"], mode="lines", line=dict(width=3, color=INK2),
                                 hoverinfo="skip", name="Track"))
     custom = np.stack([pts["dist_km"], pts["local_str"], pts["icon"] + " " + pts["condition"], pts["temperature_2m"],
-                       pts["precipitation"].fillna(0), pts["wind_from"], pts["wind_speed_10m"], pts["headwind"]], axis=1)
+                       pts["precipitation"].fillna(0), pts["wind_from"], pts["wind_speed_10m"], pts["headwind"],
+                       pts["danger"], pts["comfort"]], axis=1)
     fig.add_trace(go.Scattermap(
         lat=pts["lat"], lon=pts["lon"], mode="markers", marker=marker, customdata=custom, name="Weather",
         hovertemplate="<b>km %{customdata[0]:.1f}</b> · %{customdata[1]}<br>%{customdata[2]}<br>"
                       "%{customdata[3]:.1f} °C · rain %{customdata[4]:.1f} mm/h<br>"
-                      "wind from %{customdata[5]} %{customdata[6]:.0f} km/h (headwind %{customdata[7]:+.0f})<extra></extra>"))
+                      "wind from %{customdata[5]} %{customdata[6]:.0f} km/h (headwind %{customdata[7]:+.0f})<br>"
+                      "danger %{customdata[8]:.0f} · comfort %{customdata[9]:.0f}<extra></extra>"))
     ends = pts.iloc[[0, -1]]
     fig.add_trace(go.Scattermap(lat=ends["lat"], lon=ends["lon"], mode="markers+text", text=["Start", "Finish"],
                                 textposition="top right", marker=dict(size=9, color=INK), hoverinfo="skip",
@@ -319,6 +445,7 @@ def _table(pts: pd.DataFrame) -> None:
         "feels_like_c": pts["apparent_temperature"].round(1), "rain_mm_h": pts["precipitation"].round(1),
         "rain_prob_pct": pts["precipitation_probability"].round(0), "wind": pts["wind_from"] + " " + pts["wind_speed_10m"].round(0).astype(int).astype(str),
         "headwind_kmh": pts["headwind"].round(0), "gusts_kmh": pts["wind_gusts_10m"].round(0),
+        "danger": pts["danger"].round(0), "comfort": pts["comfort"].round(0),
     })
     with st.expander("Point-by-point reading", expanded=False):
         st.dataframe(tbl, hide_index=True, column_config={
@@ -330,7 +457,9 @@ def _table(pts: pd.DataFrame) -> None:
             "rain_prob_pct": st.column_config.NumberColumn("Rain prob.", format="%d%%"),
             "wind": "Wind (from, km/h)",
             "headwind_kmh": st.column_config.NumberColumn("Headwind", format="%+d km/h"),
-            "gusts_kmh": st.column_config.NumberColumn("Gusts", format="%d km/h")})
+            "gusts_kmh": st.column_config.NumberColumn("Gusts", format="%d km/h"),
+            "danger": st.column_config.NumberColumn("Danger", format="%d", help="0 = none, 100 = do not go"),
+            "comfort": st.column_config.NumberColumn("Comfort", format="%d", help="100 = ideal for the activity")})
         st.download_button("Download as CSV", tbl.to_csv(index=False).encode("utf-8"), "route_weather.csv", "text/csv",
                            icon=":material/download:")
 
