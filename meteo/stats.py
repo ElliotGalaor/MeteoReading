@@ -1,4 +1,4 @@
-"""Fonctions statistiques pures (sans entrée/sortie), testées unitairement."""
+"""Pure statistical functions (no I/O), covered by unit tests."""
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
@@ -7,21 +7,21 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-SEASONS = {12: "Hiver", 1: "Hiver", 2: "Hiver", 3: "Printemps", 4: "Printemps", 5: "Printemps",
-           6: "Été", 7: "Été", 8: "Été", 9: "Automne", 10: "Automne", 11: "Automne"}
-SEASON_ORDER = ["Hiver", "Printemps", "Été", "Automne"]
+SEASONS = {12: "Winter", 1: "Winter", 2: "Winter", 3: "Spring", 4: "Spring", 5: "Spring",
+           6: "Summer", 7: "Summer", 8: "Summer", 9: "Autumn", 10: "Autumn", 11: "Autumn"}
+SEASON_ORDER = ["Winter", "Spring", "Summer", "Autumn"]
 
 
 @dataclass
 class Trend:
-    """Tendance linéaire exprimée par décennie, avec deux tests complémentaires."""
-    slope: float          # pente OLS (unité / décennie)
-    ci_low: float         # intervalle de confiance à 95 % de la pente OLS
+    """Linear trend expressed per decade, with two complementary tests."""
+    slope: float          # OLS slope (unit per decade)
+    ci_low: float         # 95% confidence interval of the OLS slope
     ci_high: float
-    p_value: float        # test de Student sur la pente OLS
+    p_value: float        # Student t-test on the OLS slope
     r2: float
-    sen_slope: float      # pente de Theil-Sen (robuste aux valeurs extrêmes)
-    mk_tau: float         # tau de Kendall (test de Mann-Kendall, non paramétrique)
+    sen_slope: float      # Theil-Sen slope (robust to outliers)
+    mk_tau: float         # Kendall's tau (Mann-Kendall test, non-parametric)
     mk_p_value: float
     n: int
 
@@ -36,12 +36,12 @@ class Trend:
 
 
 def trend(x, y, per: float = 10.0) -> Trend:
-    """Tendance de y en fonction de x (années), exprimée pour `per` unités de x."""
+    """Trend of y against x (years), expressed per `per` units of x."""
     x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
     mask = ~(np.isnan(x) | np.isnan(y))
     x, y = x[mask], y[mask]
     if len(x) < 10:
-        raise ValueError(f"Série trop courte pour une tendance ({len(x)} points)")
+        raise ValueError(f"Series too short for a trend ({len(x)} points)")
     ols = stats.linregress(x, y)
     t_crit = stats.t.ppf(0.975, len(x) - 2)
     sen = stats.theilslopes(y, x)
@@ -61,9 +61,9 @@ def trend(x, y, per: float = 10.0) -> Trend:
 
 def anomalies(df: pd.DataFrame, cols: list[str], ref: tuple[int, int],
               by: str | list[str] = "city", time: str = "year", relative: bool = False) -> pd.DataFrame:
-    """Écart de chaque valeur à la moyenne de son groupe sur la période de référence.
+    """Difference between each value and the mean of its group over the reference period.
 
-    relative=True renvoie un écart en % (utile pour la pluie, très différente d'une ville à l'autre).
+    relative=True returns a difference in % (useful for rainfall, which varies a lot between cities).
     """
     in_ref = df[time].between(*ref)
     normals = df[in_ref].groupby(by)[cols].mean().add_suffix("__ref")
@@ -75,11 +75,11 @@ def anomalies(df: pd.DataFrame, cols: list[str], ref: tuple[int, int],
 
 
 def composite(df: pd.DataFrame, col: str, time: str = "year", min_share: float = 0.8) -> pd.Series:
-    """Moyenne entre villes d'une anomalie, pour chaque pas de temps.
+    """Mean of an anomaly across cities, for each time step.
 
-    On moyenne des anomalies (et non des valeurs brutes) : l'indicateur ne bouge pas
-    si une ville manque une année. Un pas de temps est ignoré si moins de
-    `min_share` des villes sont disponibles.
+    Averaging anomalies (rather than raw values) keeps the indicator stable when a city
+    is missing a year. A time step is dropped when fewer than `min_share` of the cities
+    have data.
     """
     n_total = df["city"].nunique()
     g = df.groupby(time)[col]
@@ -88,7 +88,7 @@ def composite(df: pd.DataFrame, col: str, time: str = "year", min_share: float =
 
 
 def seasonal(monthly: pd.DataFrame, col: str = "tmean") -> pd.DataFrame:
-    """Moyennes saisonnières. L'hiver N regroupe décembre N-1, janvier et février N."""
+    """Seasonal means. Winter N covers December N-1, January and February N."""
     m = monthly[monthly["valid_temp"]].copy()
     m["season"] = m["month"].map(SEASONS)
     m["season_year"] = m["year"] + (m["month"] == 12).astype(int)
@@ -102,12 +102,12 @@ def period_mean(df: pd.DataFrame, col: str, period: tuple[int, int], by: str = "
 
 
 def record_counts(daily: pd.DataFrame, start_year: int, warmup_years: int = 10) -> pd.DataFrame:
-    """Compte les records quotidiens battus chaque année (méthode de Meehl et al., 2009).
+    """Count the daily records broken each year (method of Meehl et al., 2009).
 
-    Pour chaque ville et chaque jour calendaire, un record chaud est un TX supérieur à tous
-    les TX des années précédentes à la même date ; un record froid, un TN inférieur à tous
-    les TN précédents. Dans un climat stable, il y aurait autant de records chauds que froids.
-    Les `warmup_years` premières années servent seulement à initialiser les records.
+    For each city and calendar day, a hot record is a TX higher than every previous TX on
+    that date; a cold record is a TN lower than every previous TN. In a stable climate there
+    would be as many hot records as cold ones. The first `warmup_years` only initialise
+    the records.
     """
     d = daily[["city", "date", "tn", "tx"]].copy()
     d = d[~((d["date"].dt.month == 2) & (d["date"].dt.day == 29))]
@@ -125,9 +125,9 @@ def record_counts(daily: pd.DataFrame, start_year: int, warmup_years: int = 10) 
 
 
 def daily_outliers(daily: pd.DataFrame, ref: tuple[int, int], col: str = "tmean", top: int = 10):
-    """Journées les plus anormales par rapport à la normale du jour (score z).
+    """Most unusual days compared with the normal for that day (z-score).
 
-    La normale et l'écart-type de chaque jour de l'année sont lissés sur ±15 jours.
+    The normal and standard deviation of each day of the year are smoothed over ±15 days.
     """
     d = daily[["city", "date", col]].dropna().copy()
     d["doy"] = d["date"].dt.day_of_year.clip(upper=365)
@@ -137,7 +137,7 @@ def daily_outliers(daily: pd.DataFrame, ref: tuple[int, int], col: str = "tmean"
     def smooth(g: pd.DataFrame) -> pd.DataFrame:
         g = g.sort_values("doy")
         for c in ("mean", "std"):
-            ext = pd.concat([g[c].iloc[-15:], g[c], g[c].iloc[:15]])  # année circulaire
+            ext = pd.concat([g[c].iloc[-15:], g[c], g[c].iloc[:15]])  # wrap around the year
             g[c] = ext.rolling(31, center=True).mean().iloc[15:-15].to_numpy()
         return g
 

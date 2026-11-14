@@ -1,0 +1,231 @@
+{%- set w = r.warming -%}
+{%- set h = r.heterogeneity -%}
+{%- set ex = r.extremes -%}
+{%- set pr = r.precipitation -%}
+{%- set pf = r.profiles -%}
+{%- set q = r.quality -%}
+{%- set pl = r.pipeline -%}
+{%- set c = r.config -%}
+{%- set th = c.thresholds -%}
+{%- set tr = w.france_trend_1951 -%}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>French City Climate</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface: #fcfcfb; --page: #f9f9f7; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+    --line: #e1e0d9; --accent: #2a78d6; --warm: #d63c3b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink);
+         font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 48px 24px 80px; }
+  header { border-bottom: 1px solid var(--line); padding-bottom: 28px; margin-bottom: 36px; }
+  .eyebrow { color: var(--accent); font-weight: 600; font-size: .85rem; letter-spacing: .06em; text-transform: uppercase; }
+  h1 { font-size: 2.3rem; line-height: 1.15; margin: .3rem 0 .6rem; letter-spacing: -.02em; }
+  h2 { font-size: 1.5rem; margin: 56px 0 8px; letter-spacing: -.01em; }
+  h3 { font-size: 1.1rem; margin: 28px 0 6px; }
+  .lead { color: var(--ink2); font-size: 1.1rem; margin: 0; }
+  .meta { color: var(--muted); font-size: .85rem; margin-top: 14px; }
+  .question { color: var(--ink2); margin-top: 0; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 28px 0; }
+  .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  .kpi .v { font-size: 1.9rem; font-weight: 600; line-height: 1.1; }
+  .kpi .l { color: var(--ink2); font-size: .88rem; margin-top: 6px; }
+  .findings { padding: 0; list-style: none; }
+  .findings li { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; margin: 10px 0; }
+  figure { margin: 22px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  figure img { width: 100%; height: auto; display: block; }
+  figcaption { color: var(--ink2); font-size: .9rem; margin-top: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; margin: 14px 0;
+          background: var(--surface); border: 1px solid var(--line); }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+  th { color: var(--ink2); font-weight: 600; background: #f3f2ee; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .table-wrap { overflow-x: auto; }
+  .steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 20px 0; }
+  .step { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; font-size: .88rem; }
+  .step b { display: block; font-size: .95rem; margin-bottom: 4px; }
+  .note { background: #f3f2ee; border-radius: 10px; padding: 14px 18px; color: var(--ink2); font-size: .93rem; }
+  code { background: #efeee9; border-radius: 4px; padding: 1px 5px; font-size: .88em; }
+  pre { background: #1a1a19; color: #f0efec; border-radius: 10px; padding: 14px 18px; overflow-x: auto; font-size: .88rem; }
+  footer { color: var(--muted); font-size: .82rem; border-top: 1px solid var(--line); margin-top: 56px; padding-top: 18px; }
+  @media (max-width: 720px) {
+    main { padding: 28px 16px 60px; }
+    h1 { font-size: 1.8rem; }
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .steps { grid-template-columns: 1fr; }
+  }
+  @media print { body { background: #fff; } figure, table { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div class="eyebrow">Analysis report · Météo-France open data</div>
+  <h1>The climate of French cities, {{ c.start_year }}-{{ c.end_year }}</h1>
+  <p class="lead">What {{ pl.n_rows | num(0) }} daily records say about warming, extremes and rainfall in 20 large cities.</p>
+  <div class="meta">Generated on {{ generated }} · {{ pl.n_stations | num(0) }} stations · {{ pl.n_files }} source files · reference normal {{ c.reference_period[0] }}-{{ c.reference_period[1] }}</div>
+</header>
+
+<section>
+  <h2 style="margin-top:0">Summary</h2>
+  <div class="kpis">
+    <div class="kpi"><div class="v">{{ tr.slope | signed(2) }} °C</div><div class="l">per decade since {{ c.start_year }}</div></div>
+    <div class="kpi"><div class="v">{{ w.delta_recent_vs_old | signed(2) }} °C</div><div class="l">between {{ c.old_period[0] }}-{{ c.old_period[1] }} and {{ c.recent_period[0] }}-{{ c.recent_period[1] }}</div></div>
+    <div class="kpi"><div class="v">× {{ ex.france_old_vs_recent.hot_days.ratio | num(1) }}</div><div class="l">days ≥ {{ th.hot_day }} °C</div></div>
+    <div class="kpi"><div class="v">{{ r.records.last_ratio | num(0) }} : 1</div><div class="l">hot records for each cold record since 2020</div></div>
+  </div>
+  <ul class="findings">
+    <li><b>Warming is clear, and it is speeding up.</b> {{ tr.slope | signed(2) }} °C per decade since {{ c.start_year }} (95% CI: {{ tr.ci_low | num(2) }} to {{ tr.ci_high | num(2) }}), {{ w.france_trend_1981.slope | signed(2) }} °C since 1981. {% if w.n_top10_since_2011 == 10 %}All of the 10 warmest years{% else %}{{ w.n_top10_since_2011 }} of the 10 warmest years{% endif %} came after 2010; the warmest was {{ w.warmest_years[0].year }} ({{ w.warmest_years[0].anomaly | signed(1) }} °C).</li>
+    <li><b>{{ h.fastest_season }} is warming the fastest</b> ({{ h.season_trends[h.fastest_season].slope | signed(2) }} °C per decade). All {{ h.n_significant }} cities show a significant trend; {{ h.fastest_city }} is warming the most, {{ h.slowest_city }} the least.</li>
+    <li><b>Hot extremes are multiplying.</b> Days ≥ {{ th.very_hot_day }} °C × {{ ex.france_old_vs_recent.very_hot_days.ratio | num(1) }}, tropical nights × {{ ex.france_old_vs_recent.tropical_nights.ratio | num(1) }}, frost days {{ ((ex.france_old_vs_recent.frost_days.ratio - 1) * 100) | signed(0) }}%.</li>
+    <li><b>Annual rainfall shows no clear trend</b> ({{ pr.annual_trend_pct.slope | signed(1) }}% per decade, {{ pr.annual_trend_pct | verdict }}). The decline in summer rainfall ({{ pr.season_trends_pct['Summer'].slope | signed(1) }}% per decade) is {{ pr.season_trends_pct['Summer'] | verdict }}.</li>
+    <li><b>The data is reliable but must be handled with care.</b> Very few values are rejected; the real issue is the continuity of the series (stations that close or move), handled by choosing stations carefully and splicing series.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Data and method</h2>
+  <div class="steps">
+    <div class="step"><b>1. Collection</b>{{ pl.n_files }} CSV files discovered through the data.gouv.fr API and downloaded in parallel ({{ (pl.raw_bytes / 1000000) | num(0) }} MB).</div>
+    <div class="step"><b>2. Warehouse</b>Loaded into DuckDB: {{ (pl.n_rows / 1000000) | num(1) }} million typed rows in a few seconds.</div>
+    <div class="step"><b>3. Quality</b>Météo-France quality codes, physical bounds, TN ≤ TX consistency, duplicates.</div>
+    <div class="step"><b>4. Stations</b>One reference station per city, splicing of interrupted series.</div>
+    <div class="step"><b>5. Analysis</b>Anomalies, trends (OLS, Mann-Kendall, Theil-Sen), extremes, records, PCA + k-means.</div>
+  </div>
+  <ul>
+    <li><b>Mean temperature</b> = (TN + TX) / 2: the climatological convention, consistent over the whole period.</li>
+    <li><b>Validity</b>: a month counts if at least {{ (c.month_min_completeness * 100) | num(0) }}% of its days have data, a year if at least {{ (c.year_min_completeness * 100) | num(0) }}% do.</li>
+    <li><b>National average</b>: the mean of each city's anomaly against its own normal, so that different climates are not mixed.</li>
+    <li><b>Trends</b>: linear regression (slope and confidence interval) confirmed by a non-parametric Mann-Kendall test; a trend is only called significant when both tests are, at the 5% level.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>1. How much has France warmed?</h2>
+  <figure><img src="{{ figs['01_warming_stripes'] }}" alt="Warming stripes 1951-2025"></figure>
+  <figure><img src="{{ figs['02_france_anomaly'] }}" alt="Annual anomaly vs normal">
+    <figcaption>Average annual anomaly of the 20 cities vs the {{ c.reference_period[0] }}-{{ c.reference_period[1] }} normal. Theil-Sen slope: {{ tr.sen_slope | signed(2) }} °C per decade, R² = {{ tr.r2 | num(2) }}.</figcaption></figure>
+  <p>Maximum and minimum temperatures are rising at the same pace ({{ w.tmax_trend.slope | signed(2) }} and {{ w.tmin_trend.slope | signed(2) }} °C per decade). Coldest year in the series: {{ w.coldest_year.year }} ({{ w.coldest_year.anomaly | signed(1) }} °C).</p>
+</section>
+
+<section>
+  <h2>2. Is the warming the same everywhere?</h2>
+  <figure><img src="{{ figs['04_city_trends'] }}" alt="Trend by city"></figure>
+  <figure><img src="{{ figs['05_seasonal_trends'] }}" alt="Trend by season and city"></figure>
+  <figure><img src="{{ figs['03_city_anomalies'] }}" alt="Anomalies by city"></figure>
+  <div class="table-wrap"><table>
+    <tr><th>City</th><th class="n">Trend (°C/dec.)</th><th class="n">95% CI</th><th class="n">{{ c.old_period[0] }}-{{ c.old_period[1] }}</th><th class="n">{{ c.recent_period[0] }}-{{ c.recent_period[1] }}</th><th class="n">Change</th></tr>
+    {% for row in h.cities | sort(attribute='slope', reverse=True) %}
+    <tr><td>{{ row.city }}</td><td class="n">{{ row.slope | signed(2) }}</td><td class="n">{{ row.ci_low | num(2) }} – {{ row.ci_high | num(2) }}</td><td class="n">{{ row.tmean_old | num(1) }} °C</td><td class="n">{{ row.tmean_recent | num(1) }} °C</td><td class="n">{{ row.delta | signed(1) }} °C</td></tr>
+    {% endfor %}
+  </table></div>
+</section>
+
+<section>
+  <h2>3. Are extremes changing?</h2>
+  <figure><img src="{{ figs['06_extremes_by_decade'] }}" alt="Extremes by decade"></figure>
+  <figure><img src="{{ figs['07_hot_days_by_city'] }}" alt="Hot days by city"></figure>
+  <div class="table-wrap"><table>
+    <tr><th>Indicator (average per city and per year)</th><th class="n">{{ c.old_period[0] }}-{{ c.old_period[1] }}</th><th class="n">{{ c.recent_period[0] }}-{{ c.recent_period[1] }}</th><th class="n">Ratio</th></tr>
+    {% set labels = {'hot_days': 'Days ≥ ' ~ th.hot_day ~ ' °C', 'very_hot_days': 'Days ≥ ' ~ th.very_hot_day ~ ' °C', 'tropical_nights': 'Tropical nights (TN ≥ ' ~ th.tropical_night ~ ' °C)', 'frost_days': 'Frost days', 'heatwave_days': 'Days in a heat episode'} %}
+    {% for key, label in labels.items() %}{% set v = ex.france_old_vs_recent[key] %}
+    <tr><td>{{ label }}</td><td class="n">{{ v.old | num(1) }}</td><td class="n">{{ v.recent | num(1) }}</td><td class="n">× {{ v.ratio | num(2) }}</td></tr>
+    {% endfor %}
+  </table></div>
+  <p>Hottest day measured: <b>{{ ex.hottest_day.tx | num(1) }} °C in {{ ex.hottest_day.city }}</b> on {{ ex.hottest_day.date }}. Longest heat episode: {{ ex.longest_heatwaves[0].days }} consecutive days in {{ ex.longest_heatwaves[0].city }} from {{ ex.longest_heatwaves[0].start }}.</p>
+</section>
+
+<section>
+  <h2>4. Heat records vs cold records</h2>
+  <figure><img src="{{ figs['08_records'] }}" alt="Hot / cold record ratio">
+    <figcaption>For each city and each calendar date, we count the years when TX beats every previous year (hot record) or TN falls below every previous year (cold record). In a stable climate the ratio would stay close to 1:1.</figcaption></figure>
+</section>
+
+<section>
+  <h2>5. Has rainfall changed?</h2>
+  <figure><img src="{{ figs['09_france_rainfall'] }}" alt="Annual rainfall"></figure>
+  <div class="table-wrap"><table>
+    <tr><th>Series</th><th class="n">Trend per decade</th><th class="n">Mann-Kendall</th><th>Verdict</th></tr>
+    <tr><td>Annual total</td><td class="n">{{ pr.annual_trend_pct.slope | signed(1) }}%</td><td class="n">{{ pr.annual_trend_pct.mk_p_value | pvalue }}</td><td>{{ pr.annual_trend_pct | verdict }}</td></tr>
+    {% for s, t in pr.season_trends_pct.items() %}
+    <tr><td>Total · {{ s | lower }}</td><td class="n">{{ t.slope | signed(1) }}%</td><td class="n">{{ t.mk_p_value | pvalue }}</td><td>{{ t | verdict }}</td></tr>
+    {% endfor %}
+    <tr><td>Heavy-rain days (≥ {{ th.heavy_rain }} mm)</td><td class="n">{{ pr.heavy_rain_trend.slope | signed(2) }} d</td><td class="n">{{ pr.heavy_rain_trend.mk_p_value | pvalue }}</td><td>{{ pr.heavy_rain_trend | verdict }}</td></tr>
+    <tr><td>Longest dry spell</td><td class="n">{{ pr.dry_spell_trend.slope | signed(2) }} d</td><td class="n">{{ pr.dry_spell_trend.mk_p_value | pvalue }}</td><td>{{ pr.dry_spell_trend | verdict }}</td></tr>
+  </table></div>
+  <p class="note">A "not significant" result is still a result: with year-to-year variability of around ±20%, 75 years of data are not enough to detect a change in annual totals. The driest year was {{ pr.driest_year }} ({{ pr.driest_year_anomaly_pct | signed(0) }}%).</p>
+</section>
+
+<section>
+  <h2>6. Which climate profiles set the cities apart?</h2>
+  <figure><img src="{{ figs['10_climate_profiles'] }}" alt="Climate profiles">
+    <figcaption>Average silhouette by number of groups: {% for k, v in pf.silhouette.items() %}k={{ k }}: {{ v | num(2) }}{% if not loop.last %} · {% endif %}{% endfor %}. Three groups give the best separation.</figcaption></figure>
+  <div class="table-wrap"><table>
+    <tr><th>Group</th><th>Cities</th></tr>
+    {% for g, cities in pf.groups.items() %}<tr><td>{{ g }}</td><td>{{ cities | join(', ') }}</td></tr>{% endfor %}
+  </table></div>
+  <figure><img src="{{ figs['11_climatology'] }}" alt="Monthly climatology"></figure>
+</section>
+
+<section>
+  <h2>7. The most unusual days</h2>
+  <p class="question">Gap from the normal for that day, expressed in standard deviations (z-score). These extreme values should be checked against archives before being interpreted.</p>
+  <div class="table-wrap"><table>
+    <tr><th>City</th><th>Date</th><th class="n">Tmean</th><th class="n">Normal</th><th class="n">z-score</th></tr>
+    {% for o in r.outliers.hottest_vs_normal[:5] + r.outliers.coldest_vs_normal[:5] %}
+    <tr><td>{{ o.city }}</td><td>{{ o.date }}</td><td class="n">{{ o.tmean | num(1) }} °C</td><td class="n">{{ o.normal | num(1) }} °C</td><td class="n">{{ o.z | signed(1) }}</td></tr>
+    {% endfor %}
+  </table></div>
+</section>
+
+<section>
+  <h2>Data quality</h2>
+  <figure><img src="{{ figs['12_station_network'] }}" alt="Station network over time"></figure>
+  <div class="table-wrap"><table>
+    <tr><th>Variable</th><th class="n">Valid</th><th class="n">Missing</th><th class="n">Suspect</th><th class="n">% missing</th></tr>
+    {% set vl = {'TN': 'Minimum temperature', 'TX': 'Maximum temperature', 'TM': 'Mean hourly temperature', 'RR': 'Rainfall', 'FFM': 'Mean wind', 'FXI': 'Maximum gust'} %}
+    {% for v in q.by_variable %}
+    <tr><td>{{ vl.get(v.variable, v.variable) }}</td><td class="n">{{ v.valid | num(0) }}</td><td class="n">{{ v.missing | num(0) }}</td><td class="n">{{ (v.suspect or 0) | num(0) }}</td><td class="n">{{ v.pct_missing | num(1) }}%</td></tr>
+    {% endfor %}
+  </table></div>
+  <h3>Series splicing</h3>
+  <div class="table-wrap"><table>
+    <tr><th>City</th><th>Backup station</th><th class="n">Shared days</th><th class="n">TN correction</th><th class="n">TX correction</th></tr>
+    {% for o in q.offsets %}
+    <tr><td>{{ o.city }}</td><td>{{ o.station_id }}</td><td class="n">{{ o.n_overlap_days | num(0) }}</td><td class="n">{{ o.offset_tn | signed(2) }} °C</td><td class="n">{{ o.offset_tx | signed(2) }} °C</td></tr>
+    {% endfor %}
+  </table></div>
+  {% if r.era5 %}
+  <h3>Cross-validation against ERA5</h3>
+  {% if '13_era5_validation' in figs %}<figure><img src="{{ figs['13_era5_validation'] }}" alt="ERA5 bias"></figure>{% endif %}
+  <p>Mean correlation of daily maximum temperatures: {{ r.era5.mean_corr_tx | num(3) }}. Mean bias: {{ r.era5.mean_bias_tx | signed(2) }} °C on maximum temperatures, {{ r.era5.mean_bias_tn | signed(2) }} °C on minimum temperatures, peaking in {{ r.era5.worst_city }} ({{ r.era5.worst_bias_tn | signed(1) }} °C on minimum temperatures).</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Limitations</h2>
+  <ul>
+    <li>Non-homogenised series: only identified relocations are corrected; urbanisation around stations can amplify the measured warming.</li>
+    <li>A station represents a city, not its whole area.</li>
+    <li>The tests assume independent years: the p-values are slightly optimistic.</li>
+    <li>A linear trend is a poor summary of warming that has been speeding up since the 1980s.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Reproduce the analysis</h2>
+<pre>pip install -r requirements.txt
+python -m meteo all              # collection, warehouse, ERA5 validation, analyses, report
+streamlit run dashboard/app.py   # interactive dashboard</pre>
+</section>
+
+<footer>Sources: Météo-France daily climatological data (data.gouv.fr, Etalab 2.0 open licence); ERA5 (Copernicus Climate Change Service) via the Open-Meteo API. Report generated automatically by Météo Analytics.</footer>
+</main>
+</body>
+</html>

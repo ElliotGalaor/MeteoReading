@@ -1,11 +1,11 @@
-"""Validation croisée : observations Météo-France vs réanalyse ERA5 (API Open-Meteo).
+"""Cross-validation: Météo-France observations vs the ERA5 reanalysis (Open-Meteo API).
 
-Pourquoi : vérifier la cohérence de nos séries avec une source indépendante, et mesurer
-les limites d'un produit maillé (~25 km) souvent utilisé faute de stations.
+Why: check our series against an independent source, and measure the limits of a
+gridded product (~25 km) that is often used when no station is available.
 
-L'API gratuite est limitée (600 appels/min, 5 000/h, 10 000/jour) et compte les appels
-au prorata du volume demandé : (nb variables / 10) x (nb jours / 14). Le client
-calcule ce poids, s'auto-limite par minute et met les réponses en cache.
+The free API is rate-limited (600 calls/min, 5,000/h, 10,000/day) and counts calls in
+proportion to the volume requested: (number of variables / 10) x (number of days / 14).
+The client computes this weight, throttles itself per minute and caches the responses.
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ VARIABLES = ["temperature_2m_max", "temperature_2m_min"]
 
 
 class RateLimiter:
-    """Fenêtre glissante d'une minute sur le poids des appels."""
+    """One-minute sliding window on the weight of the calls."""
 
     def __init__(self, max_per_minute: float):
         self.max = max_per_minute
@@ -44,7 +44,7 @@ class RateLimiter:
                 self.calls.append((now, weight))
                 return
             pause = 60 - (now - self.calls[0][0]) + 0.5
-            log.info("  quota/minute atteint (%.0f appels) : pause de %.0f s", used, pause)
+            log.info("  per-minute quota reached (%.0f calls): pausing %.0f s", used, pause)
             time.sleep(pause)
 
 
@@ -65,15 +65,15 @@ def fetch_city(session, cfg: Config, city: str, lat: float, lon: float, limiter:
             if resp.status_code == 429:
                 reason = resp.json().get("reason", "")
                 if "Minutely" not in reason:
-                    raise RuntimeError(f"Quota Open-Meteo dépassé : {reason}. Relancer plus tard (le cache est conservé).")
-                log.warning("  429 (quota minute), nouvel essai dans 60 s")
+                    raise RuntimeError(f"Open-Meteo quota exceeded: {reason}. Try again later (the cache is kept).")
+                log.warning("  429 (per-minute quota), retrying in 60 s")
                 time.sleep(60)
                 continue
             resp.raise_for_status()
             path.write_text(resp.text, encoding="utf-8")
             break
         else:
-            raise RuntimeError(f"Échec Open-Meteo pour {city}")
+            raise RuntimeError(f"Open-Meteo request failed for {city}")
     daily = json.loads(path.read_text(encoding="utf-8"))["daily"]
     return pd.DataFrame({"date": pd.to_datetime(daily["time"]),
                          "tx_era5": daily["temperature_2m_max"], "tn_era5": daily["temperature_2m_min"]})
@@ -105,13 +105,13 @@ def run_era5_validation(cfg: Config) -> pd.DataFrame:
 
     session, limiter = make_session(), RateLimiter(e.get("max_weighted_calls_per_minute", 400))
     total = call_weight(len(VARIABLES), e["start"], e["end"]) * len(stations)
-    log.info("%d villes, poids total ≈ %.0f appels API (quota gratuit : 10 000/jour)", len(stations), total)
+    log.info("%d cities, total weight ≈ %.0f API calls (free quota: 10,000/day)", len(stations), total)
     rows = []
     for s in stations.itertuples():
         era = fetch_city(session, cfg, s.city, s.lat, s.lon, limiter, cache)
         rows.append({"city": s.city, "station": s.station_name,
                      **compare(obs[obs["city"] == s.city], era, cfg.thresholds["hot_day"])})
-        log.info("  %-17s biais TX %+.2f °C, TN %+.2f °C", s.city, rows[-1]["bias_tx"], rows[-1]["bias_tn"])
+        log.info("  %-17s TX bias %+.2f °C, TN bias %+.2f °C", s.city, rows[-1]["bias_tx"], rows[-1]["bias_tn"])
 
     res = pd.DataFrame(rows).round(3)
     out = cfg.reports_dir / "tables"

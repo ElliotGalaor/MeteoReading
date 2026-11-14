@@ -304,7 +304,7 @@
     "slowest_city": "Brest",
     "n_significant": 20,
     "season_trends": {
-      "Hiver": {
+      "Winter": {
         "slope": 0.3033,
         "ci_low": 0.1802,
         "ci_high": 0.4264,
@@ -316,7 +316,7 @@
         "n": 74,
         "significant": true
       },
-      "Printemps": {
+      "Spring": {
         "slope": 0.296,
         "ci_low": 0.213,
         "ci_high": 0.379,
@@ -328,7 +328,7 @@
         "n": 75,
         "significant": true
       },
-      "Été": {
+      "Summer": {
         "slope": 0.4314,
         "ci_low": 0.3462,
         "ci_high": 0.5167,
@@ -340,7 +340,7 @@
         "n": 75,
         "significant": true
       },
-      "Automne": {
+      "Autumn": {
         "slope": 0.3018,
         "ci_low": 0.2216,
         "ci_high": 0.3819,
@@ -353,147 +353,147 @@
         "significant": true
       }
     },
-    "fastest_season": "Été",
+    "fastest_season": "Summer",
     "season_by_city": [
       {
         "city": "Ajaccio",
-        "Hiver": 0.243,
-        "Printemps": 0.3,
-        "Été": 0.479,
-        "Automne": 0.327
+        "Winter": 0.243,
+        "Spring": 0.3,
+        "Summer": 0.479,
+        "Autumn": 0.327
       },
       {
         "city": "Biarritz",
-        "Hiver": 0.298,
-        "Printemps": 0.329,
-        "Été": 0.424,
-        "Automne": 0.342
+        "Winter": 0.298,
+        "Spring": 0.329,
+        "Summer": 0.424,
+        "Autumn": 0.342
       },
       {
         "city": "Bordeaux",
-        "Hiver": 0.339,
-        "Printemps": 0.396,
-        "Été": 0.549,
-        "Automne": 0.406
+        "Winter": 0.339,
+        "Spring": 0.396,
+        "Summer": 0.549,
+        "Autumn": 0.406
       },
       {
         "city": "Brest",
-        "Hiver": 0.215,
-        "Printemps": 0.267,
-        "Été": 0.275,
-        "Automne": 0.202
+        "Winter": 0.215,
+        "Spring": 0.267,
+        "Summer": 0.275,
+        "Autumn": 0.202
       },
       {
         "city": "Clermont-Ferrand",
-        "Hiver": 0.336,
-        "Printemps": 0.3,
-        "Été": 0.453,
-        "Automne": 0.308
+        "Winter": 0.336,
+        "Spring": 0.3,
+        "Summer": 0.453,
+        "Autumn": 0.308
       },
       {
         "city": "Dijon",
-        "Hiver": 0.271,
-        "Printemps": 0.164,
-        "Été": 0.365,
-        "Automne": 0.214
+        "Winter": 0.271,
+        "Spring": 0.164,
+        "Summer": 0.365,
+        "Autumn": 0.214
       },
       {
         "city": "Grenoble",
-        "Hiver": 0.283,
-        "Printemps": 0.25,
-        "Été": 0.393,
-        "Automne": 0.268
+        "Winter": 0.283,
+        "Spring": 0.25,
+        "Summer": 0.393,
+        "Autumn": 0.268
       },
       {
         "city": "Lille",
-        "Hiver": 0.369,
-        "Printemps": 0.381,
-        "Été": 0.465,
-        "Automne": 0.325
+        "Winter": 0.369,
+        "Spring": 0.381,
+        "Summer": 0.465,
+        "Autumn": 0.325
       },
       {
         "city": "Limoges",
-        "Hiver": 0.355,
-        "Printemps": 0.346,
-        "Été": 0.498,
-        "Automne": 0.373
+        "Winter": 0.355,
+        "Spring": 0.346,
+        "Summer": 0.498,
+        "Autumn": 0.373
       },
       {
         "city": "Lyon",
-        "Hiver": 0.389,
-        "Printemps": 0.381,
-        "Été": 0.569,
-        "Automne": 0.372
+        "Winter": 0.389,
+        "Spring": 0.381,
+        "Summer": 0.569,
+        "Autumn": 0.372
       },
       {
         "city": "Marseille",
-        "Hiver": 0.296,
-        "Printemps": 0.317,
-        "Été": 0.503,
-        "Automne": 0.315
+        "Winter": 0.296,
+        "Spring": 0.317,
+        "Summer": 0.503,
+        "Autumn": 0.315
       },
       {
         "city": "Montpellier",
-        "Hiver": 0.313,
-        "Printemps": 0.339,
-        "Été": 0.529,
-        "Automne": 0.363
+        "Winter": 0.313,
+        "Spring": 0.339,
+        "Summer": 0.529,
+        "Autumn": 0.363
       },
       {
         "city": "Nantes",
-        "Hiver": 0.257,
-        "Printemps": 0.253,
-        "Été": 0.311,
-        "Automne": 0.246
+        "Winter": 0.257,
+        "Spring": 0.253,
+        "Summer": 0.311,
+        "Autumn": 0.246
       },
       {
         "city": "Nice",
-        "Hiver": 0.238,
-        "Printemps": 0.289,
-        "Été": 0.487,
-        "Automne": 0.305
+        "Winter": 0.238,
+        "Spring": 0.289,
+        "Summer": 0.487,
+        "Autumn": 0.305
       },
       {
         "city": "Paris",
-        "Hiver": 0.338,
-        "Printemps": 0.329,
-        "Été": 0.428,
-        "Automne": 0.284
+        "Winter": 0.338,
+        "Spring": 0.329,
+        "Summer": 0.428,
+        "Autumn": 0.284
       },
       {
         "city": "Perpignan",
-        "Hiver": 0.198,
-        "Printemps": 0.18,
-        "Été": 0.37,
-        "Automne": 0.237
+        "Winter": 0.198,
+        "Spring": 0.18,
+        "Summer": 0.37,
+        "Autumn": 0.237
       },
       {
         "city": "Reims",
-        "Hiver": 0.349,
-        "Printemps": 0.228,
-        "Été": 0.344,
-        "Automne": 0.259
+        "Winter": 0.349,
+        "Spring": 0.228,
+        "Summer": 0.344,
+        "Autumn": 0.259
       },
       {
         "city": "Rennes",
-        "Hiver": 0.256,
-        "Printemps": 0.259,
-        "Été": 0.311,
-        "Automne": 0.259
+        "Winter": 0.256,
+        "Spring": 0.259,
+        "Summer": 0.311,
+        "Autumn": 0.259
       },
       {
         "city": "Strasbourg",
-        "Hiver": 0.428,
-        "Printemps": 0.244,
-        "Été": 0.339,
-        "Automne": 0.244
+        "Winter": 0.428,
+        "Spring": 0.244,
+        "Summer": 0.339,
+        "Autumn": 0.244
       },
       {
         "city": "Toulouse",
-        "Hiver": 0.296,
-        "Printemps": 0.359,
-        "Été": 0.537,
-        "Automne": 0.387
+        "Winter": 0.296,
+        "Spring": 0.359,
+        "Summer": 0.537,
+        "Autumn": 0.387
       }
     ]
   },
@@ -936,7 +936,7 @@
       "significant": false
     },
     "season_trends_pct": {
-      "Hiver": {
+      "Winter": {
         "slope": -1.4891,
         "ci_low": -4.1696,
         "ci_high": 1.1914,
@@ -948,7 +948,7 @@
         "n": 74,
         "significant": false
       },
-      "Printemps": {
+      "Spring": {
         "slope": 0.614,
         "ci_low": -1.9558,
         "ci_high": 3.1838,
@@ -960,7 +960,7 @@
         "n": 75,
         "significant": false
       },
-      "Été": {
+      "Summer": {
         "slope": -2.3247,
         "ci_low": -5.0332,
         "ci_high": 0.3839,
@@ -972,7 +972,7 @@
         "n": 75,
         "significant": false
       },
-      "Automne": {
+      "Autumn": {
         "slope": 0.399,
         "ci_low": -2.0721,
         "ci_high": 2.8701,
@@ -1027,11 +1027,11 @@
       0.35
     ],
     "groups": {
-      "Façade atlantique : très arrosée, faible amplitude": [
+      "Atlantic coast: very wet, small seasonal range": [
         "Biarritz",
         "Brest"
       ],
-      "Sud : chaud, été sec": [
+      "South: warm, dry summers": [
         "Ajaccio",
         "Bordeaux",
         "Marseille",
@@ -1040,7 +1040,7 @@
         "Perpignan",
         "Toulouse"
       ],
-      "Nord et Centre : plus frais, amplitude marquée": [
+      "North & centre: cooler, larger seasonal range": [
         "Clermont-Ferrand",
         "Dijon",
         "Grenoble",
@@ -1056,21 +1056,21 @@
     },
     "profiles": [
       {
-        "group": "Façade atlantique : très arrosée, faible amplitude",
+        "group": "Atlantic coast: very wet, small seasonal range",
         "t_annual": 13.4,
         "amplitude": 10.5,
         "summer_rain": 237.8,
         "annual_rain": 1375.5
       },
       {
-        "group": "Nord et Centre : plus frais, amplitude marquée",
+        "group": "North & centre: cooler, larger seasonal range",
         "t_annual": 12.0,
         "amplitude": 16.0,
         "summer_rain": 187.7,
         "annual_rain": 757.6
       },
       {
-        "group": "Sud : chaud, été sec",
+        "group": "South: warm, dry summers",
         "t_annual": 15.4,
         "amplitude": 15.6,
         "summer_rain": 93.3,
@@ -1250,57 +1250,69 @@
     "by_variable": [
       {
         "variable": "FFM",
-        "absente": 21664320.0,
-        "douteuse": 3.0,
-        "valide": 3362207.0,
-        "total": 25026530.0,
-        "pct_absentes": 86.565,
-        "pct_rejetees": 0.0
+        "missing": 21664830.0,
+        "suspect": 3.0,
+        "valid": 3362637.0,
+        "out_of_range": 0.0,
+        "inconsistent": 0.0,
+        "total": 25027470.0,
+        "pct_missing": 86.564,
+        "pct_rejected": 0.0
       },
       {
         "variable": "FXI",
-        "absente": 21820030.0,
-        "douteuse": 16.0,
-        "valide": 3206484.0,
-        "total": 25026530.0,
-        "pct_absentes": 87.188,
-        "pct_rejetees": 0.0
+        "missing": 21820540.0,
+        "suspect": 16.0,
+        "valid": 3206914.0,
+        "out_of_range": 0.0,
+        "inconsistent": 0.0,
+        "total": 25027470.0,
+        "pct_missing": 87.186,
+        "pct_rejected": 0.0
       },
       {
         "variable": "RR",
-        "absente": 295061.0,
-        "douteuse": 151.0,
-        "valide": 24731318.0,
-        "total": 25026530.0,
-        "pct_absentes": 1.179,
-        "pct_rejetees": 0.001
+        "missing": 295099.0,
+        "suspect": 151.0,
+        "valid": 24732220.0,
+        "out_of_range": 0.0,
+        "inconsistent": 0.0,
+        "total": 25027470.0,
+        "pct_missing": 1.179,
+        "pct_rejected": 0.001
       },
       {
         "variable": "TM",
-        "absente": 20055215.0,
-        "douteuse": 0.0,
-        "valide": 4971315.0,
-        "total": 25026530.0,
-        "pct_absentes": 80.136,
-        "pct_rejetees": 0.0
+        "missing": 20055230.0,
+        "suspect": 0.0,
+        "valid": 4972240.0,
+        "out_of_range": 0.0,
+        "inconsistent": 0.0,
+        "total": 25027470.0,
+        "pct_missing": 80.133,
+        "pct_rejected": 0.0
       },
       {
         "variable": "TN",
-        "absente": 13700906.0,
-        "douteuse": 20.0,
-        "valide": 11325604.0,
-        "total": 25026530.0,
-        "pct_absentes": 54.746,
-        "pct_rejetees": 0.0
+        "missing": 13700919.0,
+        "suspect": 20.0,
+        "valid": 11326531.0,
+        "out_of_range": 0.0,
+        "inconsistent": 0.0,
+        "total": 25027470.0,
+        "pct_missing": 54.744,
+        "pct_rejected": 0.0
       },
       {
         "variable": "TX",
-        "absente": 13713738.0,
-        "douteuse": 14.0,
-        "valide": 11312778.0,
-        "total": 25026530.0,
-        "pct_absentes": 54.797,
-        "pct_rejetees": 0.0
+        "missing": 13713751.0,
+        "suspect": 14.0,
+        "valid": 11313705.0,
+        "out_of_range": 0.0,
+        "inconsistent": 0.0,
+        "total": 25027470.0,
+        "pct_missing": 54.795,
+        "pct_rejected": 0.0
       }
     ],
     "ref_stations": [
@@ -1315,7 +1327,7 @@
         "altitude": 5,
         "distance_km": 4.5,
         "first_date": "1950-01-01",
-        "last_date": "2026-11-10",
+        "last_date": "2026-11-11",
         "completeness_temp": 1.0,
         "completeness_rain": 1.0
       },
@@ -1330,7 +1342,7 @@
         "altitude": 21,
         "distance_km": 14.3,
         "first_date": "1950-01-01",
-        "last_date": "2026-11-09",
+        "last_date": "2026-11-11",
         "completeness_temp": 0.9996,
         "completeness_rain": 1.0
       },
@@ -1345,7 +1357,7 @@
         "altitude": 47,
         "distance_km": 8.9,
         "first_date": "1950-01-01",
-        "last_date": "2026-11-09",
+        "last_date": "2026-11-11",
         "completeness_temp": 1.0,
         "completeness_rain": 1.0
       },
@@ -1360,7 +1372,7 @@
         "altitude": 92,
         "distance_km": 9.9,
         "first_date": "1950-01-01",
-        "last_date": "2026-11-09",
+        "last_date": "2026-11-11",
         "completeness_temp": 1.0,
         "completeness_rain": 1.0
       },
@@ -1375,7 +1387,7 @@
         "altitude": 331,
         "distance_km": 5.0,
         "first_date": "1950-01-01",
-        "last_date": "2026-11-09",
+        "last_date": "2026-11-11",
         "completeness_temp": 1.0,
         "completeness_rain": 1.0
       },
@@ -1390,7 +1402,7 @@
         "altitude": 219,
         "distance_km": 7.0,
         "first_date": "1950-01-01",
-        "last_date": "2026-11-09",
+        "last_date": "2026-11-11",
         "completeness_temp": 1.0,
         "completeness_rain": 1.0
       },
@@ -1405,7 +1417,7 @@
         "altitude": 376,
         "distance_km": 37.6,
         "first_date": "1950-01-01",
-        "last_date": "2026-11-09",
+        "last_date": "2026-11-11",
         "completeness_temp": 0.7899,
         "completeness_rain": 0.7944
       },
@@ -1435,7 +1447,7 @@
         "altitude": 47,
         "distance_km": 7.2,
         "first_date": "1950-01-01",
-        "last_date": "2026-11-09",
+        "last_date": "2026-11-11",
         "completeness_temp": 1.0,
         "completeness_rain": 1.0
       },
@@ -1450,7 +1462,7 @@
         "altitude": 286,
         "distance_km": 8.0,
         "first_date": "1950-01-01",
-        "last_date": "2026-11-09",
+        "last_date": "2026-11-11",
         "completeness_temp": 0.972,
         "completeness_rain": 0.9626
       },
@@ -1465,7 +1477,7 @@
         "altitude": 402,
         "distance_km": 7.3,
         "first_date": "1973-01-01",
-        "last_date": "2026-11-09",
+        "last_date": "2026-11-11",
         "completeness_temp": 0.7067,
         "completeness_rain": 0.7067
       },
@@ -1495,7 +1507,7 @@
         "altitude": 202,
         "distance_km": 10.0,
         "first_date": "1950-01-01",
-        "last_date": "2026-11-09",
+        "last_date": "2026-11-11",
         "completeness_temp": 1.0,
         "completeness_rain": 1.0
       },
@@ -1510,7 +1522,7 @@
         "altitude": 6,
         "distance_km": 20.2,
         "first_date": "1950-01-01",
-        "last_date": "2026-11-09",
+        "last_date": "2026-11-11",
         "completeness_temp": 1.0,
         "completeness_rain": 1.0
       },
@@ -1525,7 +1537,7 @@
         "altitude": 1,
         "distance_km": 8.1,
         "first_date": "1950-01-01",
-        "last_date": "2026-11-09",
+        "last_date": "2026-11-11",
         "completeness_temp": 1.0,
         "completeness_rain": 1.0
       },
@@ -1540,7 +1552,7 @@
         "altitude": 26,
         "distance_km": 8.7,
         "first_date": "1950-01-01",
-        "last_date": "2026-11-09",
+        "last_date": "2026-11-11",
         "completeness_temp": 1.0,
         "completeness_rain": 1.0
       },
@@ -1555,7 +1567,7 @@
         "altitude": 2,
         "distance_km": 8.0,
         "first_date": "1950-01-01",
-        "last_date": "2026-11-09",
+        "last_date": "2026-11-11",
         "completeness_temp": 1.0,
         "completeness_rain": 1.0
       },
@@ -1570,7 +1582,7 @@
         "altitude": 75,
         "distance_km": 4.0,
         "first_date": "1950-01-01",
-        "last_date": "2026-11-09",
+        "last_date": "2026-11-11",
         "completeness_temp": 1.0,
         "completeness_rain": 1.0
       },
@@ -1585,7 +1597,7 @@
         "altitude": 42,
         "distance_km": 5.7,
         "first_date": "1950-01-01",
-        "last_date": "2026-11-09",
+        "last_date": "2026-11-11",
         "completeness_temp": 1.0,
         "completeness_rain": 1.0
       },
@@ -1600,7 +1612,7 @@
         "altitude": 95,
         "distance_km": 10.5,
         "first_date": "2012-05-07",
-        "last_date": "2026-11-09",
+        "last_date": "2026-11-11",
         "completeness_temp": 0.182,
         "completeness_rain": 0.182
       },
@@ -1630,7 +1642,7 @@
         "altitude": 36,
         "distance_km": 6.8,
         "first_date": "1950-01-01",
-        "last_date": "2026-11-09",
+        "last_date": "2026-11-11",
         "completeness_temp": 1.0,
         "completeness_rain": 1.0
       },
@@ -1645,7 +1657,7 @@
         "altitude": 139,
         "distance_km": 1.5,
         "first_date": "1950-01-01",
-        "last_date": "2026-11-09",
+        "last_date": "2026-11-11",
         "completeness_temp": 1.0,
         "completeness_rain": 1.0
       },
@@ -1660,7 +1672,7 @@
         "altitude": 151,
         "distance_km": 5.6,
         "first_date": "1950-01-01",
-        "last_date": "2026-11-09",
+        "last_date": "2026-11-11",
         "completeness_temp": 1.0,
         "completeness_rain": 1.0
       }
@@ -1685,7 +1697,7 @@
       {
         "city": "Limoges",
         "station_id": "87085006",
-        "n_overlap_days": 19237,
+        "n_overlap_days": 19239,
         "offset_tn": -1.92,
         "offset_tx": 1.58,
         "corr_tx": 0.98
@@ -1701,7 +1713,7 @@
     ]
   },
   "era5": {
-    "title": "ERA5 suit bien la météo du jour, mais lisse les effets locaux",
+    "title": "ERA5 tracks day-to-day weather well, but smooths out local effects",
     "mean_bias_tx": -0.46,
     "mean_bias_tn": 0.48,
     "mean_corr_tx": 0.987,
@@ -1996,17 +2008,17 @@
   },
   "pipeline": {
     "n_files": 40,
-    "raw_bytes": 267691200,
-    "duration_01_staging.sql": 7.75,
-    "duration_02_quality.sql": 1.68,
-    "duration_03_stations.sql": 1.76,
-    "duration_04_gold.sql": 0.57,
-    "n_rows": 25026530,
+    "raw_bytes": 267718430,
+    "duration_01_staging.sql": 8.36,
+    "duration_02_quality.sql": 1.69,
+    "duration_03_stations.sql": 1.97,
+    "duration_04_gold.sql": 0.65,
+    "n_rows": 25027470,
     "n_stations": 2433,
     "first_date": "1950-01-01",
-    "last_date": "2026-11-10",
-    "n_measures": 58909910,
-    "n_valid_measures": 58909706,
+    "last_date": "2026-11-12",
+    "n_measures": 58914451,
+    "n_valid_measures": 58914247,
     "n_duplicates": 0,
     "n_cities": 20
   },

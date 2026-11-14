@@ -1,4 +1,4 @@
-"""Briques communes du dashboard : accès aux données, thème Plotly, mise en forme."""
+"""Shared building blocks of the dashboard: data access, Plotly theme, formatting."""
 from __future__ import annotations
 
 import json
@@ -17,7 +17,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from meteo.config import load_config  # noqa: E402
-from meteo.fmt import fr, pvalue, sfr  # noqa: E402,F401
+from meteo.fmt import num, pvalue, signed  # noqa: E402,F401
 from meteo.palette import (  # noqa: E402,F401
     AXIS, COOL, DIVERGING_STOPS, GRID, HEAT_STOPS, INK, INK2, MUTED, NEUTRAL, RAIN_STOPS,
     SERIES, SURFACE, WARM,
@@ -32,13 +32,13 @@ RECENT = tuple(A["recent_period"])
 TH = CFG.thresholds
 
 
-# --- Données -----------------------------------------------------------------
+# --- Data ----------------------------------------------------------------------
 def warehouse_ready() -> bool:
-    return CFG.warehouse.exists() and (CFG.reports_dir / "resultats.json").exists()
+    return CFG.warehouse.exists() and (CFG.reports_dir / "results.json").exists()
 
 
 def _connect() -> duckdb.DuckDBPyConnection:
-    """Lecture seule et sans accès aux fichiers du disque : le dashboard ne peut rien modifier."""
+    """Read-only, with no access to files on disk: the dashboard cannot change anything."""
     return duckdb.connect(str(CFG.warehouse), read_only=True, config={"enable_external_access": False})
 
 
@@ -59,7 +59,7 @@ def table(name: str) -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def results() -> dict:
-    return json.loads((CFG.reports_dir / "resultats.json").read_text(encoding="utf-8"))
+    return json.loads((CFG.reports_dir / "results.json").read_text(encoding="utf-8"))
 
 
 @st.cache_data(show_spinner=False)
@@ -69,17 +69,17 @@ def era5() -> pd.DataFrame | None:
 
 
 def run_user_sql(sql: str, max_rows: int = 10_000) -> pd.DataFrame:
-    """Requête libre saisie dans la page SQL (même connexion protégée)."""
+    """Free-form query typed in the SQL page (same protected connection)."""
     with _connect() as con:
         rel = con.sql(sql)
         if rel is None:
-            raise ValueError("Seules les requêtes de lecture (SELECT, WITH, PIVOT…) sont acceptées.")
+            raise ValueError("Only read queries (SELECT, WITH, PIVOT…) are accepted.")
         return rel.limit(max_rows).df()
 
 
 def example_queries() -> dict[str, str]:
-    """Découpe sql/analyses_exemples.sql en {titre: requête}."""
-    text = (ROOT / "sql" / "analyses_exemples.sql").read_text(encoding="utf-8")
+    """Split sql/example_queries.sql into {title: query}."""
+    text = (ROOT / "sql" / "example_queries.sql").read_text(encoding="utf-8")
     out = {}
     for block in [b.strip() for b in text.split(";") if b.strip()]:
         lines = block.splitlines()
@@ -88,7 +88,7 @@ def example_queries() -> dict[str, str]:
     return out
 
 
-# --- Couleurs stables par ville (la couleur suit la ville, pas son rang) --------
+# --- Stable colours per city (the colour follows the city, not its rank) ---------
 def city_colors(selected: list[str], key: str) -> dict[str, str]:
     slots: dict[str, int] = st.session_state.setdefault(f"slots_{key}", {})
     for c in list(slots):
@@ -100,13 +100,13 @@ def city_colors(selected: list[str], key: str) -> dict[str, str]:
     return {c: SERIES[slots[c]] for c in selected}
 
 
-# --- Thème Plotly --------------------------------------------------------------
+# --- Plotly theme ----------------------------------------------------------------
 FONT = "Segoe UI, system-ui, -apple-system, Helvetica, Arial, sans-serif"
 pio.templates["meteo"] = go.layout.Template(layout=dict(
     font=dict(family=FONT, color=INK2, size=13),
     paper_bgcolor=SURFACE, plot_bgcolor=SURFACE,
     colorway=SERIES,
-    separators=", ",
+    separators=".,",
     xaxis=dict(gridcolor=GRID, linecolor=AXIS, showline=True, zeroline=False, ticks="", automargin=True,
                tickfont=dict(color=INK2), title=dict(font=dict(color=INK2))),
     yaxis=dict(gridcolor=GRID, linecolor=AXIS, showline=False, zeroline=False, ticks="", automargin=True,
@@ -117,8 +117,7 @@ pio.templates["meteo"] = go.layout.Template(layout=dict(
 ))
 pio.templates.default = "meteo"
 
-PLOTLY_CONFIG = {"displaylogo": False, "locale": "fr",
-                 "modeBarButtonsToRemove": ["lasso2d", "select2d", "autoScale2d"]}
+PLOTLY_CONFIG = {"displaylogo": False, "modeBarButtonsToRemove": ["lasso2d", "select2d", "autoScale2d"]}
 
 
 def colorscale(stops: list[str]) -> list[list]:
@@ -132,7 +131,7 @@ RAIN = colorscale(RAIN_STOPS)
 
 def chart(fig: go.Figure, height: int = 420, title: str | None = None, subtitle: str | None = None,
           margin: dict | None = None) -> None:
-    """Titre et sous-titre en HTML au-dessus du graphique : ils se replient sur petit écran."""
+    """Title and subtitle in HTML above the chart: they wrap on small screens."""
     if title:
         sub = f"<div class='chart-sub'>{subtitle}</div>" if subtitle else ""
         st.markdown(f"<div class='chart-title'>{title}</div>{sub}", unsafe_allow_html=True)
@@ -145,7 +144,7 @@ def signed_color(values) -> list[str]:
     return [WARM if v >= 0 else COOL for v in values]
 
 
-# --- Style de la page ------------------------------------------------------------
+# --- Page style --------------------------------------------------------------------
 CSS = f"""
 <style>
   .block-container {{ padding-top: 2.2rem; max-width: 1280px; }}
@@ -172,8 +171,8 @@ def page_header(title: str, lead: str) -> None:
 
 
 def source_note(extra: str = "") -> None:
-    st.markdown(f"<div class='source'>Source : Météo-France, données climatologiques quotidiennes "
-                f"(data.gouv.fr, licence Etalab 2.0){extra}.</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='source'>Source: Météo-France daily climatological data "
+                f"(data.gouv.fr, Etalab 2.0 open licence){extra}.</div>", unsafe_allow_html=True)
 
 
 def rolling(series: pd.Series, window: int = 10) -> pd.Series:
@@ -181,7 +180,7 @@ def rolling(series: pd.Series, window: int = 10) -> pd.Series:
 
 
 def doy_climatology(daily: pd.DataFrame, col: str, ref: tuple[int, int], half_window: int = 15) -> pd.DataFrame:
-    """Normale journalière lissée (moyenne, 10e et 90e centiles) sur une fenêtre de ±15 jours."""
+    """Smoothed daily normal (mean, 10th and 90th percentiles) over a ±15-day window."""
     d = daily[daily["date"].dt.year.between(*ref)][["date", col]].dropna()
     d = d[~((d["date"].dt.month == 2) & (d["date"].dt.day == 29))]
     doy = d["date"].dt.day_of_year - ((d["date"].dt.is_leap_year) & (d["date"].dt.month > 2)).astype(int)

@@ -1,15 +1,15 @@
 -- =============================================================================
--- 03 · STATIONS : dimension station + choix de la station de référence par ville
+-- 03 · STATIONS: station dimension + choice of the reference station for each city
 -- =============================================================================
 
--- Distance orthodromique (formule de haversine), en km
+-- Great-circle distance (haversine formula), in km
 CREATE OR REPLACE MACRO haversine_km(lat1, lon1, lat2, lon2) AS
     2 * 6371 * asin(sqrt(
         pow(sin(radians(lat2 - lat1) / 2), 2)
         + cos(radians(lat1)) * cos(radians(lat2)) * pow(sin(radians(lon2 - lon1) / 2), 2)
     ));
 
--- Dimension station : métadonnées les plus récentes + couverture sur la période d'analyse
+-- Station dimension: latest metadata + coverage over the analysis period
 CREATE OR REPLACE TABLE dim_station AS
 WITH meta AS (
     SELECT
@@ -43,17 +43,17 @@ SELECT
 FROM meta m
 LEFT JOIN coverage c USING (station_id);
 
--- Station(s) de référence de chaque ville.
--- a) Villes avec une chaîne imposée dans config.yaml : on la reprend telle quelle.
--- b) Sinon, sélection automatique de LA meilleure station, par ordre de priorité :
---      1. complétude des températures >= seuil
---      2. complétude la plus élevée (par paliers de 2 % pour ne pas sur-pondérer 0,1 %)
---      3. complétude des précipitations, puis distance au centre-ville
---    parmi les stations proches ET d'altitude comparable (évite une station de montagne).
+-- Reference station(s) of each city.
+-- a) Cities with a chain forced in config.yaml: it is used as is.
+-- b) Otherwise, automatic choice of THE best station, in order of priority:
+--      1. temperature completeness >= threshold
+--      2. highest completeness (in 2% steps so that 0.1% does not outweigh the rest)
+--      3. rainfall completeness, then distance to the city centre
+--    among the nearby stations AT a similar altitude (rules out mountain stations).
 CREATE OR REPLACE TABLE ref_chain AS
 WITH forced AS (
     SELECT city,
-           unnest(station_ids)              AS station_id,
+           unnest(station_ids)                 AS station_id,
            generate_subscripts(station_ids, 1) AS priority
     FROM dim_city
     WHERE len(station_ids) > 0
@@ -61,7 +61,7 @@ WITH forced AS (
 auto AS (
     SELECT c.city, s.station_id, 1 AS priority
     FROM dim_city c
-    CROSS JOIN dim_station s          -- 20 villes x quelques milliers de stations : négligeable
+    CROSS JOIN dim_station s          -- 20 cities x a few thousand stations: negligible
     WHERE len(c.station_ids) = 0
       AND haversine_km(c.lat, c.lon, s.lat, s.lon) <= ${max_distance_km}
       AND (c.alt IS NULL OR abs(s.altitude - c.alt) <= ${max_altitude_diff_m})
@@ -87,11 +87,11 @@ JOIN dim_city c USING (city)
 JOIN dim_station s USING (station_id)
 ORDER BY city, priority;
 
--- Raccordement des séries : biais de chaque station secondaire par rapport à la
--- station principale, mesuré MOIS PAR MOIS sur les jours où les deux ont une mesure
--- (le biais varie avec la saison : inversions thermiques en hiver, altitude, etc.).
--- Il est ajouté aux températures de la station secondaire. La pluie n'est pas corrigée :
--- trop variable d'un point à l'autre pour qu'un simple décalage ait un sens.
+-- Series splicing: bias of each secondary station relative to the main station,
+-- measured MONTH BY MONTH on the days when both have a measurement
+-- (the bias varies with the season: winter temperature inversions, altitude, etc.).
+-- It is added to the temperatures of the secondary station. Rainfall is not corrected:
+-- it varies too much from one place to another for a simple offset to make sense.
 CREATE OR REPLACE TABLE station_offsets AS
 WITH obs AS (
     SELECT r.city, r.priority, r.station_id, o.date, o.tn, o.tx

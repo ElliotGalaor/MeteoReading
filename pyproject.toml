@@ -1,7 +1,7 @@
 [project]
 name = "meteo-analytics"
 version = "1.0.0"
-description = "Pipeline d'analyse climatique sur 25 millions de relevés Météo-France"
+description = "Climate analysis pipeline on 25 million Météo-France weather records"
 requires-python = ">=3.11"
 
 [tool.pytest.ini_options]

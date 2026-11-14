@@ -1,11 +1,11 @@
 -- =============================================================================
--- 04 · GOLD : tables analytiques par ville (prêtes pour l'analyse et la BI)
+-- 04 · GOLD: analytical tables per city (ready for analysis and BI)
 -- =============================================================================
 
--- Série quotidienne par ville, sur un calendrier complet : un jour sans mesure
--- existe quand même (valeurs NULL), ce qui rend les taux de complétude exacts.
--- tmean = (TN + TX) / 2 : convention climatologique, homogène sur toute la période
--- (la moyenne horaire TM n'existe que depuis l'automatisation des stations).
+-- Daily series per city on a complete calendar: a day without a measurement
+-- still exists (NULL values), which makes completeness rates exact.
+-- tmean = (TN + TX) / 2: climatological convention, consistent over the whole period
+-- (the hourly mean TM only exists since stations were automated).
 CREATE OR REPLACE TABLE city_daily AS
 WITH calendar AS (
     SELECT CAST(d AS DATE) AS date
@@ -13,17 +13,17 @@ WITH calendar AS (
 ),
 obs AS (
     SELECT r.city, r.priority, o.date,
-           o.tn + coalesce(off.offset_tn, 0) AS tn,   -- station secondaire ramenée au niveau
-           o.tx + coalesce(off.offset_tx, 0) AS tx,   -- de la station principale
+           o.tn + coalesce(off.offset_tn, 0) AS tn,   -- secondary station brought to the level
+           o.tx + coalesce(off.offset_tx, 0) AS tx,   -- of the main station
            o.rr, o.ffm, o.fxi
     FROM ref_station r
     JOIN obs_daily o USING (station_id)
     LEFT JOIN station_offsets off
            ON off.city = r.city AND off.station_id = r.station_id AND off.month = month(o.date)
 ),
--- Pour chaque jour : la station la plus prioritaire qui a une mesure.
--- Températures et pluie sont choisies indépendamment (une station peut avoir l'une sans l'autre).
--- Le row_number élimine aussi les éventuels doublons.
+-- For each day: the highest-priority station that has a measurement.
+-- Temperature and rainfall are chosen independently (a station can have one without the other).
+-- The row_number also removes any duplicates.
 temp AS (
     SELECT city, date, tn, tx FROM obs
     WHERE tn IS NOT NULL AND tx IS NOT NULL
@@ -44,8 +44,8 @@ LEFT JOIN temp t ON t.city = c.city AND t.date = cal.date
 LEFT JOIN rain r ON r.city = c.city AND r.date = cal.date
 ORDER BY c.city, cal.date;
 
--- Séquences de jours secs (problème "gaps and islands") :
--- deux jours secs consécutifs ont la même valeur de (date - rang).
+-- Runs of dry days ("gaps and islands" problem):
+-- two consecutive dry days share the same value of (date - rank).
 CREATE OR REPLACE TABLE city_dry_spells AS
 WITH dry AS (
     SELECT city, date,
@@ -57,7 +57,7 @@ SELECT city, min(date) AS start_date, max(date) AS end_date, count(*) AS n_days
 FROM dry
 GROUP BY city, island;
 
--- Épisodes de chaleur : au moins N jours consécutifs avec TX >= seuil
+-- Heat episodes: at least N consecutive days with TX >= threshold
 CREATE OR REPLACE TABLE city_heatwaves AS
 WITH hot AS (
     SELECT city, date, tx,
@@ -71,7 +71,7 @@ FROM hot
 GROUP BY city, island
 HAVING count(*) >= ${heatwave_min_days};
 
--- Agrégats mensuels, avec un indicateur de validité (complétude du mois)
+-- Monthly aggregates, with a validity flag (month completeness)
 CREATE OR REPLACE TABLE city_monthly AS
 SELECT
     city,
@@ -91,7 +91,7 @@ FROM city_daily
 GROUP BY ALL
 ORDER BY ALL;
 
--- Agrégats annuels + indicateurs d'extrêmes (années complètes uniquement)
+-- Annual aggregates + extreme-weather indicators (complete years only)
 CREATE OR REPLACE TABLE city_yearly AS
 WITH base AS (
     SELECT

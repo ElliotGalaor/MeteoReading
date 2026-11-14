@@ -1,14 +1,14 @@
-"""Extraction : découverte et téléchargement massif des fichiers Météo-France.
+"""Extraction: discovery and bulk download of the Météo-France files.
 
-Les URLs ne sont pas codées en dur : elles sont découvertes via l'API data.gouv.fr,
-ce qui rend le pipeline robuste aux mises à jour du jeu de données.
+URLs are not hard-coded: they are discovered through the data.gouv.fr API, which keeps
+the pipeline working when the dataset is updated.
 
-Points clés :
-- téléchargements parallèles (ThreadPoolExecutor) ;
-- reprise sur erreur réseau (retry exponentiel) ;
-- idempotence : un fichier déjà présent avec la bonne taille n'est pas re-téléchargé,
-  un fichier mis à jour côté serveur (taille différente) l'est ;
-- traçabilité : un manifeste JSON garde l'origine, la taille et l'empreinte de chaque fichier.
+Key points:
+- parallel downloads (ThreadPoolExecutor);
+- retries with exponential backoff on network errors;
+- idempotent: a file already present with the right size is not downloaded again,
+  a file updated on the server (different size) is;
+- traceability: a JSON manifest records the origin, size and hash of every file.
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ from urllib3.util.retry import Retry
 
 log = logging.getLogger(__name__)
 
-# Ex. : .../BASE/QUOT/Q_13_previous-1950-2024_RR-T-Vent.csv.gz
+# e.g. .../BASE/QUOT/Q_13_previous-1950-2024_RR-T-Vent.csv.gz
 RESOURCE_PATTERN = re.compile(
     r"/Q_(?P<dep>[0-9]{2,3}|2A|2B)_(?P<period>previous|latest|avant)-[0-9-]*_RR-T-Vent\.csv\.gz$"
 )
@@ -47,7 +47,7 @@ class Resource:
 
 
 def make_session() -> requests.Session:
-    """Session HTTP avec retry exponentiel sur les erreurs transitoires."""
+    """HTTP session with exponential backoff on transient errors."""
     retry = Retry(
         total=5,
         backoff_factor=1.5,
@@ -56,14 +56,14 @@ def make_session() -> requests.Session:
     )
     session = requests.Session()
     session.mount("https://", HTTPAdapter(max_retries=retry, pool_maxsize=16))
-    session.headers["User-Agent"] = "meteo-analytics/1.0 (projet portfolio data analyst)"
+    session.headers["User-Agent"] = "meteo-analytics/1.0 (data analyst portfolio project)"
     return session
 
 
 def discover_resources(
     payload: dict, departments: list[str] | str, periods: list[str]
 ) -> list[Resource]:
-    """Filtre la liste des ressources data.gouv.fr (réponse JSON de l'API)."""
+    """Filter the list of data.gouv.fr resources (JSON response of the API)."""
     found: dict[tuple[str, str], Resource] = {}
     for res in payload.get("resources", []):
         m = RESOURCE_PATTERN.search(res.get("url", ""))
@@ -79,7 +79,7 @@ def discover_resources(
 
 
 def fetch_catalog(session: requests.Session, api_url: str) -> dict:
-    log.info("Interrogation de l'API data.gouv.fr…")
+    log.info("Querying the data.gouv.fr API…")
     resp = session.get(api_url, timeout=60)
     resp.raise_for_status()
     return resp.json()
@@ -94,7 +94,7 @@ def _sha256(path: Path) -> str:
 
 
 def download_one(session: requests.Session, res: Resource, dest_dir: Path) -> dict:
-    """Télécharge un fichier (écriture atomique via un .part) et renvoie son entrée de manifeste."""
+    """Download one file (atomic write through a .part file) and return its manifest entry."""
     dest = dest_dir / res.filename
     status = "cached"
     if not (dest.exists() and res.filesize and dest.stat().st_size == res.filesize):
@@ -117,26 +117,26 @@ def download_one(session: requests.Session, res: Resource, dest_dir: Path) -> di
 
 
 def download_all(cfg) -> list[dict]:
-    """Point d'entrée de l'étape d'extraction."""
+    """Entry point of the extraction step."""
     dest_dir = cfg.raw_dir / "meteo_france"
     dest_dir.mkdir(parents=True, exist_ok=True)
     session = make_session()
 
     resources = discover_resources(fetch_catalog(session, cfg.dataset_api), cfg.departments, cfg.periods)
     if not resources:
-        raise RuntimeError("Aucun fichier trouvé : vérifier les départements et périodes de config.yaml")
+        raise RuntimeError("No file found: check the départements and periods in config.yaml")
     total_mb = sum(r.filesize or 0 for r in resources) / 1e6
-    log.info("%d fichiers à synchroniser (%.0f Mo)", len(resources), total_mb)
+    log.info("%d files to sync (%.0f MB)", len(resources), total_mb)
 
     manifest, errors = [], []
     with ThreadPoolExecutor(max_workers=cfg.workers) as pool:
         futures = {pool.submit(download_one, session, r, dest_dir): r for r in resources}
-        for fut in tqdm(as_completed(futures), total=len(futures), desc="Téléchargement", unit="fichier"):
+        for fut in tqdm(as_completed(futures), total=len(futures), desc="Downloading", unit="file"):
             res = futures[fut]
             try:
                 manifest.append(fut.result())
-            except Exception as exc:  # on continue : un fichier en échec ne bloque pas les autres
-                log.error("Échec %s : %s", res.filename, exc)
+            except Exception as exc:  # keep going: one failed file does not block the others
+                log.error("Failed %s: %s", res.filename, exc)
                 errors.append(res.filename)
 
     manifest.sort(key=lambda m: m["file"])
@@ -144,7 +144,7 @@ def download_all(cfg) -> list[dict]:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
 
     n_new = sum(m["status"] == "downloaded" for m in manifest)
-    log.info("%d téléchargés, %d déjà à jour, %d en échec", n_new, len(manifest) - n_new, len(errors))
+    log.info("%d downloaded, %d already up to date, %d failed", n_new, len(manifest) - n_new, len(errors))
     if errors:
-        raise RuntimeError(f"{len(errors)} fichier(s) en échec : relancer la commande pour reprendre")
+        raise RuntimeError(f"{len(errors)} file(s) failed: run the command again to resume")
     return manifest

@@ -1,4 +1,4 @@
-# Thème du dashboard : mêmes couleurs que les graphiques du rapport
+# Dashboard theme: same colours as the report charts
 [theme]
 base = "light"
 primaryColor = "#2a78d6"

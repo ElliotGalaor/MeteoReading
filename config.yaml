@@ -1,60 +1,60 @@
 # ---------------------------------------------------------------------------
-# Configuration du pipeline Météo Analytics
-# Tout le comportement du projet se règle ici : aucune valeur "en dur" dans le code.
+# Météo Analytics pipeline configuration
+# Every behaviour of the project is set here: no hard-coded values in the code.
 # ---------------------------------------------------------------------------
 
 source:
-  # Jeu de données officiel Météo-France publié sur data.gouv.fr
-  # "Données climatologiques de base - quotidiennes" (licence Etalab 2.0)
+  # Official Météo-France dataset published on data.gouv.fr
+  # "Données climatologiques de base - quotidiennes" (Etalab 2.0 open licence)
   dataset_api: https://www.data.gouv.fr/api/1/datasets/donnees-climatologiques-de-base-quotidiennes/
-  # Fichiers à récupérer par département :
-  #   previous = 1950 → année N-2, latest = année N-1 → aujourd'hui, avant = avant 1949
+  # Files to fetch for each département (French administrative area):
+  #   previous = 1950 to year N-2, latest = year N-1 to today, avant = before 1949
   periods: [previous, latest]
-  # Départements téléchargés EN PLUS de ceux des villes ci-dessous ("all" = toute la France)
+  # Départements downloaded IN ADDITION to those of the cities below ("all" = the whole of France)
   extra_departments: []
-  # Nombre de téléchargements simultanés
+  # Number of parallel downloads
   workers: 6
 
 paths:
-  raw: data/raw                    # couche "bronze" : fichiers bruts immuables + manifeste
-  warehouse: data/warehouse.duckdb # base analytique (couches silver / gold)
-  reports: reports                 # rapport HTML, figures, résultats JSON
+  raw: data/raw                    # "bronze" layer: immutable raw files + manifest
+  warehouse: data/warehouse.duckdb # analytical database (silver / gold layers)
+  reports: reports                 # HTML report, figures, JSON results
 
 analysis:
-  start_year: 1951                 # première année analysée
-  end_year: 2025                   # dernière année complète
-  reference_period: [1991, 2020]   # normale climatique OMM actuelle
-  old_period: [1961, 1990]         # ancienne normale, pour comparer
-  recent_period: [2011, 2025]      # 15 dernières années
-  station_min_completeness: 0.85   # part minimale de jours avec TN et TX sur la période
-  station_max_distance_km: 40      # rayon de recherche autour du centre-ville
-  station_max_altitude_diff_m: 200 # écart d'altitude max entre station et centre-ville
-  month_min_completeness: 0.90     # un mois est valide si >= 90 % des jours sont renseignés
-  year_min_completeness: 0.95      # une année est valide si >= 95 % des jours sont renseignés
+  start_year: 1951                 # first year analysed
+  end_year: 2025                   # last complete year
+  reference_period: [1991, 2020]   # current WMO climate normal
+  old_period: [1961, 1990]         # previous normal, for comparison
+  recent_period: [2011, 2025]      # last 15 years
+  station_min_completeness: 0.85   # minimum share of days with both TN and TX over the period
+  station_max_distance_km: 40      # search radius around the city centre
+  station_max_altitude_diff_m: 200 # maximum altitude gap between station and city centre
+  month_min_completeness: 0.90     # a month is valid if >= 90% of its days have data
+  year_min_completeness: 0.95      # a year is valid if >= 95% of its days have data
 
-thresholds:                        # seuils des indicateurs d'extrêmes (°C ou mm)
-  hot_day: 30                      # journée chaude : TX >= 30 °C
-  very_hot_day: 35                 # journée très chaude : TX >= 35 °C
-  tropical_night: 20               # nuit tropicale : TN >= 20 °C
-  frost_day: 0                     # jour de gel : TN < 0 °C
-  rain_day: 1                      # jour de pluie : RR >= 1 mm
-  heavy_rain: 20                   # forte pluie : RR >= 20 mm
-  heatwave_min_days: 3             # épisode de chaleur : >= 3 jours consécutifs avec TX >= 30 °C
+thresholds:                        # thresholds of the extreme-weather indicators (°C or mm)
+  hot_day: 30                      # hot day: TX >= 30 °C
+  very_hot_day: 35                 # very hot day: TX >= 35 °C
+  tropical_night: 20               # tropical night: TN >= 20 °C
+  frost_day: 0                     # frost day: TN < 0 °C
+  rain_day: 1                      # rainy day: RR >= 1 mm
+  heavy_rain: 20                   # heavy rain: RR >= 20 mm
+  heatwave_min_days: 3             # heat episode: >= 3 consecutive days with TX >= 30 °C
 
-era5:                              # validation croisée avec la réanalyse ERA5 (API Open-Meteo)
+era5:                              # cross-validation against the ERA5 reanalysis (Open-Meteo API)
   api: https://archive-api.open-meteo.com/v1/archive
   start: "2015-01-01"
   end: "2024-12-31"
-  max_weighted_calls_per_minute: 400  # quota gratuit = 600/min, on garde une marge
+  max_weighted_calls_per_minute: 400  # free quota = 600/min, keep a safety margin
 
-# 20 grandes villes couvrant les principaux climats français.
-# alt : altitude du centre-ville (m), pour écarter les stations de montagne voisines.
-# stations (facultatif) : impose la station de référence, ou une CHAÎNE de stations
-#   par ordre de priorité quand une station a déménagé. Les stations secondaires
-#   sont corrigées du biais moyen mesuré sur la période où elles recouvrent la principale.
-#   - Reims : Reims-Courcy ferme en 2014 -> relais par Reims-Prunay (ouverte en 2012)
-#   - Grenoble : St-Geoirs a des trous avant 1970 -> complétée par Grenoble-Eybens (1950-1968)
-#   - Limoges : Le Palais-sur-Vienne a des jours manquants -> comblés par Limoges-Bellegarde puis Feytiat
+# 20 large cities covering the main French climates.
+# alt: altitude of the city centre (m), used to rule out nearby mountain stations.
+# stations (optional): forces the reference station, or a CHAIN of stations in order of
+#   priority when a station has moved. Secondary stations are corrected for the bias
+#   measured over the period where they overlap the main station.
+#   - Reims: Reims-Courcy closed in 2014 -> continued by Reims-Prunay (opened in 2012)
+#   - Grenoble: St-Geoirs has gaps before 1970 -> filled with Grenoble-Eybens (1950-1968)
+#   - Limoges: Le Palais-sur-Vienne has missing days -> filled with Limoges-Bellegarde, then Feytiat
 cities:
   - {name: Paris,            dep: "75", lat: 48.8566, lon: 2.3522, alt: 35}
   - {name: Marseille,        dep: "13", lat: 43.2965, lon: 5.3698, alt: 12}

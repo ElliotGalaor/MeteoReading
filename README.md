@@ -1,59 +1,60 @@
-# Météo Analytics : 75 ans de climat dans 20 villes françaises
+# Météo Analytics: 75 years of climate in 20 French cities
 
-Pipeline de données de bout en bout qui **collecte 25 millions de relevés météo officiels**, les nettoie, les stocke
-dans un entrepôt analytique, en tire des conclusions statistiquement solides et les restitue dans un
-**dashboard interactif** et un **rapport HTML**.
+End-to-end data pipeline that **collects 25 million official weather records**, cleans them, stores them in an
+analytical warehouse, draws statistically sound conclusions and presents them in an **interactive dashboard**
+and an **HTML report**.
 
-> Question métier : *de combien les grandes villes françaises se sont-elles réchauffées depuis 1951, et qu'est-ce
-> que cela change concrètement (chaleur extrême, gel, pluie) ?*
+> Business question: *how much have large French cities warmed since 1951, and what does it change in practice
+> (extreme heat, frost, rainfall)?*
 
-![Écart de température annuelle à la normale](reports/figures/02_anomalie_france.png)
+![Annual temperature anomaly vs the normal](reports/figures/02_france_anomaly.png)
 
-## Résultats clés
+## Key results
 
-| Constat | Chiffre | Fiabilité |
+| Finding | Figure | Confidence |
 |---|---|---|
-| Réchauffement moyen des 20 villes depuis 1951 | **+0,33 °C par décennie** (IC 95 % : 0,28 à 0,38) | Mann-Kendall p < 0,001, significatif dans les 20 villes |
-| Depuis 1981, le rythme accélère | **+0,43 °C par décennie** | p < 0,001 |
-| 2011-2025 comparé à 1961-1990 | **+1,75 °C** | les 10 années les plus chaudes sont toutes après 2010 |
-| Saison qui se réchauffe le plus vite | **l'été** (+0,43 °C par décennie, contre ~0,30 pour les autres saisons) | p < 0,001 |
-| Journées à 35 °C ou plus | **× 5,5** (0,7 → 3,9 par an et par ville) | |
-| Nuits tropicales (TN ≥ 20 °C) | **× 3,1** | |
-| Jours de gel | **−34 %** | |
-| Records de chaleur pour un record de froid | **15 pour 1** depuis 2020 (1 pour 1 dans les années 1960) | |
-| Cumul de pluie annuel | **pas de tendance** (−0,4 % par décennie) | p = 0,59 : non significatif |
-| Record absolu mesuré | **43,5 °C à Montpellier** le 28/06/2019 | |
+| Average warming of the 20 cities since 1951 | **+0.33 °C per decade** (95% CI: 0.28 to 0.38) | Mann-Kendall p < 0.001, significant in all 20 cities |
+| Since 1981, the pace is speeding up | **+0.43 °C per decade** | p < 0.001 |
+| 2011-2025 compared with 1961-1990 | **+1.75 °C** | the 10 warmest years all came after 2010 |
+| Season warming the fastest | **summer** (+0.43 °C per decade, vs ~0.30 for the other seasons) | p < 0.001 |
+| Days at 35 °C or more | **× 5.5** (0.7 → 3.9 per year and per city) | |
+| Tropical nights (TN ≥ 20 °C) | **× 3.1** | |
+| Frost days | **−34%** | |
+| Heat records for each cold record | **15 to 1** since 2020 (1 to 1 in the 1960s) | |
+| Annual rainfall | **no trend** (−0.4% per decade) | p = 0.59: not significant |
+| All-time record measured | **43.5 °C in Montpellier** on 28 June 2019 | |
 
-Le rapport complet, avec toutes les figures et la méthode, est dans [reports/rapport_climat.html](reports/rapport_climat.html)
-(un seul fichier, à ouvrir dans un navigateur). Pour la soutenance : [docs/presentation_entretien.md](docs/presentation_entretien.md) (pitch, démo en 5 minutes, questions probables).
+The full report, with every figure and the method, is in [reports/climate_report.html](reports/climate_report.html)
+(a single file to open in a browser). For a presentation: [docs/interview_guide.md](docs/interview_guide.md)
+(pitch, 5-minute demo, likely questions).
 
-## Ce que le projet montre
+## What the project demonstrates
 
-| Compétence | Où la voir |
+| Skill | Where to see it |
 |---|---|
-| **Collecte de données en masse** : 40 fichiers (268 Mo) découverts via l'API data.gouv.fr, téléchargés en parallèle, avec reprise sur erreur et manifeste de traçabilité | [meteo/download.py](meteo/download.py) |
-| **Client d'API respectueux des quotas** : calcul du coût de chaque appel, limiteur de débit, cache | [meteo/era5.py](meteo/era5.py) |
-| **SQL analytique** : CTE, fonctions de fenêtre, `QUALIFY`, `PIVOT`, macros, problème « gaps and islands » | [sql/](sql/) et [sql/analyses_exemples.sql](sql/analyses_exemples.sql) |
-| **Qualité des données** : codes qualité, bornes physiques, cohérence, doublons, complétude, raccordement de séries | [sql/02_quality.sql](sql/02_quality.sql), [sql/03_stations.sql](sql/03_stations.sql) |
-| **Statistiques** : anomalies, régression avec IC, Mann-Kendall, Theil-Sen, records (Meehl 2009), scores z | [meteo/stats.py](meteo/stats.py) |
-| **Machine learning exploratoire** : ACP + k-means, choix de k par silhouette | [meteo/analysis.py](meteo/analysis.py) |
-| **Validation croisée** avec une source indépendante (réanalyse ERA5) | [meteo/era5.py](meteo/era5.py) |
-| **Data visualisation** : palette lisible par les daltoniens, une idée par graphique | [reports/figures/](reports/figures/) |
-| **Dashboard** interactif en 6 pages, dont un éditeur SQL | [dashboard/](dashboard/) |
-| **Qualité logicielle** : configuration externalisée, tests automatisés, pipeline reproductible en une commande | [tests/](tests/), [config.yaml](config.yaml) |
+| **Bulk data collection**: 40 files (268 MB) discovered through the data.gouv.fr API, downloaded in parallel, with retries and a traceability manifest | [meteo/download.py](meteo/download.py) |
+| **Quota-aware API client**: computes the cost of each call, rate limiter, cache | [meteo/era5.py](meteo/era5.py) |
+| **Analytical SQL**: CTEs, window functions, `QUALIFY`, `PIVOT`, macros, "gaps and islands" | [sql/](sql/) and [sql/example_queries.sql](sql/example_queries.sql) |
+| **Data quality**: quality codes, physical bounds, consistency, duplicates, completeness, series splicing | [sql/02_quality.sql](sql/02_quality.sql), [sql/03_stations.sql](sql/03_stations.sql) |
+| **Statistics**: anomalies, regression with CI, Mann-Kendall, Theil-Sen, records (Meehl 2009), z-scores | [meteo/stats.py](meteo/stats.py) |
+| **Exploratory machine learning**: PCA + k-means, choice of k by silhouette | [meteo/analysis.py](meteo/analysis.py) |
+| **Cross-validation** against an independent source (ERA5 reanalysis) | [meteo/era5.py](meteo/era5.py) |
+| **Data visualisation**: colour-blind-safe palette, one idea per chart | [reports/figures/](reports/figures/) |
+| **Dashboard**: 6 interactive pages, including a SQL editor | [dashboard/](dashboard/) |
+| **Software quality**: externalised configuration, automated tests, pipeline reproducible in one command | [tests/](tests/), [config.yaml](config.yaml) |
 
-## Démarrage rapide
+## Quick start
 
-**Windows (PowerShell)**, depuis le dossier du projet :
+**Windows (PowerShell)**, from the project folder:
 
 ```powershell
-py -m venv .venv                                         # « py » : le lanceur Python officiel de Windows
+py -m venv .venv                                         # "py": the official Windows Python launcher
 .venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe -m meteo all                    # collecte + entrepôt + ERA5 + analyses + rapport (~3 min)
-.venv\Scripts\python.exe -m streamlit run dashboard/app.py   # dashboard sur http://localhost:8501
+.venv\Scripts\python.exe -m meteo all                    # collection + warehouse + ERA5 + analyses + report (~3 min)
+.venv\Scripts\python.exe -m streamlit run dashboard/app.py   # dashboard on http://localhost:8501
 ```
 
-**macOS / Linux** :
+**macOS / Linux**:
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
@@ -63,54 +64,54 @@ streamlit run dashboard/app.py
 ```
 
 <details>
-<summary>Dépannage Windows</summary>
+<summary>Windows troubleshooting</summary>
 
-- **`.venv\Scripts\activate` introuvable** : l'environnement a été créé par un autre Python (MSYS2, Cygwin…) qui
-  range ses fichiers dans `bin\`. Supprimer `.venv` et le recréer avec `py -m venv .venv`.
-- **« l'exécution de scripts est désactivée »** en activant l'environnement : inutile de l'activer, préfixer les
-  commandes par `.venv\Scripts\python.exe` comme ci-dessus. Pour pouvoir activer (`.venv\Scripts\Activate.ps1`),
-  autoriser une fois les scripts locaux : `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
-- **« Une stratégie de contrôle d'application a bloqué ce fichier »** au premier import : le Contrôle intelligent
-  des applications de Windows vérifie la réputation des nouvelles DLL ; relancer la commande suffit en général.
+- **`.venv\Scripts\activate` not found**: the environment was created by another Python (MSYS2, Cygwin…) that
+  stores its files in `bin\`. Delete `.venv` and create it again with `py -m venv .venv`.
+- **"running scripts is disabled on this system"** when activating the environment: there is no need to activate
+  it, prefix the commands with `.venv\Scripts\python.exe` as above. To be able to activate it
+  (`.venv\Scripts\Activate.ps1`), allow local scripts once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+- **"An Application Control policy has blocked this file"** on the first import: Windows Smart App Control checks
+  the reputation of new DLLs; running the command again usually works.
 
 </details>
 
-Chaque étape peut aussi se lancer seule (environnement activé, ou en remplaçant `python` par `.venv\Scripts\python.exe`) :
+Each step can also be run on its own (environment activated, or replacing `python` with `.venv\Scripts\python.exe`):
 
 ```bash
-python -m meteo download     # 1. collecte (~30 s)
-python -m meteo build        # 2. entrepôt DuckDB (~13 s pour 25 M lignes)
-python -m meteo era5         # 3. validation croisée ERA5 (~2 min, limitée par le quota de l'API)
-python -m meteo analyze      # 4. statistiques et figures (~6 s)
-python -m meteo report       # 5. rapport HTML
-python -m meteo query sql/analyses_exemples.sql   # requêtes SQL commentées
+python -m meteo download     # 1. collection (~30 s)
+python -m meteo build        # 2. DuckDB warehouse (~13 s for 25 M rows)
+python -m meteo era5         # 3. ERA5 cross-validation (~2 min, limited by the API quota)
+python -m meteo analyze      # 4. statistics and figures (~6 s)
+python -m meteo report       # 5. HTML report
+python -m meteo query sql/example_queries.sql   # annotated SQL queries
 python -m pytest             # tests
 ```
 
-## Le dashboard
+## The dashboard
 
-| Page | Contenu |
+| Page | Content |
 |---|---|
-| **Vue d'ensemble** | indicateurs clés, bandes de réchauffement, carte des villes, constats principaux |
-| **Explorer une ville** | jusqu'à 3 villes, 13 indicateurs, par saison, en valeurs ou en écart à la normale, tendance testée |
-| **Une année en détail** | chaque jour d'une année comparé à la normale (moyenne et 10e-90e centiles) |
-| **Extrêmes et records** | carte de chaleur ville × décennie, avant/après, records, épisodes de chaleur filtrables |
-| **Données et qualité** | schéma du pipeline, bilan qualité, réseau de stations, raccordements, validation ERA5, limites |
-| **Requêtes SQL** | éditeur SQL en direct sur l'entrepôt (lecture seule, accès disque bloqué), export CSV |
+| **Overview** | key indicators, warming stripes, map of the cities, main takeaways |
+| **Explore a city** | up to 3 cities, 13 indicators, by season, as values or anomalies, with a tested trend |
+| **A year in detail** | every day of a year compared with the normal (mean and 10th-90th percentiles) |
+| **Extremes and records** | city × decade heatmap, then vs now, records, filterable heat episodes |
+| **Data and quality** | pipeline diagram, quality summary, station network, series splicing, ERA5 validation, limitations |
+| **SQL queries** | live SQL editor on the warehouse (read-only, disk access blocked), CSV export |
 
 ## Architecture
 
 ```
-data.gouv.fr (API)          Open-Meteo (API ERA5)
+data.gouv.fr (API)          Open-Meteo (ERA5 API)
        │                            │
        ▼                            ▼
- download.py ──► data/raw/  (bronze : 40 CSV.gz + manifest.json, immuables)
+ download.py ──► data/raw/  (bronze: 40 CSV.gz + manifest.json, immutable)
                      │
-                     ▼  DuckDB, logique en SQL (sql/01 → 04)
-       stg_daily     25 M lignes typées, codes qualité conservés
-       obs_flags     statut de chaque mesure (valide, absente, douteuse, hors bornes, incohérente)
-       obs_daily     vue « propre » (valeurs validées uniquement)
-       ref_station   station(s) de référence par ville + station_offsets (raccordement)
+                     ▼  DuckDB, logic written in SQL (sql/01 → 04)
+       stg_daily     25 M typed rows, quality codes kept
+       obs_flags     status of each measurement (valid, missing, suspect, out of range, inconsistent)
+       obs_daily     "clean" view (validated values only)
+       ref_station   reference station(s) per city + station_offsets (series splicing)
        city_daily / city_monthly / city_yearly / city_heatwaves / city_dry_spells   (gold)
                      │
           ┌──────────┼───────────────┬──────────────────┐
@@ -119,54 +120,54 @@ data.gouv.fr (API)          Open-Meteo (API ERA5)
      (stats, figures)  (HTML)    (Streamlit)       (Power BI, Tableau…)
 ```
 
-## Données
+## Data
 
-- **Source** : Météo-France, [Données climatologiques de base quotidiennes](https://www.data.gouv.fr/fr/datasets/donnees-climatologiques-de-base-quotidiennes/), licence Etalab 2.0.
-- **Volume** : 25 026 059 lignes, 2 433 stations, 20 départements, du 01/01/1950 au 09/11/2026.
-- **Variables** : températures minimale et maximale (TN, TX), moyenne horaire (TM), pluie (RR), vent moyen et rafales, chacune avec son code qualité.
-- **Validation** : ERA5 (Copernicus) via l'API gratuite [Open-Meteo](https://open-meteo.com/), 2015-2024.
+- **Source**: Météo-France, [Données climatologiques de base quotidiennes](https://www.data.gouv.fr/fr/datasets/donnees-climatologiques-de-base-quotidiennes/) (daily climatological data), Etalab 2.0 open licence.
+- **Volume** (November 2026 snapshot): 25,027,470 rows, 2,433 stations, 20 départements (French administrative areas), from 1 January 1950 to November 2026.
+- **Variables**: minimum and maximum temperature (TN, TX), mean of hourly temperatures (TM), rainfall (RR), mean wind and gusts, each with its quality code.
+- **Validation**: ERA5 (Copernicus) through the free [Open-Meteo](https://open-meteo.com/) API, 2015-2024.
 
-Pour analyser toute la France (outre-mer compris), mettre `extra_departments: all` dans [config.yaml](config.yaml) : environ 1,3 Go et plus de 100 millions de lignes, sans modifier le code.
+To analyse the whole of France (overseas territories included), set `extra_departments: all` in [config.yaml](config.yaml): about 1.3 GB and more than 100 million rows, without changing the code.
 
-## Méthodologie et choix assumés
+## Methodology and deliberate choices
 
-- **Température moyenne = (TN + TX) / 2**, convention climatologique : la moyenne horaire (TM) n'existe que depuis l'automatisation des stations et créerait une rupture.
-- **Une station de référence par ville**, choisie automatiquement en SQL : la plus complète sur 1951-2025, à moins de 40 km du centre et à moins de 200 m d'écart d'altitude (sinon Grenoble se retrouvait avec une station de montagne à 806 m).
-- **Raccordement de séries** quand une station ferme ou a des trous (Reims, Grenoble, Limoges) : la station de relais est corrigée du biais mesuré **mois par mois** sur les jours communs (de −2,8 à −1,2 °C selon la saison pour Limoges, d'où l'intérêt d'une correction mensuelle).
-- **Mois valide** si au moins 90 % des jours sont mesurés, **année valide** si au moins 95 % ; résultat : 20 villes × 75 années complètes.
-- **Moyenne nationale = moyenne des anomalies**, pas des températures brutes : l'indicateur ne bouge pas si une ville manque une année.
-- **Une tendance n'est déclarée significative que si la régression linéaire ET le test de Mann-Kendall le sont** (seuil de 5 %).
-- **2026 est exclue des statistiques** (année incomplète) mais reste visible dans le dashboard.
+- **Mean temperature = (TN + TX) / 2**, the climatological convention: the hourly mean (TM) only exists since stations were automated and would create a break in the series.
+- **One reference station per city**, chosen automatically in SQL: the most complete over 1951-2025, within 40 km of the centre and within 200 m of its altitude (otherwise Grenoble ended up with a mountain station at 806 m).
+- **Series splicing** when a station closes or has gaps (Reims, Grenoble, Limoges): the backup station is corrected for the bias measured **month by month** on the shared days (from −2.8 to −1.2 °C depending on the season for Limoges, hence a monthly correction).
+- **Valid month** if at least 90% of its days have data, **valid year** if at least 95%; result: 20 cities × 75 complete years.
+- **National average = average of the anomalies**, not of raw temperatures: the indicator does not move when a city is missing a year.
+- **A trend is only called significant when both the linear regression AND the Mann-Kendall test are** (5% level).
+- **2026 is excluded from the statistics** (incomplete year) but remains visible in the dashboard.
 
-## Qualité des données : ce que l'analyse a révélé
+## Data quality: what the analysis revealed
 
-- Météo-France valide déjà ses données : **208 valeurs rejetées sur 58,9 millions** de mesures présentes, aucun doublon.
-- **Le vrai problème est la complétude** : 55 % des lignes n'ont pas de température (la majorité des postes ne mesurent que la pluie), et le réseau change (1 100 stations de pluie actives en 1995, 500 aujourd'hui).
-- **ERA5 suit très bien la météo du jour** (corrélation 0,987 sur les TX) **mais lisse les effets locaux** : +4,7 °C sur les nuits d'Ajaccio (la maille inclut la mer), −1,6 °C à Paris (l'îlot de chaleur urbain n'existe pas dans la réanalyse), et à Ajaccio 90 journées ≥ 30 °C au lieu de 456 observées. Pour les extrêmes locaux, les stations restent indispensables.
+- Météo-France already validates its data: **204 values rejected out of 58.9 million** measurements present, no duplicates.
+- **The real issue is completeness**: 55% of the rows have no temperature (most stations only measure rainfall), and the network keeps changing (1,100 active rain stations in 1995, 500 today).
+- **ERA5 tracks day-to-day weather very well** (0.987 correlation on TX) **but smooths out local effects**: +4.7 °C on Ajaccio's nights (the grid cell includes the sea), −1.6 °C in Paris (the urban heat island does not exist in the reanalysis), and in Ajaccio 90 days ≥ 30 °C instead of the 456 observed. For local extremes, stations remain essential.
 
-## Limites et pistes
+## Limitations and next steps
 
-- Séries non homogénéisées (changements d'instruments, urbanisation autour des stations) : seuls les déménagements identifiés sont corrigés.
-- Tests statistiques sous hypothèse d'indépendance des années : p-values un peu optimistes (piste : Mann-Kendall modifié de Hamed et Rao).
-- Pistes : étendre à toute la France, ajouter l'ensoleillement et l'humidité (fichiers « autres paramètres »), indicateur canicule officiel Météo-France, planifier la mise à jour quotidienne (cron ou GitHub Actions), déployer le dashboard sur Streamlit Community Cloud.
+- Non-homogenised series (changes of instruments, urbanisation around stations): only identified relocations are corrected.
+- Statistical tests assume independent years: the p-values are slightly optimistic (next step: Hamed and Rao's modified Mann-Kendall test).
+- Next steps: extend to the whole of France, add sunshine and humidity (the "autres paramètres" files), the official Météo-France heatwave indicator, schedule a daily refresh (cron or GitHub Actions), deploy the dashboard on Streamlit Community Cloud.
 
 ## Structure
 
 ```
 MeteoReading/
-├── config.yaml            # villes, périodes, seuils, chemins : tout le paramétrage
-├── meteo/                 # package Python
-│   ├── __main__.py        # interface en ligne de commande
-│   ├── download.py        # collecte massive
-│   ├── warehouse.py       # orchestration de l'entrepôt DuckDB
-│   ├── stats.py           # fonctions statistiques pures (testées)
-│   ├── analysis.py        # une fonction par question métier
-│   ├── era5.py            # validation croisée Open-Meteo
-│   ├── viz.py, palette.py # graphiques statiques
-│   └── report.py, fmt.py  # rapport HTML
-├── sql/                   # transformations (01 → 04) et requêtes d'exemple
-├── dashboard/             # application Streamlit
-├── templates/             # gabarit du rapport
-├── tests/                 # pytest, dont un test de bout en bout sur données synthétiques
-└── reports/               # rapport, figures, tables CSV, resultats.json
+├── config.yaml            # cities, periods, thresholds, paths: all the settings
+├── meteo/                 # Python package
+│   ├── __main__.py        # command-line interface
+│   ├── download.py        # bulk collection
+│   ├── warehouse.py       # DuckDB warehouse orchestration
+│   ├── stats.py           # pure statistical functions (tested)
+│   ├── analysis.py        # one function per business question
+│   ├── era5.py            # Open-Meteo cross-validation
+│   ├── viz.py, palette.py # static charts
+│   └── report.py, fmt.py  # HTML report
+├── sql/                   # transformations (01 → 04) and example queries
+├── dashboard/             # Streamlit app
+├── templates/             # report template
+├── tests/                 # pytest, including an end-to-end test on synthetic data
+└── reports/               # report, figures, CSV tables, results.json
 ```

@@ -1,3 +1,3 @@
-"""Météo Analytics : pipeline d'analyse climatique sur les données ouvertes Météo-France."""
+"""Météo Analytics: climate analysis pipeline on Météo-France open data."""
 
 __version__ = "1.0.0"

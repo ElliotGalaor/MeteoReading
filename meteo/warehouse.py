@@ -1,12 +1,12 @@
-"""Transformation & chargement : construction de l'entrepôt analytique DuckDB.
+"""Transform & load: build the DuckDB analytical warehouse.
 
-Architecture en couches ("medallion") :
-    bronze : fichiers CSV bruts + manifeste          (data/raw, immuables)
-    silver : stg_daily -> obs_flags -> obs_daily      (typage, contrôle qualité)
-    gold   : dim_station, ref_station, city_*         (tables prêtes pour l'analyse)
+Layered ("medallion") architecture:
+    bronze : raw CSV files + manifest                 (data/raw, immutable)
+    silver : stg_daily -> obs_flags -> obs_daily      (typing, quality control)
+    gold   : dim_station, ref_station, city_*         (analysis-ready tables)
 
-La logique métier est écrite en SQL (dossier sql/), exécuté dans l'ordre.
-Python ne fait qu'orchestrer et injecter les paramètres de config.yaml.
+The business logic is written in SQL (sql/ folder) and run in order.
+Python only orchestrates and injects the parameters from config.yaml.
 """
 from __future__ import annotations
 
@@ -30,19 +30,19 @@ GOLD_TABLES = ["dim_station", "ref_station", "station_offsets", "city_daily", "c
 
 
 def render_sql(name: str, params: dict) -> str:
-    """Charge un fichier SQL et remplace les paramètres ${...}."""
+    """Load a SQL file and substitute its ${...} parameters."""
     return Template((SQL_DIR / name).read_text(encoding="utf-8")).substitute(params)
 
 
 def raw_files(cfg: Config) -> list[Path]:
     files = sorted((cfg.raw_dir / "meteo_france").glob("Q_*_RR-T-Vent.csv.gz"))
     if not files:
-        raise FileNotFoundError("Aucun fichier brut : lancer d'abord `python -m meteo download`")
+        raise FileNotFoundError("No raw file: run `python -m meteo download` first")
     return files
 
 
 def sql_list(paths: list[Path]) -> str:
-    """Liste Python -> littéral de liste SQL (chemins en / pour DuckDB)."""
+    """Python list -> SQL list literal (forward-slash paths for DuckDB)."""
     return "[" + ", ".join("'" + p.as_posix().replace("'", "''") + "'" for p in paths) + "]"
 
 
@@ -87,7 +87,7 @@ def build_warehouse(cfg: Config, files: list[Path] | None = None) -> dict:
         for name in SQL_STEPS:
             t0 = time.perf_counter()
             if name == "04_gold.sql":
-                # le calendrier va jusqu'à la dernière date réellement observée
+                # the calendar runs up to the last date actually observed
                 params["last_date"] = con.sql("SELECT max(date) FROM stg_daily").fetchall()[0][0].isoformat()
             con.execute(render_sql(name, params))
             stats[f"duration_{name}"] = round(time.perf_counter() - t0, 2)
@@ -98,8 +98,7 @@ def build_warehouse(cfg: Config, files: list[Path] | None = None) -> dict:
 
     with open(cfg.warehouse.parent / "pipeline_stats.json", "w", encoding="utf-8") as f:
         json.dump(stats, f, indent=2, ensure_ascii=False, default=str)
-    log.info("%s lignes brutes, %s stations, %d villes", f"{stats['n_rows']:,}".replace(",", " "),
-             stats["n_stations"], stats["n_cities"])
+    log.info("%s raw rows, %s stations, %d cities", f"{stats['n_rows']:,}", stats["n_stations"], stats["n_cities"])
     return stats
 
 
@@ -108,7 +107,7 @@ def collect_stats(con: duckdb.DuckDBPyConnection) -> dict:
         "SELECT count(*), count(DISTINCT station_id), min(date), max(date) FROM stg_daily"
     ).fetchall()[0]
     n_valid, n_values = con.sql(
-        "SELECT sum(n) FILTER (WHERE status = 'valide'), sum(n) FILTER (WHERE status <> 'absente') FROM dq_summary"
+        "SELECT sum(n) FILTER (WHERE status = 'valid'), sum(n) FILTER (WHERE status <> 'missing') FROM dq_summary"
     ).fetchall()[0]
     return {
         "n_rows": n_rows,
@@ -123,7 +122,7 @@ def collect_stats(con: duckdb.DuckDBPyConnection) -> dict:
 
 
 def export_parquet(con: duckdb.DuckDBPyConnection, cfg: Config) -> None:
-    """Export des tables gold en Parquet (lisibles par Power BI, Tableau, Spark, pandas…)."""
+    """Export the gold tables to Parquet (readable by Power BI, Tableau, Spark, pandas…)."""
     out = cfg.warehouse.parent / "gold"
     out.mkdir(parents=True, exist_ok=True)
     for table in GOLD_TABLES:
@@ -132,5 +131,5 @@ def export_parquet(con: duckdb.DuckDBPyConnection, cfg: Config) -> None:
 
 def connect(cfg: Config, read_only: bool = True) -> duckdb.DuckDBPyConnection:
     if not Path(cfg.warehouse).exists():
-        raise FileNotFoundError("Entrepôt absent : lancer d'abord `python -m meteo build`")
+        raise FileNotFoundError("Warehouse missing: run `python -m meteo build` first")
     return duckdb.connect(str(cfg.warehouse), read_only=read_only)

@@ -1,4 +1,4 @@
-"""Chargement et validation de la configuration (config.yaml)."""
+"""Loading and validation of the configuration file (config.yaml)."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -16,7 +16,7 @@ class City:
     lat: float
     lon: float
     alt: float | None = None
-    stations: tuple[str, ...] = ()  # station(s) imposée(s), par ordre de priorité
+    stations: tuple[str, ...] = ()  # forced station(s), in order of priority
 
 
 @dataclass(frozen=True)
@@ -35,7 +35,7 @@ class Config:
 
     @property
     def departments(self) -> list[str] | str:
-        """Départements à télécharger : ceux des villes + les départements en plus."""
+        """Départements to download: those of the cities plus the extra ones."""
         if self.extra_departments == "all":
             return "all"
         deps = {c.dep for c in self.cities} | set(self.extra_departments or [])
@@ -57,11 +57,11 @@ def load_config(path: str | Path | None = None) -> Config:
         for c in raw["cities"]
     ]
     if len({c.name for c in cities}) != len(cities):
-        raise ValueError("Deux villes portent le même nom dans config.yaml")
+        raise ValueError("Two cities share the same name in config.yaml")
 
     a = raw["analysis"]
     if not a["start_year"] < a["end_year"]:
-        raise ValueError("analysis.start_year doit être inférieur à analysis.end_year")
+        raise ValueError("analysis.start_year must be lower than analysis.end_year")
 
     src, paths = raw["source"], raw["paths"]
     return Config(

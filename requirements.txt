@@ -1,4 +1,4 @@
-# Versions testées : Python 3.14, pandas 3.1, DuckDB 2.0, Streamlit 1.67, Plotly 7.1
+# Tested versions: Python 3.14, pandas 3.1, DuckDB 2.0, Streamlit 1.67, Plotly 7.1
 pandas>=2.2
 numpy>=1.26
 scipy>=1.11

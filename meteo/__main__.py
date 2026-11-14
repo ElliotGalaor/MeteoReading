@@ -1,12 +1,12 @@
-"""Interface en ligne de commande.
+"""Command-line interface.
 
-    python -m meteo download     # 1. collecte massive des fichiers Météo-France
-    python -m meteo build        # 2. entrepôt DuckDB : nettoyage, qualité, agrégats
-    python -m meteo analyze      # 3. statistiques + figures + resultats.json
-    python -m meteo era5         # 4. (option) validation croisée avec ERA5 / Open-Meteo
-    python -m meteo report       # 5. rapport HTML autonome
-    python -m meteo all          # tout enchaîner
-    python -m meteo query "SELECT ..."   # requêter l'entrepôt (ou un fichier .sql)
+    python -m meteo download     # 1. bulk download of the Météo-France files
+    python -m meteo build        # 2. DuckDB warehouse: cleaning, quality checks, aggregates
+    python -m meteo analyze      # 3. statistics + figures + results.json
+    python -m meteo era5         # 4. (optional) cross-validation against ERA5 / Open-Meteo
+    python -m meteo report       # 5. self-contained HTML report
+    python -m meteo all          # run everything
+    python -m meteo query "SELECT ..."   # query the warehouse (or run a .sql file)
 """
 from __future__ import annotations
 
@@ -27,43 +27,43 @@ def step(name: str):
     log.info("━━ %s", name)
     t0 = time.perf_counter()
     yield
-    log.info("✓ %s terminé en %.1f s", name, time.perf_counter() - t0)
+    log.info("✓ %s done in %.1f s", name, time.perf_counter() - t0)
 
 
 def cmd_download(cfg, args):
     from .download import download_all
 
-    with step("Collecte des données"):
+    with step("Data collection"):
         download_all(cfg)
 
 
 def cmd_build(cfg, args):
     from .warehouse import build_warehouse
 
-    with step("Construction de l'entrepôt"):
+    with step("Warehouse build"):
         build_warehouse(cfg)
 
 
 def cmd_analyze(cfg, args):
     from .analysis import run_analysis
 
-    with step("Analyses statistiques"):
+    with step("Statistical analysis"):
         run_analysis(cfg)
 
 
 def cmd_era5(cfg, args):
     from .era5 import run_era5_validation
 
-    with step("Validation croisée ERA5"):
+    with step("ERA5 cross-validation"):
         run_era5_validation(cfg)
 
 
 def cmd_report(cfg, args):
     from .report import build_report
 
-    with step("Rapport HTML"):
+    with step("HTML report"):
         path = build_report(cfg)
-    log.info("Rapport : %s", path)
+    log.info("Report: %s", path)
 
 
 def cmd_all(cfg, args):
@@ -85,7 +85,7 @@ def cmd_query(cfg, args):
     pd.set_option("display.width", 200)
     pd.set_option("display.max_columns", 30)
     with duckdb.connect(str(cfg.warehouse), read_only=True) as con:
-        # Un fichier peut contenir plusieurs requêtes séparées par ";"
+        # A file can hold several queries separated by ";"
         for statement in [s.strip() for s in sql.split(";") if s.strip()]:
             title = next((l[2:].strip() for l in statement.splitlines() if l.startswith("--")), None)
             if title:
@@ -94,18 +94,18 @@ def cmd_query(cfg, args):
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="meteo", description="Pipeline d'analyse climatique Météo-France")
-    parser.add_argument("--config", help="chemin vers config.yaml", default=None)
+    parser = argparse.ArgumentParser(prog="meteo", description="Climate analysis pipeline on Météo-France open data")
+    parser.add_argument("--config", help="path to config.yaml", default=None)
     parser.add_argument("-v", "--verbose", action="store_true")
     sub = parser.add_subparsers(dest="command", required=True)
     for name, fn in [("download", cmd_download), ("build", cmd_build), ("analyze", cmd_analyze),
                      ("era5", cmd_era5), ("report", cmd_report)]:
         sub.add_parser(name).set_defaults(func=fn)
     p_all = sub.add_parser("all")
-    p_all.add_argument("--no-era5", action="store_true", help="ne pas appeler l'API Open-Meteo")
+    p_all.add_argument("--no-era5", action="store_true", help="skip the Open-Meteo API calls")
     p_all.set_defaults(func=cmd_all)
     p_q = sub.add_parser("query")
-    p_q.add_argument("sql", help="requête SQL ou chemin d'un fichier .sql")
+    p_q.add_argument("sql", help="SQL query or path to a .sql file")
     p_q.add_argument("--max-rows", type=int, default=30)
     p_q.set_defaults(func=cmd_query)
 

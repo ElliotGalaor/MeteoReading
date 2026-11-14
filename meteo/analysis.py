@@ -1,19 +1,18 @@
-"""Analyses : chaque fonction répond à une question métier et renvoie des chiffres clés.
+"""Analyses: each function answers one business question and returns key figures.
 
-Q1. De combien la France s'est-elle réchauffée depuis 1951, et est-ce significatif ?
-Q2. Le réchauffement est-il homogène entre villes, saisons, minimales et maximales ?
-Q3. Les extrêmes (chaleur, nuits tropicales, gel) évoluent-ils ?
-Q4. Les records de chaleur sont-ils plus fréquents que les records de froid ?
-Q5. Les précipitations ont-elles changé (cumul, fortes pluies, sécheresses) ?
-Q6. Quels profils climatiques distinguent les villes (ACP + clustering) ?
-Q7. Quelles journées ont été les plus anormales ?
-+  Qualité des données et représentativité du réseau.
+Q1. How much has France warmed since 1951, and is it significant?
+Q2. Is the warming uniform across cities, seasons, minimum and maximum temperatures?
+Q3. Are extremes (heat, tropical nights, frost) changing?
+Q4. Are heat records more frequent than cold records?
+Q5. Has rainfall changed (totals, heavy rain, dry spells)?
+Q6. Which climate profiles set the cities apart (PCA + clustering)?
+Q7. Which days were the most unusual?
++   Data quality and representativeness of the station network.
 """
 from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -35,7 +34,7 @@ def load(cfg: Config) -> dict[str, pd.DataFrame]:
         tables = {t: con.sql(f"SELECT * FROM {t}").df() for t in (
             "city_daily", "city_monthly", "city_yearly", "ref_station", "station_offsets",
             "dq_summary", "network_yearly", "city_heatwaves")}
-    # Analyse limitée aux années complètes (l'année en cours reste dans l'entrepôt et le dashboard)
+    # The analysis only uses complete years (the current year stays in the warehouse and the dashboard)
     a = cfg.analysis
     d = tables["city_daily"]
     d["date"] = pd.to_datetime(d["date"])
@@ -52,22 +51,31 @@ def _r(x, n=2):
     return None if x is None or (isinstance(x, float) and np.isnan(x)) else round(float(x), n)
 
 
+def _decade_label(d: int, start: int, end: int) -> str:
+    """1950 -> '1951-59' when the analysis starts in 1951; 2020 -> '2020-25'."""
+    return f"{max(d, start)}-{str(min(d + 9, end))[2:]}"
+
+
+def _xy(s: pd.Series):
+    return s.index.values, s.values
+
+
 # --- Q1 ----------------------------------------------------------------------
 def warming(t, cfg, figs) -> dict:
     a = cfg.analysis
     ref, old, recent = tuple(a["reference_period"]), tuple(a["old_period"]), tuple(a["recent_period"])
     y = t["city_yearly"][t["city_yearly"]["valid_temp"]]
     y = anomalies(y, ["tmean", "tn", "tx"], ref)
-    fr = composite(y, "tmean_anom")
-    tr = trend(fr.index, fr.values)
-    tr_recent = trend(fr.loc[1981:].index, fr.loc[1981:].values)
+    france = composite(y, "tmean_anom")
+    tr = trend(france.index, france.values)
+    tr_recent = trend(france.loc[1981:].index, france.loc[1981:].values)
 
-    viz.warming_stripes(fr, figs / "01_warming_stripes.png", ref)
-    viz.anomaly_bars(fr, figs / "02_anomalie_france.png", tr, ref)
-    viz.anomaly_small_multiples(y, figs / "03_anomalies_par_ville.png", ref)
+    viz.warming_stripes(france, figs / "01_warming_stripes.png", ref)
+    viz.anomaly_bars(france, figs / "02_france_anomaly.png", tr, ref)
+    viz.anomaly_small_multiples(y, figs / "03_city_anomalies.png", ref)
 
-    old_mean, recent_mean = fr.loc[old[0]:old[1]].mean(), fr.loc[recent[0]:recent[1]].mean()
-    top = fr.sort_values(ascending=False)
+    old_mean, recent_mean = france.loc[old[0]:old[1]].mean(), france.loc[recent[0]:recent[1]].mean()
+    top = france.sort_values(ascending=False)
     return {
         "france_trend_1951": tr.to_dict(),
         "france_trend_1981": tr_recent.to_dict(),
@@ -77,16 +85,7 @@ def warming(t, cfg, figs) -> dict:
         "coldest_year": {"year": int(top.index[-1]), "anomaly": _r(top.iloc[-1])},
         "tmax_trend": trend(*_xy(composite(y, "tx_anom"))).to_dict(),
         "tmin_trend": trend(*_xy(composite(y, "tn_anom"))).to_dict(),
-    }, y, fr
-
-
-def _decade_label(d: int, start: int, end: int) -> str:
-    """1950 -> '1951-59' si l'analyse démarre en 1951 ; 2020 -> '2020-25'."""
-    return f"{max(d, start)}-{str(min(d + 9, end))[2:]}"
-
-
-def _xy(s: pd.Series):
-    return s.index.values, s.values
+    }, y, france
 
 
 # --- Q2 ----------------------------------------------------------------------
@@ -101,7 +100,7 @@ def heterogeneity(t, cfg, figs, y) -> tuple[dict, pd.DataFrame]:
                      "tmean_recent": period_mean(d, "tmean", recent).iloc[0]})
     cities = pd.DataFrame(rows)
     cities["delta"] = cities["tmean_recent"] - cities["tmean_old"]
-    viz.city_trends(cities, figs / "04_tendance_par_ville.png")
+    viz.city_trends(cities, figs / "04_city_trends.png")
 
     s = seasonal(t["city_monthly"])
     s = s[s["year"].between(a["start_year"], a["end_year"])]
@@ -109,19 +108,18 @@ def heterogeneity(t, cfg, figs, y) -> tuple[dict, pd.DataFrame]:
                  .apply(lambda g: trend(g["year"], g["tmean"]).slope, include_groups=False)
                  .unstack()[SEASON_ORDER])
     s_anom = anomalies(s, ["tmean"], tuple(a["reference_period"]), by=["city", "season"])
-    fr_season = {season: trend(*_xy(composite(g, "tmean_anom"))).to_dict()
-                 for season, g in s_anom.groupby("season")}
-    fastest = max(fr_season, key=lambda k: fr_season[k]["slope"])
-    titles = {"Été": "L'été se réchauffe le plus vite", "Printemps": "Le printemps se réchauffe le plus vite",
-              "Hiver": "L'hiver se réchauffe le plus vite", "Automne": "L'automne se réchauffe le plus vite"}
-    viz.season_heatmap(season_tr.sort_values("Été", ascending=False), figs / "05_tendance_saisons.png", titles[fastest])
+    season_trends = {season: trend(*_xy(composite(g, "tmean_anom"))).to_dict()
+                     for season, g in s_anom.groupby("season")}
+    fastest = max(season_trends, key=lambda k: season_trends[k]["slope"])
+    viz.season_heatmap(season_tr.sort_values("Summer", ascending=False), figs / "05_seasonal_trends.png",
+                       f"{fastest} is warming the fastest")
 
     return {
         "cities": cities.round(3).to_dict(orient="records"),
         "fastest_city": cities.loc[cities["slope"].idxmax(), "city"],
         "slowest_city": cities.loc[cities["slope"].idxmin(), "city"],
         "n_significant": int(cities["significant"].sum()),
-        "season_trends": {k: fr_season[k] for k in SEASON_ORDER},
+        "season_trends": {k: season_trends[k] for k in SEASON_ORDER},
         "fastest_season": fastest,
         "season_by_city": season_tr.round(3).reset_index().to_dict(orient="records"),
     }, cities
@@ -134,37 +132,36 @@ def extremes(t, cfg, figs) -> dict:
     y = t["city_yearly"][t["city_yearly"]["valid_temp"]].copy()
     y["decade"] = y["year"] // 10 * 10
     labels = {
-        "hot_days": f"Journées chaudes (TX ≥ {th['hot_day']} °C)",
-        "very_hot_days": f"Journées très chaudes (TX ≥ {th['very_hot_day']} °C)",
-        "tropical_nights": f"Nuits tropicales (TN ≥ {th['tropical_night']} °C)",
-        "frost_days": f"Jours de gel (TN < {th['frost_day']} °C)",
+        "hot_days": f"Hot days (TX ≥ {th['hot_day']} °C)",
+        "very_hot_days": f"Very hot days (TX ≥ {th['very_hot_day']} °C)",
+        "tropical_nights": f"Tropical nights (TN ≥ {th['tropical_night']} °C)",
+        "frost_days": f"Frost days (TN < {th['frost_day']} °C)",
     }
     by_decade = y.groupby("decade")[list(labels) + ["heatwave_days"]].mean()
     by_decade.index = [_decade_label(d, a["start_year"], a["end_year"]) for d in by_decade.index]
     hot_up = by_decade["hot_days"].iloc[-1] > by_decade["hot_days"].iloc[0]
     frost_down = by_decade["frost_days"].iloc[-1] < by_decade["frost_days"].iloc[0]
-    title = ("Plus de chaleur extrême, beaucoup moins de gel" if hot_up and frost_down
-             else "Évolution des jours extrêmes")
-    viz.extremes_by_decade(by_decade, figs / "06_extremes_decennies.png", labels, title)
+    title = "More extreme heat, much less frost" if hot_up and frost_down else "Change in extreme days"
+    viz.extremes_by_decade(by_decade, figs / "06_extremes_by_decade.png", labels, title)
 
-    per_city = pd.DataFrame({
-        "city": sorted(y["city"].unique()),
-    }).set_index("city")
+    per_city = pd.DataFrame({"city": sorted(y["city"].unique())}).set_index("city")
     for col in ("hot_days", "tropical_nights", "frost_days", "heatwave_days"):
         per_city[f"{col}_old"] = period_mean(y, col, old)
         per_city[f"{col}_recent"] = period_mean(y, col, recent)
     per_city = per_city.reset_index()
-    viz.dumbbell(per_city, figs / "07_jours_chauds_par_ville.png", "hot_days_old", "hot_days_recent",
+    viz.dumbbell(per_city, figs / "07_hot_days_by_city.png", "hot_days_old", "hot_days_recent",
                  (f"{old[0]}-{old[1]}", f"{recent[0]}-{recent[1]}"),
-                 "Les journées à 30 °C se multiplient partout",
-                 f"Nombre moyen de journées avec TX ≥ {th['hot_day']} °C par an",
-                 "Jours par an")
+                 f"{th['hot_day']} °C days are multiplying everywhere",
+                 f"Average number of days per year with TX ≥ {th['hot_day']} °C",
+                 "Days per year")
 
-    fr = {col: (period_mean(y, col, old).mean(), period_mean(y, col, recent).mean()) for col in list(labels) + ["heatwave_days"]}
+    means = {col: (period_mean(y, col, old).mean(), period_mean(y, col, recent).mean())
+             for col in list(labels) + ["heatwave_days"]}
     hw = t["city_heatwaves"]
     longest = hw.sort_values(["n_days", "tx_peak"], ascending=False).head(5)
     return {
-        "france_old_vs_recent": {k: {"old": _r(o, 1), "recent": _r(r, 1), "ratio": _r(r / o if o else None)} for k, (o, r) in fr.items()},
+        "france_old_vs_recent": {k: {"old": _r(o, 1), "recent": _r(r, 1), "ratio": _r(r / o if o else None)}
+                                 for k, (o, r) in means.items()},
         "by_decade": by_decade.round(2).reset_index(names="decade").to_dict(orient="records"),
         "per_city": per_city.round(1).to_dict(orient="records"),
         "hottest_day": _hottest_day(t["city_daily"]),
@@ -199,13 +196,13 @@ def precipitation(t, cfg, figs) -> dict:
     ref = tuple(a["reference_period"])
     y = t["city_yearly"][t["city_yearly"]["valid_rain"]]
     y = anomalies(y, ["rr"], ref, relative=True)
-    fr = composite(y, "rr_anom")
-    tr = trend(fr.index, fr.values)
-    viz.precip_anomaly(fr, figs / "09_pluie_france.png", tr, ref)
+    france = composite(y, "rr_anom")
+    tr = trend(france.index, france.values)
+    viz.precip_anomaly(france, figs / "09_france_rainfall.png", tr, ref)
 
     s = seasonal(t["city_monthly"].assign(valid_temp=t["city_monthly"]["valid_rain"]), "rr")
     s = s[s["year"].between(a["start_year"], a["end_year"])]
-    s["rr"] = s["rr"] * 3  # moyenne mensuelle -> cumul saisonnier
+    s["rr"] = s["rr"] * 3  # monthly mean -> seasonal total
     s = anomalies(s, ["rr"], ref, by=["city", "season"], relative=True)
     seasons = {k: trend(*_xy(composite(g, "rr_anom"))).to_dict() for k, g in s.groupby("season")}
     return {
@@ -213,8 +210,8 @@ def precipitation(t, cfg, figs) -> dict:
         "season_trends_pct": {k: seasons[k] for k in SEASON_ORDER},
         "heavy_rain_trend": trend(*_xy(composite(y, "heavy_rain_days"))).to_dict(),
         "dry_spell_trend": trend(*_xy(composite(y, "longest_dry_spell"))).to_dict(),
-        "wettest_year": int(fr.idxmax()), "driest_year": int(fr.idxmin()),
-        "driest_year_anomaly_pct": _r(fr.min(), 1),
+        "wettest_year": int(france.idxmax()), "driest_year": int(france.idxmin()),
+        "driest_year_anomaly_pct": _r(france.min(), 1),
     }
 
 
@@ -228,15 +225,15 @@ def climate_profiles(t, cfg, figs) -> dict:
     X = StandardScaler().fit_transform(normals)
 
     sil = {k: float(silhouette_score(X, KMeans(k, n_init=20, random_state=42).fit_predict(X))) for k in range(2, 7)}
-    k = 3  # <= 3 groupes : nombre de couleurs distinguables par tous (y compris daltoniens)
+    k = 3  # <= 3 groups: the number of colours everyone can tell apart (colour-blind readers included)
     km = KMeans(k, n_init=20, random_state=42).fit(X)
     pca = PCA(2).fit(X)
     pcs = pca.transform(X)
     if np.corrcoef(pcs[:, 0], normals.filter(like="tmean").mean(axis=1))[0, 1] < 0:
-        pcs[:, 0] *= -1  # oriente l'axe 1 vers le chaud, plus lisible
+        pcs[:, 0] *= -1  # point axis 1 towards warmer cities, easier to read
     coords = pd.DataFrame({"city": normals.index, "pc1": pcs[:, 0], "pc2": pcs[:, 1], "cluster": km.labels_})
 
-    # Nommer les groupes à partir de leurs caractéristiques moyennes
+    # Name the groups from their average characteristics
     tm = normals.filter(like="tmean_")
     rr = normals.filter(like="rr_")
     feat = pd.DataFrame({
@@ -247,26 +244,26 @@ def climate_profiles(t, cfg, figs) -> dict:
         "cluster": km.labels_,
     })
     prof = feat.groupby("cluster").mean()
-    # (règles simples et explicables ; les noms décrivent le centre de chaque groupe)
+    # (simple, explainable rules; the names describe the centre of each group)
     names, remaining = {}, list(prof.index)
-    med = prof.loc[remaining, "summer_rain"].idxmin()
-    names[med] = "Sud : chaud, été sec"
-    remaining.remove(med)
-    oce = prof.loc[remaining, "amplitude"].idxmin()
-    names[oce] = "Façade atlantique : très arrosée, faible amplitude"
-    remaining.remove(oce)
+    south = prof.loc[remaining, "summer_rain"].idxmin()
+    names[south] = "South: warm, dry summers"
+    remaining.remove(south)
+    atlantic = prof.loc[remaining, "amplitude"].idxmin()
+    names[atlantic] = "Atlantic coast: very wet, small seasonal range"
+    remaining.remove(atlantic)
     for c in remaining:
-        names[c] = "Nord et Centre : plus frais, amplitude marquée"
-    # ordre d'affichage fixe : couleur 1 = océanique, 2 = méditerranéen, 3 = semi-continental
-    order = {oce: 0, med: 1, **{c: 2 for c in remaining}}
+        names[c] = "North & centre: cooler, larger seasonal range"
+    # fixed display order: colour 1 = Atlantic, 2 = South, 3 = North & centre
+    order = {atlantic: 0, south: 1, **{c: 2 for c in remaining}}
     coords["cluster"] = coords["cluster"].map(order)
     names = {order[c]: n for c, n in names.items()}
-    viz.clusters_scatter(coords, figs / "10_profils_climatiques.png", names, pca.explained_variance_ratio_,
-                         "Trois grandes familles de climat ressortent des données")
+    viz.clusters_scatter(coords, figs / "10_climate_profiles.png", names, pca.explained_variance_ratio_,
+                         "Three broad climate families emerge from the data")
 
     clim = m.groupby(["city", "month"])["tmean"].mean().unstack()
     clim = clim.loc[clim.mean(axis=1).sort_values(ascending=False).index]
-    viz.climatology_heatmap(clim, figs / "11_climatologie.png", ref)
+    viz.climatology_heatmap(clim, figs / "11_climatology.png", ref)
 
     prof.index = [names[order[c]] for c in prof.index]
     return {
@@ -288,15 +285,18 @@ def outliers(t, cfg) -> dict:
             "n_days_z_above_3": int((d["z"].abs() > 3).sum()), "n_days_total": int(len(d))}
 
 
-# --- Qualité -----------------------------------------------------------------
+# --- Data quality --------------------------------------------------------------
 def data_quality(t, cfg, figs) -> dict:
     dq = t["dq_summary"].pivot_table(index="variable", columns="status", values="n", aggfunc="sum").fillna(0)
-    dq["total"] = dq.sum(axis=1)
-    dq["pct_absentes"] = dq["absente"] / dq["total"] * 100
-    present = dq["total"] - dq["absente"]
-    dq["pct_rejetees"] = (present - dq["valide"]) / present * 100
+    for status in ("valid", "missing", "suspect", "out_of_range", "inconsistent"):
+        if status not in dq:
+            dq[status] = 0
+    dq["total"] = dq[["valid", "missing", "suspect", "out_of_range", "inconsistent"]].sum(axis=1)
+    dq["pct_missing"] = dq["missing"] / dq["total"] * 100
+    present = dq["total"] - dq["missing"]
+    dq["pct_rejected"] = (present - dq["valid"]) / present * 100
     viz.network(t["network_yearly"][t["network_yearly"]["year"] <= cfg.analysis["end_year"]],
-                figs / "12_reseau_stations.png")
+                figs / "12_station_network.png")
     off = (t["station_offsets"].groupby(["city", "station_id"])
            .agg(n_overlap_days=("n_overlap_days", "sum"), offset_tn=("offset_tn", "mean"),
                 offset_tx=("offset_tx", "mean"), corr_tx=("corr_tx", "mean"))
@@ -316,10 +316,10 @@ def run_analysis(cfg: Config) -> dict:
     tables_dir.mkdir(parents=True, exist_ok=True)
 
     t = load(cfg)
-    log.info("Données chargées : %s jours-villes", f"{len(t['city_daily']):,}".replace(",", " "))
+    log.info("Data loaded: %s city-days", f"{len(t['city_daily']):,}")
 
     res: dict = {}
-    res["warming"], y_anom, fr = warming(t, cfg, figs)
+    res["warming"], y_anom, france = warming(t, cfg, figs)
     res["heterogeneity"], cities = heterogeneity(t, cfg, figs, y_anom)
     res["extremes"] = extremes(t, cfg, figs)
     res["records"] = records(t, cfg, figs)
@@ -334,12 +334,12 @@ def run_analysis(cfg: Config) -> dict:
         bias_tx, corr_tx = era5["bias_tx"].mean(), era5["corr_tx"].mean()
         spread = max(era5["bias_tx"].std(), era5["bias_tn"].std())
         if corr_tx > 0.95 and spread > 0.8:
-            title = "ERA5 suit bien la météo du jour, mais lisse les effets locaux"
+            title = "ERA5 tracks day-to-day weather well, but smooths out local effects"
         elif abs(bias_tx) > 0.3:
-            title = f"La réanalyse ERA5 {'sous' if bias_tx < 0 else 'sur'}estime les maximales"
+            title = f"The ERA5 reanalysis {'under' if bias_tx < 0 else 'over'}estimates maximum temperatures"
         else:
-            title = "La réanalyse ERA5 colle aux stations"
-        viz.era5_bias(era5, figs / "13_validation_era5.png", title, f"{cfg.era5['start'][:4]}-{cfg.era5['end'][:4]}")
+            title = "The ERA5 reanalysis matches the stations closely"
+        viz.era5_bias(era5, figs / "13_era5_validation.png", title, f"{cfg.era5['start'][:4]}-{cfg.era5['end'][:4]}")
         worst = era5.loc[era5["bias_tn"].abs().idxmax()]
         res["era5"] = {
             "title": title,
@@ -358,14 +358,14 @@ def run_analysis(cfg: Config) -> dict:
                                                   "month_min_completeness", "year_min_completeness")}
     res["config"]["thresholds"] = cfg.thresholds
 
-    # Tables de résultats (CSV) : réutilisables dans Excel / Power BI
-    fr.rename("anomalie_c").to_csv(tables_dir / "anomalie_france.csv", index_label="annee")
-    cities.round(3).to_csv(tables_dir / "tendances_villes.csv", index=False)
-    pd.DataFrame(res["extremes"]["per_city"]).to_csv(tables_dir / "extremes_villes.csv", index=False)
+    # Result tables (CSV): reusable in Excel / Power BI
+    france.rename("anomaly_c").to_csv(tables_dir / "france_anomaly.csv", index_label="year")
+    cities.round(3).to_csv(tables_dir / "city_trends.csv", index=False)
+    pd.DataFrame(res["extremes"]["per_city"]).to_csv(tables_dir / "city_extremes.csv", index=False)
 
-    with open(cfg.reports_dir / "resultats.json", "w", encoding="utf-8") as f:
+    with open(cfg.reports_dir / "results.json", "w", encoding="utf-8") as f:
         json.dump(res, f, indent=2, ensure_ascii=False, default=_json_default)
-    log.info("%d figures, résultats dans %s", len(list(figs.glob("*.png"))), cfg.reports_dir / "resultats.json")
+    log.info("%d figures, results in %s", len(list(figs.glob("*.png"))), cfg.reports_dir / "results.json")
     return res
 
 

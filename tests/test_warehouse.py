@@ -1,8 +1,8 @@
-"""Test de bout en bout de l'entrepôt sur un mini-jeu de données au format Météo-France.
+"""End-to-end test of the warehouse on a small dataset in the Météo-France format.
 
-Le jeu contient volontairement les pièges rencontrés dans les vraies données :
-code qualité douteux, valeur impossible, TN > TX, doublon, identifiant à zéro initial,
-station éloignée, station incomplète et station qui déménage.
+The dataset deliberately contains the pitfalls found in the real data:
+suspect quality code, impossible value, TN > TX, duplicate, ID with a leading zero,
+distant station, incomplete station and a station that moves.
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from meteo.warehouse import build_warehouse
 
 HEADER = "NUM_POSTE;NOM_USUEL;LAT;LON;ALTI;AAAAMMJJ;RR;QRR;TN;QTN;TX;QTX;TM;QTM;FFM;QFFM;FXI;QFXI"
 START, END = date(2000, 1, 1), date(2003, 12, 31)
-DAY_SUSPECT, DAY_OUT, DAY_INCOHERENT, DAY_DUP = date(2001, 3, 1), date(2001, 3, 2), date(2001, 3, 3), date(2001, 3, 4)
+DAY_SUSPECT, DAY_OUT, DAY_INCONSISTENT, DAY_DUP = date(2001, 3, 1), date(2001, 3, 2), date(2001, 3, 3), date(2001, 3, 4)
 
 
 def base_tx(d: date) -> float:
@@ -43,33 +43,33 @@ def warehouse(tmp_path_factory):
     raw = tmp / "raw" / "meteo_france"
     raw.mkdir(parents=True)
 
-    # Département 06 : la bonne station, une station loin, une station incomplète
+    # Département 06: the right station, a distant station, an incomplete station
     lines = [HEADER]
     for d in days(START, END):
         tx, tn = base_tx(d), round(base_tx(d) - 10, 1)
         rr = 5.0 if d.toordinal() % 3 == 0 else 0.0
         if d == DAY_SUSPECT:
-            lines.append(row("06000001", "BONNE", 43.70, 7.26, 5, d, tx, tn, rr, qtx=2))
+            lines.append(row("06000001", "GOOD", 43.70, 7.26, 5, d, tx, tn, rr, qtx=2))
         elif d == DAY_OUT:
-            lines.append(row("06000001", "BONNE", 43.70, 7.26, 5, d, 99.0, tn, rr))
-        elif d == DAY_INCOHERENT:
-            lines.append(row("06000001", "BONNE", 43.70, 7.26, 5, d, 5.0, 12.0, rr))
+            lines.append(row("06000001", "GOOD", 43.70, 7.26, 5, d, 99.0, tn, rr))
+        elif d == DAY_INCONSISTENT:
+            lines.append(row("06000001", "GOOD", 43.70, 7.26, 5, d, 5.0, 12.0, rr))
         else:
-            lines.append(row("06000001", "BONNE", 43.70, 7.26, 5, d, tx, tn, rr))
+            lines.append(row("06000001", "GOOD", 43.70, 7.26, 5, d, tx, tn, rr))
         if d == DAY_DUP:
             lines.append(lines[-1])
-        lines.append(row("06000002", "LOIN", 44.70, 7.26, 5, d, tx, tn, rr))           # ~110 km
+        lines.append(row("06000002", "FAR", 44.70, 7.26, 5, d, tx, tn, rr))           # ~110 km
         if d.year < 2002:
-            lines.append(row("06000003", "COURTE", 43.71, 7.27, 5, d, tx, tn, rr))     # 50 % du temps
+            lines.append(row("06000003", "SHORT", 43.71, 7.27, 5, d, tx, tn, rr))     # half of the time
 
-    # Département 13 : une station ferme fin 2001, la nouvelle ouvre début 2001 (1 °C plus chaude)
+    # Département 13: one station closes end of 2001, the new one opens early 2001 (1 °C warmer)
     lines13 = [HEADER]
     for d in days(START, END):
         tx, tn = base_tx(d), round(base_tx(d) - 10, 1)
         if d.year <= 2001:
-            lines13.append(row("13000001", "ANCIENNE", 43.30, 5.37, 10, d, tx, tn))
+            lines13.append(row("13000001", "OLD", 43.30, 5.37, 10, d, tx, tn))
         if d.year >= 2001:
-            lines13.append(row("13000002", "NOUVELLE", 43.31, 5.38, 10, d, round(tx + 1, 1), round(tn + 1, 1)))
+            lines13.append(row("13000002", "NEW", 43.31, 5.38, 10, d, round(tx + 1, 1), round(tn + 1, 1)))
 
     for dep, content in (("06", lines), ("13", lines13)):
         with gzip.open(raw / f"Q_{dep}_previous-1950-2024_RR-T-Vent.csv.gz", "wt", encoding="utf-8") as f:
@@ -77,7 +77,7 @@ def warehouse(tmp_path_factory):
 
     cfg_path = tmp / "config.yaml"
     cfg_path.write_text(yaml.safe_dump({
-        "source": {"dataset_api": "http://exemple.invalid", "periods": ["previous"], "workers": 1},
+        "source": {"dataset_api": "http://example.invalid", "periods": ["previous"], "workers": 1},
         "paths": {"raw": "raw", "warehouse": "wh.duckdb", "reports": "reports"},
         "analysis": {"start_year": 2000, "end_year": 2003, "reference_period": [2000, 2003],
                      "old_period": [2000, 2001], "recent_period": [2002, 2003],
@@ -103,49 +103,49 @@ def one(con, sql):
     return con.sql(sql).fetchall()[0][0]
 
 
-def test_identifiant_garde_le_zero_initial(warehouse):
+def test_station_id_keeps_leading_zero(warehouse):
     con, _ = warehouse
     assert one(con, "SELECT count(*) FROM dim_station WHERE station_id = '06000001'") == 1
 
 
-def test_doublon_detecte(warehouse):
+def test_duplicate_detected(warehouse):
     con, stats = warehouse
     assert stats["n_duplicates"] == 1
 
 
-def test_valeurs_rejetees(warehouse):
+def test_rejected_values(warehouse):
     con, _ = warehouse
     tx = dict(con.sql("SELECT status, n FROM dq_summary WHERE variable = 'TX'").fetchall())
-    assert tx["douteuse"] == 1 and tx["hors_bornes"] == 1 and tx["incoherente"] == 1
+    assert tx["suspect"] == 1 and tx["out_of_range"] == 1 and tx["inconsistent"] == 1
     nulls = one(con, f"""SELECT count(*) FROM obs_daily WHERE station_id = '06000001' AND tx IS NULL
-                         AND date IN ('{DAY_SUSPECT}', '{DAY_OUT}', '{DAY_INCOHERENT}')""")
+                         AND date IN ('{DAY_SUSPECT}', '{DAY_OUT}', '{DAY_INCONSISTENT}')""")
     assert nulls == 3
 
 
-def test_choix_de_la_station(warehouse):
+def test_station_choice(warehouse):
     con, _ = warehouse
     assert one(con, "SELECT station_id FROM ref_station WHERE city = 'Testville'") == "06000001"
 
 
-def test_raccordement_corrige_le_biais(warehouse):
+def test_splicing_corrects_the_bias(warehouse):
     con, _ = warehouse
     offsets = [r[0] for r in con.sql("SELECT offset_tx FROM station_offsets WHERE city = 'Chaintown'").fetchall()]
     assert len(offsets) == 12
     assert all(abs(o - 1.0) < 0.01 for o in offsets)
-    # 2000 n'est couverte que par l'ancienne station : ramenée au niveau de la nouvelle (+1 °C)
+    # 2000 is only covered by the old station: brought to the level of the new one (+1 °C)
     t2000 = one(con, "SELECT avg(tx) FROM city_daily WHERE city = 'Chaintown' AND year(date) = 2000")
     expected = sum(base_tx(d) + 1 for d in days(date(2000, 1, 1), date(2000, 12, 31))) / 366
     assert t2000 == pytest.approx(expected, abs=0.02)
 
 
-def test_calendrier_complet_et_annees_valides(warehouse):
+def test_full_calendar_and_valid_years(warehouse):
     con, _ = warehouse
     n_days = (END - START).days + 1
     assert one(con, "SELECT count(*) FROM city_daily") == 2 * n_days
     assert one(con, "SELECT count(*) FROM city_yearly WHERE valid_temp") == 8
 
 
-def test_sequences_seches(warehouse):
+def test_dry_spells(warehouse):
     con, _ = warehouse
-    # pluie un jour sur trois -> séquences sèches de 2 jours au plus
+    # rain one day in three -> dry spells of 2 days at most
     assert one(con, "SELECT max(n_days) FROM city_dry_spells WHERE city = 'Testville'") == 2
