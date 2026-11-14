@@ -1,0 +1,177 @@
+name: CI
+
+# Lint and tests, then the Docker image (code + Météo-France data), built once and smoke-tested.
+# - Pull requests: the image is built and tested, not published.
+# - main, v* tags and the weekly data refresh: that same image is pushed to GitHub Container Registry,
+#   tagged run-<CI run id> (always), sha-<commit> (pushes), latest (main) and the version number (tags).
+#   On main, the CD workflow then deploys it to Cloud Run (docs/DEPLOY.md); a v* tag gets a GitHub release.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  schedule:
+    # Every Monday: rebuild the image with the latest Météo-France data, then CD deploys it
+    - cron: "0 5 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Only pull request runs are cancelled: every run of main keeps its own image (rollbacks)
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  lint:
+    name: Lint (ruff, actionlint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install ruff
+      - name: Ruff
+        run: ruff check --output-format=github .
+      - name: Workflows (actionlint)
+        uses: docker://rhysd/actionlint:1.7.7
+        with:
+          args: -color
+
+  tests:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Tests
+        run: pytest --junitxml=pytest-report.xml
+      - name: Test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-report-${{ matrix.python-version }}
+          path: pytest-report.xml
+
+  image:
+    name: Docker image
+    needs: [lint, tests]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      DOCKER_METADATA_SHORT_SHA_LENGTH: "7"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          # run-<id>: the CD workflow deploys the image of the CI run that triggered it
+          tags: |
+            type=raw,value=run-${{ github.run_id }}
+            type=sha,format=short,enable=${{ github.event_name != 'schedule' }}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      # Data is downloaded again at most once a day: the same date reuses the cached data layer
+      - name: Data version
+        id: data
+        run: echo "version=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
+      # Built once and loaded into the runner's Docker: the image tested below is the one pushed
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          build-args: DATA_VERSION=${{ steps.data.outputs.version }}
+          tags: |
+            ${{ steps.meta.outputs.tags }}
+            meteoreading:ci
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Container smoke test
+        run: |
+          docker run -d --name app -p 8080:8080 meteoreading:ci
+          for _ in $(seq 1 60); do
+            if [ "$(curl -fsS http://127.0.0.1:8080/_stcore/health 2>/dev/null)" = ok ]; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8080/_stcore/health && echo
+          curl -fsS http://127.0.0.1:8080/ | grep -qi "<title>"
+          # The warehouse copied into the image: ~25 million Météo-France records
+          docker exec app python -c "import duckdb; c = duckdb.connect('data/warehouse.duckdb', read_only=True); n = c.sql('SELECT count(*) FROM stg_daily').fetchall()[0][0]; assert n > 20_000_000, n; print(f'rows in the warehouse: {n:,}')"
+          docker exec app python -c "import json; r = json.load(open('reports/results.json')); t = r['warming']['france_trend_1951']; print('warming per decade:', t['slope'], 'C')"
+          # The dashboard runs headless (Streamlit AppTest): the overview page renders without error.
+          # Run from another folder, like `streamlit run`: the project root is not importable by accident.
+          docker exec -w /tmp app python -c "from streamlit.testing.v1 import AppTest; at = AppTest.from_file('/app/dashboard/app.py', default_timeout=120).run(); assert not at.exception, at.exception; print('page rendered:', at.title[0].value)"
+
+      - name: Container logs
+        if: always()
+        run: docker logs app || true
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push the tested image
+        if: github.event_name != 'pull_request'
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          echo "### Image pushed to GHCR" >> "$GITHUB_STEP_SUMMARY"
+          while read -r tag; do
+            [ -n "$tag" ] || continue
+            docker push "$tag"
+            echo "- \`$tag\`" >> "$GITHUB_STEP_SUMMARY"
+          done <<< "$TAGS"
+
+  release:
+    name: GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create the release with generated notes (kept if it already exists)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # A tag pushed again (moved tag, rewritten history): its release already exists and is kept as it is
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            echo "::notice::Release $GITHUB_REF_NAME already exists: kept as it is"
+            exit 0
+          fi
+          release_ref="${IMAGE,,}:${GITHUB_REF_NAME#v}"
+          fence="\`\`\`"
+          printf '## Docker image\n\n%sbash\ndocker run -p 8080:8080 %s\n%s\n' "$fence" "$release_ref" "$fence" > notes.md
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md --generate-notes

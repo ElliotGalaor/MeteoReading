@@ -105,7 +105,7 @@ def track_from_waypoints(waypoints: list[tuple[float, float]], activity: str = "
         ele = fetch_elevation(lat, lon, session)
     except (RuntimeError, OSError):
         ele = [np.nan] * len(lat)
-    rows = [(la, lo, e, None) for la, lo, e in zip(lat, lon, ele)]
+    rows = [(la, lo, e, None) for la, lo, e in zip(lat, lon, ele, strict=True)]
     track = build_track(rows, "route")
     track.name = name or f"Drawn route ({activity.lower()}, {track.distance_km:.1f} km)"
     return track, routed

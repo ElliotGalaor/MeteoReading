@@ -5,20 +5,57 @@ Run from the project root:
 """
 from __future__ import annotations
 
+import sys
 import time
+from pathlib import Path
+
+# `streamlit run` only puts the script's own folder (dashboard/) on the import path:
+# add the project root so that the `meteo` package is found, before importing it.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from ui import (
-    CFG, COOL, DIVERGING, END, GRID, HEAT, INK, INK2, MUTED, OLD, RAIN, RECENT, REF, SERIES, START,
-    SURFACE, TH, WARM, chart, city_colors, doy_climatology, era5, example_queries, num, page_header,
-    pvalue, results, rolling, run_user_sql, signed, signed_color, source_note, table, warehouse_ready,
-)
 from meteo.stats import SEASONS, trend
 from route_page import page_route
+from ui import (
+    CFG,
+    COOL,
+    DIVERGING,
+    END,
+    GRID,
+    HEAT,
+    INK,
+    INK2,
+    MUTED,
+    OLD,
+    RAIN,
+    RECENT,
+    REF,
+    SERIES,
+    START,
+    SURFACE,
+    TH,
+    WARM,
+    chart,
+    city_colors,
+    doy_climatology,
+    era5,
+    example_queries,
+    num,
+    page_header,
+    pvalue,
+    results,
+    rolling,
+    run_user_sql,
+    signed,
+    signed_color,
+    source_note,
+    table,
+    warehouse_ready,
+)
 
 st.set_page_config(page_title="Météo Analytics", page_icon="🌡️", layout="wide")
 
@@ -189,7 +226,7 @@ def page_city():
           f"Thin line: annual value · thick line: 10-year moving average · {period[0]}-{period[1]}")
 
     cols = st.columns(len(sel))
-    for c_, city in zip(cols, sel):
+    for c_, city in zip(cols, sel, strict=True):
         d = df[df["city"] == city]
         try:
             t = trend(d["year"], d[col])

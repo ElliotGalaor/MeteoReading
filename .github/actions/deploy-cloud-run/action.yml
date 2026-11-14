@@ -1,0 +1,111 @@
+name: Deploy to Cloud Run
+description: >-
+  Copy an image already built and tested by CI from GitHub Container Registry to Artifact Registry
+  (same digest: nothing is rebuilt), deploy it to a Cloud Run service and check that it answers.
+
+inputs:
+  image-ref:
+    description: GHCR image pinned by digest (ghcr.io/owner/repo@sha256:...)
+    required: true
+  service:
+    description: Cloud Run service name
+    required: true
+  project-id:
+    description: Google Cloud project ID
+    required: true
+  region:
+    description: Google Cloud region (Cloud Run service and Artifact Registry repository)
+    required: true
+  artifact-repository:
+    description: Artifact Registry Docker repository name
+    required: true
+  workload-identity-provider:
+    description: "Full name of the Workload Identity provider (projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>)"
+    required: true
+  deploy-service-account:
+    description: Service account GitHub Actions impersonates to deploy
+    required: true
+  runtime-service-account:
+    description: Service account the service runs as (optional; Google's default otherwise)
+    required: false
+    default: ""
+  github-token:
+    description: Token with packages:read, to pull the image from GHCR
+    required: true
+
+outputs:
+  url:
+    description: URL of the Cloud Run service
+    value: ${{ steps.deploy.outputs.url }}
+
+runs:
+  using: composite
+  steps:
+    # Keyless authentication: GitHub's OIDC token is exchanged for short-lived Google credentials
+    - uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ inputs.workload-identity-provider }}
+        service_account: ${{ inputs.deploy-service-account }}
+
+    - uses: google-github-actions/setup-gcloud@v2
+
+    - name: Copy the image to Artifact Registry
+      id: copy
+      shell: bash
+      env:
+        IMAGE_REF: ${{ inputs.image-ref }}
+        REGION: ${{ inputs.region }}
+        PROJECT_ID: ${{ inputs.project-id }}
+        REPOSITORY: ${{ inputs.artifact-repository }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: |
+        echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+        gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+        digest="${IMAGE_REF#*@}"
+        target="$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/meteoreading"
+        # Copies the manifest and layers as they are: the digest does not change
+        docker buildx imagetools create --tag "$target:sha256-${digest#sha256:}" "$IMAGE_REF"
+        echo "ref=$target@$digest" >> "$GITHUB_OUTPUT"
+
+    - name: Deploy the service
+      id: deploy
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.service }}
+        REF: ${{ steps.copy.outputs.ref }}
+        REGION: ${{ inputs.region }}
+        PROJECT_ID: ${{ inputs.project-id }}
+        RUNTIME_SA: ${{ inputs.runtime-service-account }}
+      run: |
+        # Streamlit keeps one WebSocket per visitor: session affinity, long timeout, moderate concurrency.
+        # Scales to zero between visits (free tier), CPU boost to shorten cold starts.
+        args=(--image "$REF" --project "$PROJECT_ID" --region "$REGION"
+              --port 8080 --memory 2Gi --cpu 1 --cpu-boost
+              --min-instances 0 --max-instances 3 --concurrency 20
+              --session-affinity --timeout 3600 --allow-unauthenticated
+              --labels "app=meteoreading,commit=${GITHUB_SHA:0:7}" --quiet)
+        if [ -n "$RUNTIME_SA" ]; then args+=(--service-account "$RUNTIME_SA"); fi
+        gcloud run deploy "$SERVICE" "${args[@]}"
+        url=$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format 'value(status.url)')
+        echo "url=$url" >> "$GITHUB_OUTPUT"
+
+    - name: Check that the service answers
+      shell: bash
+      env:
+        URL: ${{ steps.deploy.outputs.url }}
+        SERVICE: ${{ inputs.service }}
+        REF: ${{ steps.copy.outputs.ref }}
+      run: |
+        for _ in $(seq 1 30); do
+          if [ "$(curl -fsS "$URL/_stcore/health" 2>/dev/null)" = ok ]; then
+            {
+              echo "### Deployed to \`$SERVICE\`"
+              echo "- URL: $URL"
+              echo "- image: \`$REF\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          sleep 5
+        done
+        echo "::error::$URL/_stcore/health did not answer \"ok\" after 150 s"
+        exit 1

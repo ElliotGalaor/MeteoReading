@@ -1,5 +1,8 @@
 # Météo Analytics: 75 years of climate in 20 French cities
 
+[![CI](https://github.com/ElliotGalaor/MeteoReading/actions/workflows/ci.yml/badge.svg)](https://github.com/ElliotGalaor/MeteoReading/actions/workflows/ci.yml)
+[![CD](https://github.com/ElliotGalaor/MeteoReading/actions/workflows/cd.yml/badge.svg)](https://github.com/ElliotGalaor/MeteoReading/actions/workflows/cd.yml)
+
 End-to-end data pipeline that **collects 25 million official weather records**, cleans them, stores them in an
 analytical warehouse, draws statistically sound conclusions and presents them in an **interactive dashboard**
 and an **HTML report**. It also gives a **weather reading along any GPS track**: draw a route on the map, import a GPX/KML/GeoJSON
@@ -43,7 +46,8 @@ The full report, with every figure and the method, is in [reports/climate_report
 | **Data visualisation**: colour-blind-safe palette, one idea per chart | [reports/figures/](reports/figures/) |
 | **Dashboard**: 7 interactive pages, including a SQL editor | [dashboard/](dashboard/) |
 | **Geospatial data**: GPX/KML/GeoJSON parsing (safe XML), routing on OpenStreetMap, resampling, elevation, bearings, time interpolation, head/tail wind | [meteo/gps.py](meteo/gps.py), [meteo/routing.py](meteo/routing.py), [meteo/route_weather.py](meteo/route_weather.py) |
-| **Software quality**: externalised configuration, automated tests, pipeline reproducible in one command | [tests/](tests/), [config.yaml](config.yaml) |
+| **Software quality**: externalised configuration, automated tests, `ruff` lint, pipeline reproducible in one command | [tests/](tests/), [config.yaml](config.yaml) |
+| **DevOps**: GitHub Actions CI (lint, tests on 3 Python versions, **Docker** image with its data built once, smoke-tested and published to GHCR, weekly data refresh) and CD (that same image promoted on **Google Cloud Run**: staging, then production after approval, keyless authentication through Workload Identity Federation) | [.github/workflows/](.github/workflows/), [Dockerfile](Dockerfile), [docs/DEPLOY.md](docs/DEPLOY.md) |
 
 ## Quick start
 
@@ -89,6 +93,25 @@ python -m meteo report       # 5. HTML report
 python -m meteo query sql/example_queries.sql   # annotated SQL queries
 python -m meteo route samples/paris_versailles_bike.gpx --start "2026-11-20 09:00" --activity cycling
 python -m pytest             # tests
+```
+
+## Deployment
+
+The dashboard runs on **Google Cloud Run**, deployed by GitHub Actions:
+
+- **continuous integration** on every pull request and push: `ruff` and `actionlint`, tests on Python 3.12, 3.13
+  and 3.14, then a Docker image built **with its data** (the pipeline runs during the build) and smoke-tested:
+  health endpoint, ~25 million rows in the warehouse, dashboard rendered headless;
+- **continuous delivery**: every push to `main` publishes the tested image to GitHub Container Registry, then deploys
+  that same image, never rebuilt, to a staging service and, after approval, to production on Cloud Run;
+- **weekly data refresh**: every Monday the image is rebuilt with the latest Météo-France observations and
+  deployed the same way.
+
+Set-up (one script in Cloud Shell, a few GitHub variables), costs and limits: [deployment guide](docs/DEPLOY.md).
+Run the same image locally:
+
+```bash
+docker run -p 8080:8080 ghcr.io/elliotgalaor/meteoreading:latest
 ```
 
 ## The dashboard
@@ -190,6 +213,9 @@ To analyse the whole of France (overseas territories included), set `extra_depar
 
 ```
 MeteoReading/
+├── .github/               # CI and CD workflows, Cloud Run deploy action
+├── Dockerfile             # image: dependencies, data built at build time, dashboard
+├── deploy/gcp-setup.sh    # one-time Google Cloud setup (Cloud Shell)
 ├── config.yaml            # cities, periods, thresholds, paths: all the settings
 ├── meteo/                 # Python package
 │   ├── __main__.py        # command-line interface

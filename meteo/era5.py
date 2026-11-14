@@ -60,7 +60,7 @@ def fetch_city(session, cfg: Config, city: str, lat: float, lon: float, limiter:
         params = {"latitude": lat, "longitude": lon, "start_date": e["start"], "end_date": e["end"],
                   "daily": ",".join(VARIABLES), "timezone": "Europe/Paris", "models": "era5"}
         limiter.wait(call_weight(len(VARIABLES), e["start"], e["end"]))
-        for attempt in range(4):
+        for _attempt in range(4):
             resp = session.get(e["api"], params=params, timeout=120)
             if resp.status_code == 429:
                 reason = resp.json().get("reason", "")
