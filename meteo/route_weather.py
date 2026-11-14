@@ -147,7 +147,7 @@ def compass(deg: float) -> str:
 
 
 def build_reading_table(samples: pd.DataFrame, hourly: list[pd.DataFrame], elevations: list) -> pd.DataFrame:
-    rows = [interpolate_at(h, t) for h, t in zip(hourly, samples["time"])]
+    rows = [interpolate_at(h, t) for h, t in zip(hourly, samples["time"], strict=True)]
     df = pd.concat([samples.reset_index(drop=True), pd.DataFrame(rows)], axis=1)
     df["model_ele"] = elevations
     df["ele_profile"] = df["ele"].where(df["ele"].notna(), df["model_ele"])

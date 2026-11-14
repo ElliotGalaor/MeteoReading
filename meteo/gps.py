@@ -122,7 +122,7 @@ def _parse_kml(data: bytes) -> tuple[list[tuple], str | None]:
     coords = [el.text for el in root.iter() if _local(el.tag) == "coord"]
     if coords and len(whens) == len(coords):
         rows = []
-        for when, c in zip(whens, coords):
+        for when, c in zip(whens, coords, strict=True):
             parts = c.split()
             rows.append((parts[1], parts[0], parts[2] if len(parts) > 2 else None, when))
         return rows, name

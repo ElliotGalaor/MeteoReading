@@ -278,9 +278,10 @@ def climate_profiles(t, cfg, figs) -> dict:
 # --- Q7 ----------------------------------------------------------------------
 def outliers(t, cfg) -> dict:
     hot, cold, d = daily_outliers(t["city_daily"], tuple(cfg.analysis["reference_period"]))
-    fmt = lambda df: [{"city": r.city, "date": r.date.strftime("%Y-%m-%d"), "tmean": _r(r.tmean, 1),
-                       "normal": _r(r.mean, 1), "anomaly": _r(r.anomaly, 1), "z": _r(r.z, 1)}
-                      for r in df.itertuples()]
+    def fmt(df: pd.DataFrame) -> list[dict]:
+        return [{"city": r.city, "date": r.date.strftime("%Y-%m-%d"), "tmean": _r(r.tmean, 1),
+                 "normal": _r(r.mean, 1), "anomaly": _r(r.anomaly, 1), "z": _r(r.z, 1)}
+                for r in df.itertuples()]
     return {"hottest_vs_normal": fmt(hot), "coldest_vs_normal": fmt(cold),
             "n_days_z_above_3": int((d["z"].abs() > 3).sum()), "n_days_total": int(len(d))}
 

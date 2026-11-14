@@ -1,0 +1,16 @@
+.git
+.github
+.venv
+.claude
+.pytest_cache
+.ruff_cache
+**/__pycache__
+*.pyc
+data
+tests
+docs
+deploy
+*.md
+# Results are rebuilt in the image, except the versioned ERA5 comparison
+reports
+!reports/tables/era5_validation.csv

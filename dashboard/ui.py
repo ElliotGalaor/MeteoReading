@@ -19,8 +19,19 @@ if str(ROOT) not in sys.path:
 from meteo.config import load_config  # noqa: E402
 from meteo.fmt import num, pvalue, signed  # noqa: E402,F401
 from meteo.palette import (  # noqa: E402,F401
-    AXIS, COOL, DIVERGING_STOPS, GRID, HEAT_STOPS, INK, INK2, MUTED, NEUTRAL, RAIN_STOPS,
-    SERIES, SURFACE, WARM,
+    AXIS,
+    COOL,
+    DIVERGING_STOPS,
+    GRID,
+    HEAT_STOPS,
+    INK,
+    INK2,
+    MUTED,
+    NEUTRAL,
+    RAIN_STOPS,
+    SERIES,
+    SURFACE,
+    WARM,
 )
 
 CFG = load_config(ROOT / "config.yaml")
@@ -185,7 +196,7 @@ def doy_climatology(daily: pd.DataFrame, col: str, ref: tuple[int, int], half_wi
     d = d[~((d["date"].dt.month == 2) & (d["date"].dt.day == 29))]
     doy = d["date"].dt.day_of_year - ((d["date"].dt.is_leap_year) & (d["date"].dt.month > 2)).astype(int)
     values = [[] for _ in range(365)]
-    for day, v in zip(doy.to_numpy() - 1, d[col].to_numpy()):
+    for day, v in zip(doy.to_numpy() - 1, d[col].to_numpy(), strict=True):
         values[day].append(v)
     rows = []
     for i in range(365):

@@ -7,11 +7,20 @@ from datetime import date
 import numpy as np
 import pandas as pd
 import pytest
+from defusedxml import EntitiesForbidden
 
-from meteo.gps import (bearing_deg, build_track, haversine_km, parse_track, passage_times, sample_points,
-                       summary, to_gpx, with_times)
-from meteo.route_weather import (choose_source, interpolate_at, read_route, summarize, wind_components,
-                                 build_reading_table)
+from meteo.gps import (
+    bearing_deg,
+    build_track,
+    haversine_km,
+    parse_track,
+    passage_times,
+    sample_points,
+    summary,
+    to_gpx,
+    with_times,
+)
+from meteo.route_weather import build_reading_table, choose_source, interpolate_at, read_route, summarize, wind_components
 
 GPX = b"""<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1">
@@ -67,7 +76,7 @@ def test_rejects_bad_files():
         parse_track(b"<gpx></gpx>", "empty.gpx")
     bomb = b"""<?xml version="1.0"?><!DOCTYPE lolz [<!ENTITY lol "lol"><!ENTITY lol2 "&lol;&lol;&lol;">]>
       <gpx><wpt lat="1" lon="1"><name>&lol2;</name></wpt></gpx>"""
-    with pytest.raises(Exception):          # defusedxml refuses entity declarations
+    with pytest.raises(EntitiesForbidden):  # defusedxml refuses entity declarations
         parse_track(bomb, "bomb.gpx")
 
 

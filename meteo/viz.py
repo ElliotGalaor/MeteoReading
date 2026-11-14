@@ -25,8 +25,21 @@ from matplotlib.patches import Patch  # noqa: E402
 logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
 
 from .palette import (  # noqa: E402
-    AXIS, BLUE, COOL, DIVERGING_STOPS, GRID, HEAT_STOPS, INK, INK2, MUTED, ORANGE, RAIN_STOPS,
-    SERIES, SOURCE, SURFACE, WARM,
+    AXIS,
+    BLUE,
+    COOL,
+    DIVERGING_STOPS,
+    GRID,
+    HEAT_STOPS,
+    INK,
+    INK2,
+    MUTED,
+    ORANGE,
+    RAIN_STOPS,
+    SERIES,
+    SOURCE,
+    SURFACE,
+    WARM,
 )
 
 DIVERGING = LinearSegmentedColormap.from_list("anomalies", DIVERGING_STOPS)
@@ -126,7 +139,7 @@ def city_trends(df: pd.DataFrame, path: Path) -> Path:
     ax.set_yticks(y, d["city"])
     ax.grid(axis="y", visible=False)
     ax.set_xlabel("Trend in annual mean temperature (°C per decade)")
-    for yi, (_, r) in zip(y, d.iterrows()):
+    for yi, (_, r) in zip(y, d.iterrows(), strict=True):
         ax.text(r["ci_high"] + 0.01, yi, _num(r["slope"], 2), va="center", color=INK2, fontsize=8.5)
     ax.set_xlim(0, d["ci_high"].max() + 0.08)
     all_up = bool((d["ci_low"] > 0).all())
@@ -164,7 +177,7 @@ def extremes_by_decade(df: pd.DataFrame, path: Path, labels: dict[str, str], tit
     """Small multiples: average number of extreme days per year, by decade."""
     fig, axes = plt.subplots(2, 2, figsize=(11, 6.6), sharex=True)
     x = np.arange(len(df))
-    for ax, (col, label) in zip(axes.flat, labels.items()):
+    for ax, (col, label) in zip(axes.flat, labels.items(), strict=True):
         vals = df[col].values
         ax.bar(x, vals, width=0.7, color=BLUE, linewidth=0)
         ax.set_title(label, fontsize=11)
@@ -193,7 +206,7 @@ def records_ratio(df: pd.DataFrame, path: Path) -> Path:
     ax.set_yticks(ticks, ["1:4", "1:2", "1:1", "2:1", "4:1", "8:1", "16:1"])
     ax.set_xticks(x, df.index)
     ax.grid(axis="x", visible=False)
-    for xi, r in zip(x, ratio):
+    for xi, r in zip(x, ratio, strict=True):
         txt = f"{r:.1f}:1" if r >= 1 else f"1:{1 / r:.1f}"
         ax.text(xi, np.log2(r) + (0.12 if r >= 1 else -0.12), txt, ha="center",
                 va="bottom" if r >= 1 else "top", fontsize=9, color=INK)
@@ -283,7 +296,7 @@ def network(df: pd.DataFrame, path: Path) -> Path:
 def anomaly_small_multiples(df: pd.DataFrame, path: Path, ref: tuple[int, int]) -> Path:
     cities = sorted(df["city"].unique())
     fig, axes = plt.subplots(4, 5, figsize=(14, 9), sharex=True, sharey=True)
-    for ax, city in zip(axes.flat, cities):
+    for ax, city in zip(axes.flat, cities, strict=False):
         d = df[df["city"] == city]
         ax.bar(d["year"], d["tmean_anom"], width=0.9,
                color=np.where(d["tmean_anom"] >= 0, WARM, COOL), linewidth=0)
@@ -309,7 +322,7 @@ def dumbbell(df: pd.DataFrame, path: Path, col_old: str, col_new: str, labels: t
     ax.hlines(y, d[col_old], d[col_new], color=AXIS, lw=2)
     ax.scatter(d[col_old], y, color=SERIES[0], s=50, zorder=3, label=labels[0], edgecolor=SURFACE, linewidth=1.5)
     ax.scatter(d[col_new], y, color=SERIES[1], s=50, zorder=3, label=labels[1], edgecolor=SURFACE, linewidth=1.5)
-    for yi, (_, r) in zip(y, d.iterrows()):
+    for yi, (_, r) in zip(y, d.iterrows(), strict=True):
         ax.text(r[col_new] + 0.6, yi, f"{r[col_new]:.0f}", va="center", fontsize=8.5, color=INK2)
     ax.set_yticks(y, d["city"])
     ax.grid(axis="y", visible=False)

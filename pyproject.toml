@@ -1,8 +1,8 @@
 [project]
-name = "meteo-analytics"
-version = "1.0.0"
-description = "Climate analysis pipeline on 25 million Météo-France weather records"
-requires-python = ">=3.11"
+name = "meteo-reading"
+version = "1.1.0"
+description = "Climate analysis of 25 million Météo-France weather records, and weather along any GPS track"
+requires-python = ">=3.12"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
@@ -10,4 +10,20 @@ testpaths = ["tests"]
 addopts = "-q"
 
 [tool.ruff]
-line-length = 120
+line-length = 130
+target-version = "py312"
+extend-exclude = [".venv", "data"]
+
+[tool.ruff.lint]
+# pyflakes, pycodestyle, bugbear, import sorting
+select = ["E", "F", "W", "B", "I"]
+ignore = [
+    "E501",  # line length: handled case by case
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["meteo", "ui", "route_page"]
+
+[tool.ruff.lint.per-file-ignores]
+# the project root is added to sys.path before the imports (see the comment in the file)
+"dashboard/app.py" = ["E402"]

@@ -1,0 +1,154 @@
+name: CD
+
+# Deploys an image the CI workflow already built, tested and pushed: no rebuild, no tests.
+# The same image (pinned by digest) goes to the staging Cloud Run service first, automatically, then to
+# the production service once the reviewer of the production environment approves. See docs/DEPLOY.md.
+# - Automatic: after every successful CI run on main (pushes and the weekly data refresh).
+# - By hand (Actions > CD > Run workflow): any image tag, to redeploy or roll back.
+run-name: Deploy ${{ inputs.tag || github.event.workflow_run.display_title }}
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to deploy: run-<CI run id>, sha-<commit> (e.g. sha-185a8e9), latest or a version"
+        required: true
+        type: string
+
+permissions: {}
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  image:
+    name: Image to deploy
+    # Only successful CI runs that published an image (a pull request from a branch named main
+    # also triggers workflow_run, and its image is never published)
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'schedule'))
+    runs-on: ubuntu-latest
+    permissions:
+      packages: read
+    outputs:
+      ref: ${{ steps.resolve.outputs.ref }}
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve the tag to the image digest
+        id: resolve
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          CI_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            tag="$INPUT_TAG"
+          else
+            tag="run-$CI_RUN_ID"   # tag pushed by the CI run that triggered this one
+          fi
+          if ! [[ "$tag" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "::error::Invalid image tag: $tag"
+            exit 1
+          fi
+          repo="${IMAGE,,}"
+          # Staging and production both get exactly this digest
+          if ! digest=$(docker buildx imagetools inspect "$repo:$tag" --format '{{.Manifest.Digest}}'); then
+            echo "::error::Image $repo:$tag not found in GitHub Container Registry"
+            exit 1
+          fi
+          echo "ref=$repo@$digest" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Image to deploy"
+            echo "- tag: \`$tag\`"
+            echo "- digest: \`$digest\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  staging:
+    name: Deploy to staging
+    needs: image
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: ${{ steps.deploy.outputs.url }}
+    permissions:
+      contents: read
+      packages: read
+      id-token: write   # OIDC token exchanged for Google credentials (Workload Identity Federation)
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    steps:
+      # Skipped until the Google Cloud variables are set (forks, before the setup of docs/DEPLOY.md)
+      - name: Google Cloud configuration
+        if: vars.GCP_PROJECT_ID == ''
+        run: |
+          echo "::notice::GCP_PROJECT_ID variable not set (docs/DEPLOY.md): Cloud Run was not deployed"
+
+      - uses: actions/checkout@v4
+        if: vars.GCP_PROJECT_ID != ''
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        if: vars.GCP_PROJECT_ID != ''
+        uses: ./.github/actions/deploy-cloud-run
+        with:
+          image-ref: ${{ needs.image.outputs.ref }}
+          service: ${{ vars.CLOUD_RUN_SERVICE || 'meteoreading-staging' }}
+          project-id: ${{ vars.GCP_PROJECT_ID }}
+          region: ${{ vars.GCP_REGION || 'europe-west1' }}
+          artifact-repository: ${{ vars.GCP_ARTIFACT_REPOSITORY || 'meteoreading' }}
+          workload-identity-provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          deploy-service-account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          runtime-service-account: ${{ vars.GCP_RUNTIME_SERVICE_ACCOUNT }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  production:
+    name: Deploy to production
+    needs: [image, staging]
+    runs-on: ubuntu-latest
+    # Protected environment: the job waits for the approval of a required reviewer
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+    concurrency:
+      group: deploy-production
+      # A newer image replaces one still waiting for approval
+      cancel-in-progress: true
+    steps:
+      - name: Google Cloud configuration
+        if: vars.GCP_PROJECT_ID == ''
+        run: |
+          echo "::notice::GCP_PROJECT_ID variable not set (docs/DEPLOY.md): Cloud Run was not deployed"
+
+      - uses: actions/checkout@v4
+        if: vars.GCP_PROJECT_ID != ''
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        if: vars.GCP_PROJECT_ID != ''
+        uses: ./.github/actions/deploy-cloud-run
+        with:
+          image-ref: ${{ needs.image.outputs.ref }}
+          service: ${{ vars.CLOUD_RUN_SERVICE || 'meteoreading' }}
+          project-id: ${{ vars.GCP_PROJECT_ID }}
+          region: ${{ vars.GCP_REGION || 'europe-west1' }}
+          artifact-repository: ${{ vars.GCP_ARTIFACT_REPOSITORY || 'meteoreading' }}
+          workload-identity-provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          deploy-service-account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          runtime-service-account: ${{ vars.GCP_RUNTIME_SERVICE_ACCOUNT }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -88,7 +88,7 @@ def cmd_query(cfg, args):
     with duckdb.connect(str(cfg.warehouse), read_only=True) as con:
         # A file can hold several queries separated by ";"
         for statement in [s.strip() for s in sql.split(";") if s.strip()]:
-            title = next((l[2:].strip() for l in statement.splitlines() if l.startswith("--")), None)
+            title = next((line[2:].strip() for line in statement.splitlines() if line.startswith("--")), None)
             if title:
                 print(f"\n=== {title}")
             print(con.sql(statement).df().to_string(index=False, max_rows=args.max_rows))

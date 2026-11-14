@@ -3,19 +3,19 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 
+import folium
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-import folium
 import streamlit as st
 from folium.plugins import Draw
 from plotly.subplots import make_subplots
 from streamlit_folium import st_folium
 
-from ui import COOL, DIVERGING, HEAT, INK, INK2, MUTED, RAIN, ROOT, SERIES, WARM, _connect, chart, num, page_header
 from meteo.gps import ACTIVITIES, Track, parse_track, passage_times, sample_points, summary, to_gpx, with_times
 from meteo.route_weather import FORECAST_FUTURE_DAYS, api_weight, nearby_station_obs, read_route
 from meteo.routing import geocode, track_from_waypoints, waypoints_from_drawings
+from ui import COOL, DIVERGING, HEAT, INK, INK2, MUTED, RAIN, ROOT, SERIES, WARM, _connect, chart, num, page_header
 
 SAMPLES_DIR = ROOT / "samples"
 TIMEZONES = ["Europe/Paris", "UTC", "Europe/London", "Europe/Madrid", "Europe/Rome", "Europe/Berlin",

@@ -67,6 +67,13 @@ for recent or upcoming trips, ERA5 archive for older ones. Values are interpolat
 wind is interpolated as a vector (otherwise 350° and 10° would average to 180°) and projected on the direction
 of travel to get the headwind. For past trips, nearby Météo-France stations give a ground truth.
 
+**How is it deployed?**
+On Google Cloud Run, by GitHub Actions. CI lints, runs the tests on three Python versions and builds a Docker image
+that contains the data (the pipeline runs during the build), then smoke-tests it: health endpoint, row count, and
+the dashboard rendered headless. CD never rebuilds: it takes that exact image by digest, deploys it to a staging
+service, then to production once I approve. GitHub authenticates to Google through Workload Identity Federation,
+so there is no service account key anywhere. Every Monday a scheduled run refreshes the data the same way.
+
 **What would you do with more time?**
 Extend to the whole of France (it is one configuration setting), add sunshine and humidity, schedule a daily
 refresh, and deploy the dashboard online.
