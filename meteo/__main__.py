@@ -7,6 +7,7 @@
     python -m meteo report       # 5. self-contained HTML report
     python -m meteo all          # run everything
     python -m meteo query "SELECT ..."   # query the warehouse (or run a .sql file)
+    python -m meteo route track.gpx --start "2026-11-20 09:00" --activity cycling   # weather along a GPS track
 """
 from __future__ import annotations
 
@@ -93,6 +94,48 @@ def cmd_query(cfg, args):
             print(con.sql(statement).df().to_string(index=False, max_rows=args.max_rows))
 
 
+def cmd_route(cfg, args):
+    import pandas as pd
+
+    from .gps import ACTIVITIES, parse_track, passage_times, summary, with_times
+    from .route_weather import read_route
+
+    path = Path(args.track)
+    track = parse_track(path.read_bytes(), path.name)
+    if args.start or not track.has_time:
+        if not args.start:
+            raise SystemExit("This track has no timestamps: add --start 'YYYY-MM-DD HH:MM'")
+        preset = ACTIVITIES[args.activity.capitalize()]
+        start = pd.Timestamp(args.start, tz=args.tz)
+        track = with_times(track, passage_times(track, start, args.speed or preset["speed"],
+                                                preset["climb_min_per_100m"]))
+    s = summary(track)
+    reading = read_route(track)
+    pts = reading.points
+    local = pts["time"].dt.tz_convert(reading.timezone)
+    print(f"\n{track.name}: {s['distance_km']:.1f} km, {local.iloc[0]:%a %d %b %Y %H:%M} -> {local.iloc[-1]:%H:%M} "
+          f"({reading.timezone}), source: {reading.source}\n")
+    for line in reading.insights:
+        print(f"  - {line}")
+    table = pd.DataFrame({
+        "km": pts["dist_km"].round(1), "time": local.dt.strftime("%H:%M"), "ele_m": pts["ele_profile"].round(0),
+        "conditions": pts["condition"], "temp_c": pts["temperature_2m"].round(1),
+        "rain_mm_h": pts["precipitation"].round(1), "wind": pts["wind_from"] + " " + pts["wind_speed_10m"].round(0).astype(int).astype(str),
+        "headwind": pts["headwind"].round(0), "gusts": pts["wind_gusts_10m"].round(0),
+    })
+    print("\n" + table.to_string(index=False))
+    if args.out:
+        table.to_csv(args.out, index=False)
+        print(f"\nSaved to {args.out}")
+    if args.png:
+        from .viz import route_profile
+
+        sub = (f"{s['distance_km']:.1f} km · {local.iloc[0]:%d %b %Y %H:%M} to {local.iloc[-1]:%H:%M} "
+               f"({reading.timezone}) · {'ERA5 archive' if reading.source == 'archive' else 'forecast'}")
+        route_profile(pts, track.points, Path(args.png), track.name, sub)
+        print(f"Chart saved to {args.png}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="meteo", description="Climate analysis pipeline on Météo-France open data")
     parser.add_argument("--config", help="path to config.yaml", default=None)
@@ -108,6 +151,15 @@ def main(argv: list[str] | None = None) -> int:
     p_q.add_argument("sql", help="SQL query or path to a .sql file")
     p_q.add_argument("--max-rows", type=int, default=30)
     p_q.set_defaults(func=cmd_query)
+    p_r = sub.add_parser("route", help="weather reading along a GPS track (GPX, KML, GeoJSON)")
+    p_r.add_argument("track", help="path to the track file")
+    p_r.add_argument("--start", help="departure time 'YYYY-MM-DD HH:MM' (planned trip); default: the track's own times")
+    p_r.add_argument("--activity", choices=["walking", "cycling", "driving"], default="cycling")
+    p_r.add_argument("--speed", type=float, help="average speed in km/h (default: the activity's)")
+    p_r.add_argument("--tz", default="Europe/Paris", help="time zone of --start")
+    p_r.add_argument("--out", help="save the point-by-point reading to this CSV file")
+    p_r.add_argument("--png", help="save a profile chart (elevation, temperature, rain, wind) to this PNG file")
+    p_r.set_defaults(func=cmd_route)
 
     args = parser.parse_args(argv)
     logging.basicConfig(

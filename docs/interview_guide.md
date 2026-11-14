@@ -18,6 +18,8 @@ technically was data quality: stations move, and I had to splice their series."
    validation.
 5. **SQL queries**: run "Rank of 2022 in each city's history" (window function), then the query over the
    25 million rows: answer in ~0.1 s.
+6. **Route weather**: pick "Paris to Versailles by bike" for tomorrow 9:00, switch the map to "Headwind", then
+   open the Mont Ventoux sample (recorded on 15 July 2025): the temperature drops along the climb.
 
 ## Likely questions
 
@@ -55,11 +57,18 @@ To validate my series against an independent source, and because many companies 
 no stations. Conclusion: ERA5 tracks day-to-day weather very well (0.987 correlation), but smooths out local
 effects (sea, city); for local extremes, you need stations.
 
+**How does the route weather work?**
+The track is sampled every kilometre or more (40 points at most), each point gets a passage time (recorded or
+estimated from a speed), and the hourly weather of all points is fetched in one batch from Open-Meteo: forecast
+for recent or upcoming trips, ERA5 archive for older ones. Values are interpolated at the exact passage time; the
+wind is interpolated as a vector (otherwise 350° and 10° would average to 180°) and projected on the direction
+of travel to get the headwind. For past trips, nearby Météo-France stations give a ground truth.
+
 **What would you do with more time?**
 Extend to the whole of France (it is one configuration setting), add sunshine and humidity, schedule a daily
 refresh, and deploy the dashboard online.
 
 **How do you make sure the code works?**
-18 automated tests, including an end-to-end test on a small synthetic dataset that reproduces every pitfall
+33 automated tests, including an end-to-end test on a small synthetic dataset that reproduces every pitfall
 found in the real data: suspect quality code, impossible value, TN > TX, duplicate, ID with a leading zero,
 station that moves.

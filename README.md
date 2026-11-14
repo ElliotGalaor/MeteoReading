@@ -2,7 +2,8 @@
 
 End-to-end data pipeline that **collects 25 million official weather records**, cleans them, stores them in an
 analytical warehouse, draws statistically sound conclusions and presents them in an **interactive dashboard**
-and an **HTML report**.
+and an **HTML report**. It also gives a **weather reading along any GPS track**: import a GPX/KML/GeoJSON file
+(or pick a sample) and see the conditions at the time you pass each point.
 
 > Business question: *how much have large French cities warmed since 1951, and what does it change in practice
 > (extreme heat, frost, rainfall)?*
@@ -40,7 +41,8 @@ The full report, with every figure and the method, is in [reports/climate_report
 | **Exploratory machine learning**: PCA + k-means, choice of k by silhouette | [meteo/analysis.py](meteo/analysis.py) |
 | **Cross-validation** against an independent source (ERA5 reanalysis) | [meteo/era5.py](meteo/era5.py) |
 | **Data visualisation**: colour-blind-safe palette, one idea per chart | [reports/figures/](reports/figures/) |
-| **Dashboard**: 6 interactive pages, including a SQL editor | [dashboard/](dashboard/) |
+| **Dashboard**: 7 interactive pages, including a SQL editor | [dashboard/](dashboard/) |
+| **Geospatial data**: GPX/KML/GeoJSON parsing (safe XML), distances, bearings, sampling, time interpolation, head/tail wind | [meteo/gps.py](meteo/gps.py), [meteo/route_weather.py](meteo/route_weather.py) |
 | **Software quality**: externalised configuration, automated tests, pipeline reproducible in one command | [tests/](tests/), [config.yaml](config.yaml) |
 
 ## Quick start
@@ -85,6 +87,7 @@ python -m meteo era5         # 3. ERA5 cross-validation (~2 min, limited by the 
 python -m meteo analyze      # 4. statistics and figures (~6 s)
 python -m meteo report       # 5. HTML report
 python -m meteo query sql/example_queries.sql   # annotated SQL queries
+python -m meteo route samples/paris_versailles_bike.gpx --start "2026-11-20 09:00" --activity cycling
 python -m pytest             # tests
 ```
 
@@ -98,6 +101,28 @@ python -m pytest             # tests
 | **Extremes and records** | city × decade heatmap, then vs now, records, filterable heat episodes |
 | **Data and quality** | pipeline diagram, quality summary, station network, series splicing, ERA5 validation, limitations |
 | **SQL queries** | live SQL editor on the warehouse (read-only, disk access blocked), CSV export |
+| **Route weather** | weather along an uploaded or sample GPS track: map, profile, point-by-point reading, nearby station observations |
+
+## Route weather reading
+
+Import a track exported from Strava, Garmin, Komoot or Google Earth (GPX, KML or GeoJSON), or pick one of the
+[sample tracks](samples/). The tool:
+
+1. **reads the track** safely (`defusedxml`), drops repeated points, computes distances, ascent and the direction of travel;
+2. **times each point**: the recorded timestamps for a past activity, or an estimate for a planned trip
+   (departure time + speed, with extra time for climbs when walking or cycling);
+3. **samples up to 40 points** at least 1 km apart and fetches the hourly weather for all of them in one batch:
+   the **Open-Meteo forecast API** for the last 3 months and the next 16 days (best models for the area, e.g.
+   Météo-France AROME/ARPEGE over France), the **ERA5 archive** for older trips;
+4. **interpolates the weather at the exact time** you pass each point (wind as a vector), adjusts temperatures to
+   the altitude, and splits the wind into **headwind / tailwind / crosswind** along your heading;
+5. **writes the reading**: where and when it rains, temperature range (coldest point), wind against you, strong
+   gusts, thunderstorm or ice risk, plus the observations of the **Météo-France stations within 5 km** of the route
+   for past trips (ground truth from the warehouse).
+
+![Weather along the Mont Ventoux climb](reports/figures/route_weather_example.png)
+
+*Example from the command line (`--png`): the Mont Ventoux sample recorded on 15 July 2025, read from the ERA5 archive. The temperature drops by 7 °C between Bédoin and the summit, with a light headwind and no rain.*
 
 ## Architecture
 
@@ -163,10 +188,13 @@ MeteoReading/
 │   ├── stats.py           # pure statistical functions (tested)
 │   ├── analysis.py        # one function per business question
 │   ├── era5.py            # Open-Meteo cross-validation
+│   ├── gps.py             # GPS tracks: parsing, distances, sampling, timing
+│   ├── route_weather.py   # weather reading along a track
 │   ├── viz.py, palette.py # static charts
 │   └── report.py, fmt.py  # HTML report
 ├── sql/                   # transformations (01 → 04) and example queries
 ├── dashboard/             # Streamlit app
+├── samples/               # sample GPS tracks (simplified routes)
 ├── templates/             # report template
 ├── tests/                 # pytest, including an end-to-end test on synthetic data
 └── reports/               # report, figures, CSV tables, results.json

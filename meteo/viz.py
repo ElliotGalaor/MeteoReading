@@ -333,3 +333,39 @@ def era5_bias(df: pd.DataFrame, path: Path, title: str, period: str) -> Path:
     ax.legend(loc="upper right")
     _title(ax, title, f"Mean difference between ERA5 (~25 km grid) and the Météo-France station, {period}")
     return _finish(fig, path, SOURCE.replace(" · analysis", " and ERA5 (Copernicus) via the Open-Meteo API · analysis"))
+
+
+def route_profile(points: pd.DataFrame, track_points: pd.DataFrame, path: Path, title: str, subtitle: str) -> Path:
+    """Small multiples along a route: elevation, temperature, rain and head/tail wind (shared distance axis)."""
+    fig, axes = plt.subplots(4, 1, figsize=(10, 8.6), sharex=True, gridspec_kw={"height_ratios": [1, 1.1, 0.8, 1]})
+    km = points["dist_km"]
+    ele_x = track_points["dist_km"]
+    ele_y = track_points["ele"] if track_points["ele"].notna().mean() > 0.9 else np.interp(ele_x, km, points["ele_profile"])
+    ax = axes[0]
+    ax.fill_between(ele_x, ele_y, np.nanmin(ele_y) - 20, color=AXIS, alpha=0.45, linewidth=0)
+    ax.plot(ele_x, ele_y, color=MUTED, lw=1.5)
+    ax.set_ylabel("Elevation (m)")
+    ax = axes[1]
+    ax.plot(km, points["temperature_2m"], color=SERIES[1], marker="o", ms=4, label="temperature")
+    ax.plot(km, points["apparent_temperature"], color=SERIES[0], marker="o", ms=4, label="feels like")
+    ax.set_ylabel("°C")
+    ax.legend(loc="upper right", ncols=2)
+    ax = axes[2]
+    ax.bar(km, points["precipitation"].fillna(0), width=max(km.max() / len(km) * 0.6, 0.2), color=BLUE, linewidth=0)
+    ax.set_ylim(0, max(points["precipitation"].max() * 1.3, 1))
+    ax.set_ylabel("Rain (mm/h)")
+    ax = axes[3]
+    head = points["headwind"]
+    ax.bar(km, head, width=max(km.max() / len(km) * 0.6, 0.2), color=np.where(head >= 0, WARM, COOL), linewidth=0)
+    ax.plot(km, points["wind_gusts_10m"], color=INK, lw=1.5, label="gusts")
+    ax.axhline(0, color=AXIS, lw=0.8)
+    ax.set_ylabel("Wind (km/h)")
+    ax.set_xlabel("Distance (km)")
+    ax.legend(handles=[Patch(color=WARM, label="headwind"), Patch(color=COOL, label="tailwind"),
+                       Line2D([], [], color=INK, lw=1.5, label="gusts")], loc="upper left", ncols=3)
+    for a in axes:
+        a.grid(axis="x", visible=False)
+    fig.suptitle(title, x=0.01, ha="left", fontsize=13.5, fontweight="semibold", color=INK)
+    fig.text(0.01, 0.948, subtitle, color=INK2, fontsize=9.5)
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    return _finish(fig, path, "Weather: Open-Meteo (forecast models / ERA5 archive) · analysis: Météo Analytics")

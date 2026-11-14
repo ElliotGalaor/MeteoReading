@@ -10,6 +10,8 @@ font = "sans-serif"
 
 [server]
 headless = true
+# Uploaded GPS tracks are small: cap uploads at 20 MB
+maxUploadSize = 20
 
 [browser]
 gatherUsageStats = false

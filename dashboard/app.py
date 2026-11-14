@@ -18,6 +18,7 @@ from ui import (
     pvalue, results, rolling, run_user_sql, signed, signed_color, source_note, table, warehouse_ready,
 )
 from meteo.stats import SEASONS, trend
+from route_page import page_route
 
 st.set_page_config(page_title="Météo Analytics", page_icon="🌡️", layout="wide")
 
@@ -555,20 +556,25 @@ def page_sql():
 
 
 # =============================================================================
-if not warehouse_ready():
-    st.error("The data is not ready yet. From the project root, run:")
-    st.code("python -m meteo all", language="bash")
-    st.stop()
-
-nav = st.navigation([
-    st.Page(page_overview, title="Overview", icon=":material/thermostat:", default=True),
-    st.Page(page_city, title="Explore a city", icon=":material/location_city:", url_path="city"),
-    st.Page(page_year, title="A year in detail", icon=":material/calendar_month:", url_path="year"),
-    st.Page(page_extremes, title="Extremes and records", icon=":material/local_fire_department:", url_path="extremes"),
-    st.Page(page_quality, title="Data and quality", icon=":material/fact_check:", url_path="quality"),
-    st.Page(page_sql, title="SQL queries", icon=":material/terminal:", url_path="sql"),
-])
+route = st.Page(page_route, title="Route weather", icon=":material/route:", url_path="route")
+if warehouse_ready():
+    nav = st.navigation({
+        "Climate analysis": [
+            st.Page(page_overview, title="Overview", icon=":material/thermostat:", default=True),
+            st.Page(page_city, title="Explore a city", icon=":material/location_city:", url_path="city"),
+            st.Page(page_year, title="A year in detail", icon=":material/calendar_month:", url_path="year"),
+            st.Page(page_extremes, title="Extremes and records", icon=":material/local_fire_department:", url_path="extremes"),
+            st.Page(page_quality, title="Data and quality", icon=":material/fact_check:", url_path="quality"),
+            st.Page(page_sql, title="SQL queries", icon=":material/terminal:", url_path="sql"),
+        ],
+        "Tools": [route],
+    })
+else:
+    # Without the warehouse, only the route tool (which uses the weather API) is available
+    nav = st.navigation([route])
+    st.sidebar.info("Climate pages appear once the data is built: run `python -m meteo all`.")
 with st.sidebar:
     st.markdown("### Météo Analytics")
-    st.caption(f"Climate of 20 French cities, {START}-{END}, from Météo-France open data.")
+    st.caption(f"Climate of 20 French cities, {START}-{END}, from Météo-France open data, "
+               "and weather along any GPS track.")
 nav.run()
