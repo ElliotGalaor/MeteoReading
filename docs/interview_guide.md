@@ -19,8 +19,9 @@ after a quiet period wakes the instance up).
 3. **A year in detail**: Paris 2022 against the normal; then 2003 for the August heatwave.
 4. **Data and quality**: the pipeline diagram, the series-splicing table (Reims, Grenoble, Limoges), the ERA5
    validation.
-5. **SQL queries**: run "Rank of 2022 in each city's history" (window function), then the query over the
-   25 million rows: answer in ~0.1 s.
+5. **Pivot table**: click "Warming by decade" (from +1.6 °C in Brest to +2.8 °C in Limoges between the 1950s and 2020-2025),
+   then "25 million records": every daily record aggregated in about 0.1 s. Open "The query that ran" to show the
+   SQL assembled on the server, with the filter values bound as parameters.
 6. **Route weather**: choose "Draw on the map", search "Annecy", click a few points around the lake and finish
    the line: the route snaps to the roads, then the reading appears for tomorrow 9:00. Switch the map to
    "Headwind", then open the Mont Ventoux sample (recorded on 15 July 2025): the temperature drops along the climb.
@@ -28,6 +29,13 @@ after a quiet period wakes the instance up).
    danger, and the advice changes.
 
 ## Likely questions
+
+**Why a pivot table instead of a SQL editor?**
+Accepting SQL from a browser is an injection risk, even on a read-only database: a visitor can run very heavy
+queries or read every table. The pivot table covers what a data analyst needs to explore (crossing dimensions,
+aggregating, filtering), and only lets the user pick names from a catalog: the server assembles the SQL from
+fixed fragments and binds the filter values as parameters. Totals use GROUPING SETS so that a total median is a
+real median. Defence in depth: the connection is read-only and cannot touch files.
 
 **Why DuckDB rather than pandas or PostgreSQL?**
 25 million rows do not fit comfortably in pandas. DuckDB is a serverless columnar analytical database: it reads

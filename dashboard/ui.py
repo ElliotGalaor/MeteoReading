@@ -80,26 +80,6 @@ def era5() -> pd.DataFrame | None:
     return pd.read_csv(p) if p.exists() else None
 
 
-def run_user_sql(sql: str, max_rows: int = 10_000) -> pd.DataFrame:
-    """Free-form query typed in the SQL page (same protected connection)."""
-    with _connect() as con:
-        rel = con.sql(sql)
-        if rel is None:
-            raise ValueError("Only read queries (SELECT, WITH, PIVOT…) are accepted.")
-        return rel.limit(max_rows).df()
-
-
-def example_queries() -> dict[str, str]:
-    """Split sql/example_queries.sql into {title: query}."""
-    text = (ROOT / "sql" / "example_queries.sql").read_text(encoding="utf-8")
-    out = {}
-    for block in [b.strip() for b in text.split(";") if b.strip()]:
-        lines = block.splitlines()
-        title = lines[0][2:].strip() if lines[0].startswith("--") else block[:60]
-        out[title] = "\n".join(lines[1:] if lines[0].startswith("--") else lines).strip()
-    return out
-
-
 # --- Stable colours per city (the colour follows the city, not its rank) ---------
 def city_colors(selected: list[str], key: str) -> dict[str, str]:
     slots: dict[str, int] = st.session_state.setdefault(f"slots_{key}", {})
