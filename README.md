@@ -2,8 +2,8 @@
 
 End-to-end data pipeline that **collects 25 million official weather records**, cleans them, stores them in an
 analytical warehouse, draws statistically sound conclusions and presents them in an **interactive dashboard**
-and an **HTML report**. It also gives a **weather reading along any GPS track**: import a GPX/KML/GeoJSON file
-(or pick a sample) and see the conditions at the time you pass each point.
+and an **HTML report**. It also gives a **weather reading along any GPS track**: draw a route on the map, import a GPX/KML/GeoJSON
+file or pick a sample, and see the conditions at the time you pass each point.
 
 > Business question: *how much have large French cities warmed since 1951, and what does it change in practice
 > (extreme heat, frost, rainfall)?*
@@ -42,7 +42,7 @@ The full report, with every figure and the method, is in [reports/climate_report
 | **Cross-validation** against an independent source (ERA5 reanalysis) | [meteo/era5.py](meteo/era5.py) |
 | **Data visualisation**: colour-blind-safe palette, one idea per chart | [reports/figures/](reports/figures/) |
 | **Dashboard**: 7 interactive pages, including a SQL editor | [dashboard/](dashboard/) |
-| **Geospatial data**: GPX/KML/GeoJSON parsing (safe XML), distances, bearings, sampling, time interpolation, head/tail wind | [meteo/gps.py](meteo/gps.py), [meteo/route_weather.py](meteo/route_weather.py) |
+| **Geospatial data**: GPX/KML/GeoJSON parsing (safe XML), routing on OpenStreetMap, resampling, elevation, bearings, time interpolation, head/tail wind | [meteo/gps.py](meteo/gps.py), [meteo/routing.py](meteo/routing.py), [meteo/route_weather.py](meteo/route_weather.py) |
 | **Software quality**: externalised configuration, automated tests, pipeline reproducible in one command | [tests/](tests/), [config.yaml](config.yaml) |
 
 ## Quick start
@@ -101,12 +101,20 @@ python -m pytest             # tests
 | **Extremes and records** | city × decade heatmap, then vs now, records, filterable heat episodes |
 | **Data and quality** | pipeline diagram, quality summary, station network, series splicing, ERA5 validation, limitations |
 | **SQL queries** | live SQL editor on the warehouse (read-only, disk access blocked), CSV export |
-| **Route weather** | weather along an uploaded or sample GPS track: map, profile, point-by-point reading, nearby station observations |
+| **Route weather** | weather along a route drawn on the map, uploaded or picked from the samples: map, profile, point-by-point reading, nearby station observations |
 
 ## Route weather reading
 
-Import a track exported from Strava, Garmin, Komoot or Google Earth (GPX, KML or GeoJSON), or pick one of the
-[sample tracks](samples/). The tool:
+Three ways to get a track:
+
+- **draw it on the map**: search a place, click your waypoints, finish the line. The route can **follow roads and
+  paths** suited to walking, cycling or driving (OSRM routing engine on OpenStreetMap data), or join your points
+  with straight lines (off-trail). The altitude of every point is added (Open-Meteo elevation API), and the route
+  can be saved as GPX;
+- **import a file** exported from Strava, Garmin, Komoot or Google Earth (GPX, KML or GeoJSON);
+- **pick a [sample track](samples/)**.
+
+Then the tool:
 
 1. **reads the track** safely (`defusedxml`), drops repeated points, computes distances, ascent and the direction of travel;
 2. **times each point**: the recorded timestamps for a past activity, or an estimate for a planned trip
@@ -151,6 +159,8 @@ data.gouv.fr (API)          Open-Meteo (ERA5 API)
 - **Volume** (November 2026 snapshot): 25,027,470 rows, 2,433 stations, 20 départements (French administrative areas), from 1 January 1950 to November 2026.
 - **Variables**: minimum and maximum temperature (TN, TX), mean of hourly temperatures (TM), rainfall (RR), mean wind and gusts, each with its quality code.
 - **Validation**: ERA5 (Copernicus) through the free [Open-Meteo](https://open-meteo.com/) API, 2015-2024.
+- **Route weather**: Open-Meteo forecast, archive, elevation and geocoding APIs; map tiles and routing from
+  [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (routing servers hosted by FOSSGIS, for light use).
 
 To analyse the whole of France (overseas territories included), set `extra_departments: all` in [config.yaml](config.yaml): about 1.3 GB and more than 100 million rows, without changing the code.
 
@@ -189,6 +199,7 @@ MeteoReading/
 │   ├── analysis.py        # one function per business question
 │   ├── era5.py            # Open-Meteo cross-validation
 │   ├── gps.py             # GPS tracks: parsing, distances, sampling, timing
+│   ├── routing.py         # track from map clicks: routing, resampling, elevation
 │   ├── route_weather.py   # weather reading along a track
 │   ├── viz.py, palette.py # static charts
 │   └── report.py, fmt.py  # HTML report

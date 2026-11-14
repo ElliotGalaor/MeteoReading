@@ -1,4 +1,4 @@
-"""Dashboard page: weather reading along a GPS track (uploaded or sample)."""
+"""Dashboard page: weather reading along a GPS track (sample, uploaded, or drawn on a map)."""
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
@@ -6,12 +6,16 @@ from datetime import date, datetime, time, timedelta
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import folium
 import streamlit as st
+from folium.plugins import Draw
 from plotly.subplots import make_subplots
+from streamlit_folium import st_folium
 
 from ui import COOL, DIVERGING, HEAT, INK, INK2, MUTED, RAIN, ROOT, SERIES, WARM, _connect, chart, num, page_header
-from meteo.gps import ACTIVITIES, Track, parse_track, passage_times, sample_points, summary, with_times
+from meteo.gps import ACTIVITIES, Track, parse_track, passage_times, sample_points, summary, to_gpx, with_times
 from meteo.route_weather import FORECAST_FUTURE_DAYS, api_weight, nearby_station_obs, read_route
+from meteo.routing import geocode, track_from_waypoints, waypoints_from_drawings
 
 SAMPLES_DIR = ROOT / "samples"
 TIMEZONES = ["Europe/Paris", "UTC", "Europe/London", "Europe/Madrid", "Europe/Rome", "Europe/Berlin",
@@ -46,9 +50,20 @@ def _stations(points: pd.DataFrame, tz: str) -> pd.DataFrame:
         return nearby_station_obs(con, points, tz)
 
 
+@st.cache_data(show_spinner=False, ttl=3600)
+def _route(waypoints: tuple, activity: str, follow: bool) -> tuple[pd.DataFrame, str, bool]:
+    track, routed = track_from_waypoints(list(waypoints), activity, follow)
+    return track.points, track.name, routed
+
+
+@st.cache_data(show_spinner=False, ttl=86400)
+def _geocode(name: str) -> list[dict]:
+    return geocode(name)
+
+
 def _guess_activity(name: str) -> str:
     n = name.lower()
-    if any(w in n for w in ("car", "drive", "voiture", "road trip")):
+    if any(w in n for w in ("car", "drive", "driving", "voiture", "road trip")):
         return "Driving"
     if any(w in n for w in ("walk", "hike", "run", "rando", "trail", "marche")):
         return "Walking"
@@ -71,31 +86,44 @@ def _warehouse_last_date() -> date | None:
 # =============================================================================
 def page_route():
     page_header("Route weather",
-                "Import a GPS track or pick a sample: get the weather along the route, at the time you pass each point.")
+                "Draw a route on the map, import a GPS track or pick a sample: get the weather along the route, "
+                "at the time you pass each point.")
 
-    left, right = st.columns([1.3, 1], gap="large")
-    with left:
-        mode = st.segmented_control("Track", ["Sample track", "Upload a file"], default="Sample track")
-        try:
-            if mode == "Upload a file":
-                up = st.file_uploader("GPX, KML or GeoJSON file", type=["gpx", "kml", "geojson", "json"])
-                if up is None:
-                    st.info("Drop a track exported from Strava, Garmin, Komoot, Google Earth… "
-                            "or pick a sample track above.")
-                    return
-                points, name = _parse(up.getvalue(), up.name)
-            else:
-                samples = _samples()
-                if not samples:
-                    st.warning("No sample track found in the samples/ folder.")
-                    return
-                names = list(samples)
-                default = next((i for i, n in enumerate(names) if n.startswith("Paris")), 0)
-                name = st.selectbox("Sample", names, index=default)
-                points, name = _parse(open(samples[name], "rb").read(), samples[name])
-        except ValueError as exc:
-            st.error(f"Could not read this track: {exc}")
+    mode = st.segmented_control("Track", ["Sample track", "Draw on the map", "Upload a file"], default="Sample track")
+    if mode == "Draw on the map":
+        built = _draw_track()
+        if built is None:
             return
+        points, name = built
+        left, right = st.columns([1.3, 1], gap="large")
+        with left:
+            st.markdown(f"**{name}**")
+            st.download_button("Save this route as GPX", to_gpx(Track(name=name, points=points)).encode("utf-8"),
+                               "route.gpx", "application/gpx+xml", icon=":material/download:",
+                               help="Reuse it later with “Upload a file”, or in a GPS app.")
+    else:
+        left, right = st.columns([1.3, 1], gap="large")
+        with left:
+            try:
+                if mode == "Upload a file":
+                    up = st.file_uploader("GPX, KML or GeoJSON file", type=["gpx", "kml", "geojson", "json"])
+                    if up is None:
+                        st.info("Drop a track exported from Strava, Garmin, Komoot, Google Earth… "
+                                "or draw one on the map.")
+                        return
+                    points, name = _parse(up.getvalue(), up.name)
+                else:
+                    samples = _samples()
+                    if not samples:
+                        st.warning("No sample track found in the samples/ folder.")
+                        return
+                    names = list(samples)
+                    default = next((i for i, n in enumerate(names) if n.startswith("Paris")), 0)
+                    name = st.selectbox("Sample", names, index=default)
+                    points, name = _parse(open(samples[name], "rb").read(), samples[name])
+            except ValueError as exc:
+                st.error(f"Could not read this track: {exc}")
+                return
     track = Track(name=name, points=points)
 
     with right:
@@ -148,7 +176,8 @@ def page_route():
     k = st.columns(4)
     k[0].metric("Temperature", f"{stats['temp_min']:.0f} to {stats['temp_max']:.0f} °C", border=True,
                 help=f"Feels like down to {stats['feels_min']:.0f} °C.")
-    k[1].metric("Rain on the way", f"{stats['rain_mm']:.1f} mm", border=True,
+    rain_txt = "< 0.1 mm" if 0 < stats["rain_mm"] < 0.1 else f"{stats['rain_mm']:.1f} mm"
+    k[1].metric("Rain on the way", rain_txt, border=True,
                 help=f"On {stats['rain_share']:.0%} of the route (hours with ≥ 0.2 mm/h at the time you pass).")
     k[2].metric("Strongest gust", f"{stats['gust_max']:.0f} km/h", border=True)
     k[3].metric("Headwind share", f"{stats['headwind_share']:.0%}", border=True,
@@ -165,6 +194,44 @@ def page_route():
              if source == "forecast" else "ERA5 reanalysis archive via the Open-Meteo API (what the weather actually was)")
     st.markdown(f"<div class='source'>Weather: {label}. Times in {tz}. Temperatures are adjusted to the altitude "
                 f"of each point (90 m terrain model).</div>", unsafe_allow_html=True)
+
+
+def _draw_track() -> tuple[pd.DataFrame, str] | None:
+    """Map where the user clicks waypoints; returns the resulting track (points, name)."""
+    c1, c2, c3 = st.columns([2, 1.1, 1.2], vertical_alignment="bottom")
+    place = c1.text_input("Go to a place", placeholder="Town, mountain, address…", key="draw_place")
+    activity = c2.selectbox("Route for", list(ACTIVITIES), index=1, key="draw_activity")
+    follow = c3.toggle("Follow roads and paths", value=True, key="draw_follow",
+                       help="Snap the line to roads and paths suited to the activity (OpenStreetMap routing). "
+                            "Off: straight lines between your points, e.g. off-trail.")
+    center, zoom = (46.6, 2.6), 6
+    if place:
+        hits = _geocode(place)
+        if hits:
+            center, zoom = (hits[0]["lat"], hits[0]["lon"]), 12
+            c1.caption(f"Centred on {hits[0]['label']}")
+        else:
+            c1.caption("Place not found.")
+    m = folium.Map(location=center, zoom_start=zoom, tiles="OpenStreetMap", control_scale=True)
+    Draw(draw_options={"polyline": {"shapeOptions": {"color": SERIES[0], "weight": 4}, "metric": True},
+                       "polygon": False, "rectangle": False, "circle": False, "circlemarker": False, "marker": False},
+         edit_options={"edit": True, "remove": True}).add_to(m)
+    out = st_folium(m, key="draw_map", height=460, use_container_width=True, center=center, zoom=zoom,
+                    returned_objects=["all_drawings"])
+    waypoints = waypoints_from_drawings((out or {}).get("all_drawings"))
+    if len(waypoints) < 2:
+        st.info("Pick the line tool (top left of the map), click your waypoints, then click the last point again "
+                "to finish. The edit and bin tools below it let you move or delete the line.")
+        return None
+    with st.spinner("Building the route…"):
+        try:
+            points, name, routed = _route(tuple(waypoints), activity, follow)
+        except ValueError as exc:
+            st.error(str(exc))
+            return None
+    if follow and not routed:
+        st.warning("The routing service did not answer: your points are joined by straight lines.")
+    return points, name
 
 
 def _map(track: Track, pts: pd.DataFrame, tz: str) -> None:

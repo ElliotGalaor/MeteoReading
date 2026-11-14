@@ -209,7 +209,8 @@ def summarize(df: pd.DataFrame, tz: str) -> tuple[dict, list[str]]:
             span = f"km {km_a:.0f}" if a == b else f"km {km_a:.0f} to {km_b:.0f}"
             insights.append(f"Rain likely from {span}, around {local.iloc[a].strftime(clock)} "
                             f"(up to {rain.iloc[a:b + 1].max():.1f} mm/h).")
-        insights.append(f"About {stats['rain_mm']:.1f} mm of rain expected on {stats['rain_share']:.0%} of the route.")
+        amount = "only a trace of rain (under 0.1 mm)" if stats["rain_mm"] < 0.1 else f"about {stats['rain_mm']:.1f} mm of rain"
+        insights.append(f"In total, {amount} on {stats['rain_share']:.0%} of the route.")
 
     i_min = int(df["temperature_2m"].idxmin())
     t_line = f"Temperature from {stats['temp_min']:.0f} °C to {stats['temp_max']:.0f} °C"

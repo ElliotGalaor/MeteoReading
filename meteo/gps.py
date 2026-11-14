@@ -200,6 +200,18 @@ def cumulative_ascent(ele: pd.Series) -> np.ndarray:
     return np.concatenate([[0.0], np.cumsum(np.clip(np.diff(e.to_numpy()), 0, None))])
 
 
+def resample_path(lat, lon, step_km: float = 0.2, max_points: int = 1000) -> tuple[np.ndarray, np.ndarray]:
+    """Points evenly spaced every `step_km` along a polyline (the step grows if needed to stay under `max_points`)."""
+    lat, lon = np.asarray(lat, dtype=float), np.asarray(lon, dtype=float)
+    dist = cumulative_distance(lat, lon)
+    total = dist[-1]
+    if total == 0:
+        return lat[:1], lon[:1]
+    step = max(step_km, total / max(max_points - 1, 1))
+    targets = np.append(np.arange(0, total, step), total)
+    return np.interp(targets, dist, lat), np.interp(targets, dist, lon)
+
+
 # --- Sampling and timing ------------------------------------------------------------
 def sample_points(track: Track, max_points: int = 40, min_step_km: float = 1.0) -> pd.DataFrame:
     """Points spread evenly along the track where the weather is read.
