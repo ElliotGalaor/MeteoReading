@@ -98,6 +98,7 @@ def cmd_route(cfg, args):
     import pandas as pd
 
     from .gps import ACTIVITIES, parse_track, passage_times, summary, with_times
+    from .route_scores import assess
     from .route_weather import read_route
 
     path = Path(args.track)
@@ -117,6 +118,14 @@ def cmd_route(cfg, args):
           f"({reading.timezone}), source: {reading.source}\n")
     for line in reading.insights:
         print(f"  - {line}")
+    scores = assess(pts, args.activity.capitalize(), reading.timezone)
+    worst = ", ".join(f"{f.name.lower()} {f.value:.0f} at km {f.km:.0f}" for f in scores.danger.factors[:3])
+    lost = ", ".join(f"{f.name.lower()} -{f.value:.0f}" for f in scores.comfort.factors[:3])
+    print(f"\n  Danger  {scores.danger.value:3d}/100 ({scores.danger.level})" + (f": {worst}" if worst else ""))
+    print(f"  Comfort {scores.comfort.value:3d}/100 ({scores.comfort.level})" + (f": {lost}" if lost else ""))
+    print(f"\n  What to plan for ({scores.activity.lower()}):")
+    for a in scores.advice:
+        print(f"  - {a.title}: {a.text}")
     table = pd.DataFrame({
         "km": pts["dist_km"].round(1), "time": local.dt.strftime("%H:%M"), "ele_m": pts["ele_profile"].round(0),
         "conditions": pts["condition"], "temp_c": pts["temperature_2m"].round(1),
@@ -154,7 +163,8 @@ def main(argv: list[str] | None = None) -> int:
     p_r = sub.add_parser("route", help="weather reading along a GPS track (GPX, KML, GeoJSON)")
     p_r.add_argument("track", help="path to the track file")
     p_r.add_argument("--start", help="departure time 'YYYY-MM-DD HH:MM' (planned trip); default: the track's own times")
-    p_r.add_argument("--activity", choices=["walking", "cycling", "driving"], default="cycling")
+    p_r.add_argument("--activity", choices=["walking", "cycling", "driving"], default="cycling",
+                     help="sets the speed of a planned trip, and the danger and comfort scores")
     p_r.add_argument("--speed", type=float, help="average speed in km/h (default: the activity's)")
     p_r.add_argument("--tz", default="Europe/Paris", help="time zone of --start")
     p_r.add_argument("--out", help="save the point-by-point reading to this CSV file")

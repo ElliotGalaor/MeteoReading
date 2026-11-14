@@ -16,4 +16,7 @@ DIVERGING_STOPS = ["#0d366b", "#256abf", "#86b6ef", NEUTRAL, "#f0a09e", "#d63c3b
 HEAT_STOPS = ["#fdf1ea", "#f7c2a6", "#eb6834", "#a8400f", "#5c2208"]
 RAIN_STOPS = ["#eef5fd", "#9ec5f4", "#3987e5", "#1c5cab", "#0d366b"]
 
+# Status (danger and comfort levels): always shown with a label, never by colour alone
+STATUS = {"good": "#0ca30c", "warning": "#fab219", "serious": "#ec835a", "critical": "#d03b3b"}
+
 SOURCE = "Source: Météo-France daily climatological data (data.gouv.fr) · analysis: Météo Analytics"

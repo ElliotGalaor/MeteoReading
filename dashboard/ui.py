@@ -30,6 +30,7 @@ from meteo.palette import (  # noqa: E402,F401
     NEUTRAL,
     RAIN_STOPS,
     SERIES,
+    STATUS,
     SURFACE,
     WARM,
 )
@@ -151,6 +152,21 @@ CSS = f"""
   .stTextArea textarea {{ font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 0.88rem; }}
   .chart-title {{ color: {INK}; font-weight: 600; font-size: 1.08rem; margin-top: 0.8rem; line-height: 1.35; }}
   .chart-sub {{ color: {INK2}; font-size: 0.88rem; margin-top: 0.1rem; line-height: 1.4; }}
+  .score-card {{ border: 1px solid rgba(11,11,11,0.10); border-radius: 8px; padding: 0.85rem 1rem 0.75rem;
+                 background: {SURFACE}; height: 100%; }}
+  .score-label {{ color: {INK2}; font-size: 0.9rem; }}
+  .score-value {{ color: {INK}; font-size: 2.1rem; font-weight: 600; line-height: 1.15; }}
+  .score-value small {{ color: {MUTED}; font-size: 0.95rem; font-weight: 400; }}
+  .chip {{ display: inline-flex; align-items: center; gap: 0.4rem; color: {INK}; font-size: 0.95rem;
+           font-weight: 500; margin-left: 0.6rem; vertical-align: 0.35rem; }}
+  .chip i {{ width: 10px; height: 10px; border-radius: 50%; display: inline-block; }}
+  .meter {{ height: 8px; border-radius: 4px; background: #ecebe6; margin: 0.55rem 0 0.55rem; }}
+  .meter div {{ height: 100%; border-radius: 4px; }}
+  .score-why {{ color: {INK2}; font-size: 0.86rem; line-height: 1.45; }}
+  .advice {{ border-left: 3px solid {MUTED}; padding: 0.3rem 0 0.3rem 0.8rem; margin: 0.4rem 0; color: {INK}; }}
+  .advice.danger {{ border-left-color: {STATUS['critical']}; }}
+  .advice.comfort {{ border-left-color: {SERIES[0]}; }}
+  .advice span {{ color: {INK2}; }}
 </style>
 """
 

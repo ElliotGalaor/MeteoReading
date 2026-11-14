@@ -25,6 +25,8 @@ after a quiet period wakes the instance up).
 6. **Route weather**: choose "Draw on the map", search "Annecy", click a few points around the lake and finish
    the line: the route snaps to the roads, then the reading appears for tomorrow 9:00. Switch the map to
    "Headwind", then open the Mont Ventoux sample (recorded on 15 July 2025): the temperature drops along the climb.
+   Under "Safety and comfort", switch the activity from cycling to driving: the same gusts stop counting as a
+   danger, and the advice changes.
 
 ## Likely questions
 
@@ -77,6 +79,16 @@ estimated from a speed), and the hourly weather of all points is fetched in one 
 for recent or upcoming trips, ERA5 archive for older ones. Values are interpolated at the exact passage time; the
 wind is interpolated as a vector (otherwise 350° and 10° would average to 180°) and projected on the direction
 of travel to get the headwind. For past trips, nearby Météo-France stations give a ground truth.
+
+**How are the danger and comfort scores computed? Why not a model?**
+There is no labelled data on "dangerous trips" to train a model on, so I built transparent indices, like a
+weather vigilance scale. Each hazard is scored from 0 to 100 between two documented thresholds that depend on
+the activity (gusts start to matter at 40 km/h on a bike, 70 km/h in a car). Hazards met at the same time
+combine like independent risks, 1 - (1 - a)(1 - b), so two moderate hazards weigh more than one. The route's
+danger is 70% its worst moment and 30% its average over time: a trip is as dangerous as its worst part. Comfort
+is 100 minus penalties, averaged over the time spent at each point. Every threshold is a named constant with a
+unit test, so anyone can challenge a number and see the effect; with feedback data (trips rated by users), the
+weights could then be fitted.
 
 **How is it deployed?**
 On Google Cloud Run, by GitHub Actions. CI lints, runs the tests on three Python versions and builds a Docker image
