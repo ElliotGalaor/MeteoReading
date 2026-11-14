@@ -77,6 +77,12 @@ the dashboard rendered headless. CD never rebuilds: it takes that exact image by
 service, then to production once I approve. GitHub authenticates to Google through Workload Identity Federation,
 so there is no service account key anywhere. Every Monday a scheduled run refreshes the data the same way.
 
+**What if the site gets a lot of traffic, or a bot hammers it?**
+The bill is capped. A Google Cloud budget only sends alerts, so I added a kill switch: Cloud Billing posts the
+state of the budget to Pub/Sub, and a small Cloud Function closes the services to the Internet when half of the
+monthly budget is spent, then reopens them the next month. Why half: billing data is hours late, and the other
+half absorbs that delay. Each service also runs one instance at most, which bounds what an hour can cost.
+
 **What would you do with more time?**
 Extend to the whole of France (it is one configuration setting), add sunshine and humidity, schedule a daily
 refresh, and deploy the dashboard online.

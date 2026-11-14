@@ -33,13 +33,46 @@ a scheduled CI run rebuilds the image with the latest observations; CD then depl
 For a portfolio with occasional visitors, this stays within Google Cloud's free tier:
 
 - **Cloud Run** (tier 1 regions such as `europe-west1`): a monthly free allowance of CPU time, memory time and
-  requests. The services scale to zero, so nothing runs between visits; a visit starts an instance in a few
-  seconds (cold start).
-- **Artifact Registry**: 0.5 GB of free storage, then a few cents per GB and per month. The repository keeps only
-  the 5 most recent images, and they share most of their layers.
+  requests (about 50 hours of an instance). The services scale to zero, so nothing runs between visits; a visit
+  starts an instance in a few seconds (cold start).
+- **Artifact Registry**: 0.5 GB of free storage, then about 0.10 USD per GB and per month. The repository keeps
+  only the 3 most recent images, and they share most of their layers.
 
-A billing account is still required by Google. Setting a **budget alert** (Billing > Budgets & alerts) is a good
-habit.
+A billing account is still required by Google, and **a Google Cloud budget only sends alerts: it never stops
+anything**. The cost is capped at **5 USD per month** in three ways:
+
+1. **A single instance at most** per service: the worst hour costs about 0.10 USD, never more.
+2. **A monthly budget** of 4.30 EUR (the billing account is in euros: about 5 USD), with e-mail alerts at
+   50%, 90% and 100%.
+3. **A kill switch**, the `budget-guard` Cloud Function ([deploy/budget_guard](../deploy/budget_guard/main.py)).
+   Cloud Billing posts the state of the budget to a Pub/Sub topic several times a day; when the cost of the month
+   reaches **half the budget**, the function sets the ingress of both services to *internal*: they no longer
+   answer on the Internet, start no instance and cost nothing more. When the next month starts, the cost
+   restarts from zero and the function opens them again. Deploys go on in the meantime, and the CD summary says
+   that the service is closed.
+
+```mermaid
+flowchart LR
+    B["Cloud Billing<br>budget 4.30 EUR/month"] -->|"several times a day"| T["Pub/Sub<br>budget-alerts"]
+    B -->|"50%, 90%, 100%"| E["E-mail to the<br>billing admins"]
+    T --> F["Cloud Function<br>budget-guard"]
+    F -->|"cost >= 50%: internal<br>new month: public"| S["Cloud Run<br>services"]
+```
+
+Why close at half the budget: billing data can be several hours late, so the kill switch sees the cost of the
+morning in the afternoon. The other half absorbs what is spent in the meantime: one instance running non-stop
+costs about 2.5 USD a day. The function only reopens the services it closed itself (label
+`budget-guard=closed`), and it runs as a `budget-guard` service account that may change those two services and
+nothing else.
+
+Set it up once the services exist (after the first deploy), in Cloud Shell:
+
+```bash
+bash MeteoReading/deploy/gcp-budget.sh <PROJECT_ID> 4.30 europe-west1
+```
+
+The script ([deploy/gcp-budget.sh](../deploy/gcp-budget.sh)) can be run again, for instance with another amount
+(in the currency of the billing account). It ends by printing how to test the kill switch on staging only.
 
 ## 1. Prepare Google Cloud (once)
 
@@ -99,8 +132,8 @@ Without `GCP_PROJECT_ID`, the deploy jobs do nothing and their log says so (fork
 
 The deploy itself lives in a reusable composite action:
 [.github/actions/deploy-cloud-run](../.github/actions/deploy-cloud-run/action.yml). The services are public, scale
-from 0 to 3 instances (2 GiB, 1 vCPU, CPU boost at start-up), and use session affinity with a long timeout,
-because Streamlit keeps one WebSocket open per visitor.
+from 0 to 1 instance (2 GiB, 1 vCPU, CPU boost at start-up, up to 20 visitors at a time), and use session affinity
+with a long timeout, because Streamlit keeps one WebSocket open per visitor.
 
 ### Approve a production deploy
 
@@ -117,6 +150,8 @@ on the [package page](https://github.com/ElliotGalaor/MeteoReading/pkgs/containe
 ## Limits
 
 - **Cold start**: after a while without visits, the first page takes a few seconds to load.
+- **Monthly budget**: if half the budget is spent, the site answers with an error 404 until the next month.
+- **One instance**: up to 20 visitors at a time; beyond that, new visitors get an error until one leaves.
 - **Route weather** calls the free Open-Meteo and OpenStreetMap routing services from the server: fine for a
   portfolio, not for heavy traffic (their fair-use limits apply to the server's address).
 - The data is a snapshot taken at build time, refreshed every Monday.
@@ -133,3 +168,7 @@ on the [package page](https://github.com/ElliotGalaor/MeteoReading/pkgs/containe
   [Approve a production deploy](#approve-a-production-deploy).
 - **The service answers but a page shows an error**: **Cloud Run** → the service → **Logs** in the Google Cloud
   console.
+- **The site answers with an error 404 and the CD summary says "closed to the Internet"**: the budget guard closed
+  it. Check the cost (**Billing** → **Reports**) and the log of the function
+  (`gcloud functions logs read budget-guard --region europe-west1`). It reopens by itself next month; to reopen it
+  now, raise the budget (`bash deploy/gcp-budget.sh <PROJECT_ID> <AMOUNT>`): the next notification reopens it.

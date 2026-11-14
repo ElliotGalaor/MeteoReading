@@ -115,6 +115,9 @@ The dashboard runs on **Google Cloud Run**, deployed by GitHub Actions:
 - **weekly data refresh**: every Monday the image is rebuilt with the latest Météo-France observations and
   deployed the same way.
 
+- **capped cost**: at most one instance per service, and a kill switch (a Cloud Function fed by the billing
+  budget) takes the site offline if half of the 5 USD monthly budget is spent, then reopens it the next month.
+
 Set-up (one script in Cloud Shell, a few GitHub variables), costs and limits: [deployment guide](docs/DEPLOY.md).
 Run the same image locally:
 
@@ -223,7 +226,10 @@ To analyse the whole of France (overseas territories included), set `extra_depar
 MeteoReading/
 ├── .github/               # CI and CD workflows, Cloud Run deploy action
 ├── Dockerfile             # image: dependencies, data built at build time, dashboard
-├── deploy/gcp-setup.sh    # one-time Google Cloud setup (Cloud Shell)
+├── deploy/                # Google Cloud setup scripts (Cloud Shell)
+│   ├── gcp-setup.sh       # one-time setup: registry, service accounts, keyless GitHub access
+│   ├── gcp-budget.sh      # monthly budget and its kill switch
+│   └── budget_guard/      # Cloud Function: closes the site when the budget is nearly spent
 ├── config.yaml            # cities, periods, thresholds, paths: all the settings
 ├── meteo/                 # Python package
 │   ├── __main__.py        # command-line interface

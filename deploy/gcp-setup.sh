@@ -6,7 +6,7 @@
 #
 # It creates, or reuses when they already exist:
 #   - the Cloud Run, Artifact Registry, IAM and Security Token Service APIs;
-#   - an Artifact Registry Docker repository that keeps only the 5 most recent images;
+#   - an Artifact Registry Docker repository that keeps only the 3 most recent images;
 #   - a "github-deployer" service account, allowed to deploy Cloud Run services and push images, nothing else;
 #   - a "meteoreading-run" service account the app runs as, with no role at all;
 #   - a Workload Identity pool and provider that trust GitHub's OIDC tokens for this repository only:
@@ -38,11 +38,11 @@ if ! gcloud artifacts repositories describe "$REPOSITORY" --location "$REGION" >
     gcloud artifacts repositories create "$REPOSITORY" --repository-format=docker --location "$REGION" \
         --description="Météo Analytics images deployed by GitHub Actions"
 fi
-# Keep the 5 most recent images (enough to roll back), delete the older ones: storage stays small
+# Keep the 3 most recent images (enough to roll back), delete the older ones: storage stays small
 policy=$(mktemp)
 cat > "$policy" << 'JSON'
 [
-  {"name": "keep-5-most-recent", "action": {"type": "Keep"}, "mostRecentVersions": {"keepCount": 5}},
+  {"name": "keep-3-most-recent", "action": {"type": "Keep"}, "mostRecentVersions": {"keepCount": 3}},
   {"name": "delete-the-rest", "action": {"type": "Delete"}, "condition": {"tagState": "any"}}
 ]
 JSON
