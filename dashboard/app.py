@@ -6,7 +6,6 @@ Run from the project root:
 from __future__ import annotations
 
 import sys
-import time
 from pathlib import Path
 
 # `streamlit run` only puts the script's own folder (dashboard/) on the import path:
@@ -19,6 +18,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from meteo.stats import SEASONS, trend
+from pivot_page import page_pivot
 from route_page import page_route
 from ui import (
     CFG,
@@ -28,7 +28,6 @@ from ui import (
     GRID,
     HEAT,
     INK,
-    INK2,
     MUTED,
     OLD,
     RAIN,
@@ -43,13 +42,11 @@ from ui import (
     city_colors,
     doy_climatology,
     era5,
-    example_queries,
     num,
     page_header,
     pvalue,
     results,
     rolling,
-    run_user_sql,
     signed,
     signed_color,
     source_note,
@@ -544,54 +541,6 @@ def page_quality():
 
 
 # =============================================================================
-TABLE_DOCS = {
-    "city_daily": "1 row per city and per day (TN, TX, Tmean, rainfall, wind)",
-    "city_monthly": "monthly aggregates per city + validity",
-    "city_yearly": "annual aggregates + extreme-weather indicators",
-    "city_heatwaves": "heat episodes (consecutive days ≥ 30 °C)",
-    "city_dry_spells": "runs of dry days",
-    "ref_station": "reference stations of each city",
-    "dim_station": "all stations: metadata and completeness",
-    "obs_daily": f"view: the {num(results().get('pipeline', {}).get('n_rows', 0), 0)} validated records, all stations",
-    "dq_summary": "quality summary by variable and status",
-}
-
-
-def _load_example():
-    st.session_state["sql_text"] = example_queries()[st.session_state["sql_example"]]
-
-
-def page_sql():
-    page_header("SQL queries", "Query the DuckDB warehouse directly (read-only).")
-    ex = example_queries()
-    if "sql_text" not in st.session_state:
-        st.session_state["sql_text"] = next(iter(ex.values()))
-    left, right = st.columns([3, 1.3], gap="large")
-    with left:
-        st.selectbox("Example", list(ex), key="sql_example", on_change=_load_example)
-        sql = st.text_area("Query", key="sql_text", height=260)
-        run = st.button("Run", type="primary", icon=":material/play_arrow:")
-    with right:
-        st.markdown("**Available tables**")
-        for name, doc in TABLE_DOCS.items():
-            st.markdown(f"<div style='margin-bottom:6px'><code>{name}</code><br>"
-                        f"<span style='color:{INK2};font-size:0.85rem'>{doc}</span></div>", unsafe_allow_html=True)
-    if run or "sql_result" not in st.session_state:
-        t0 = time.perf_counter()
-        try:
-            st.session_state["sql_result"] = (run_user_sql(sql), time.perf_counter() - t0, None)
-        except Exception as exc:  # SQL error: shown as is
-            st.session_state["sql_result"] = (None, 0, str(exc))
-    df, elapsed, err = st.session_state["sql_result"]
-    if err:
-        st.error(err)
-        return
-    st.caption(f"{num(len(df), 0)} row(s) in {num(elapsed * 1000, 0)} ms (display limited to 10,000 rows)")
-    st.dataframe(df, hide_index=True)
-    st.download_button("Download as CSV", df.to_csv(index=False).encode("utf-8"), "result.csv", "text/csv",
-                       icon=":material/download:")
-
-
 # =============================================================================
 route = st.Page(page_route, title="Route weather", icon=":material/route:", url_path="route")
 if warehouse_ready():
@@ -602,7 +551,7 @@ if warehouse_ready():
             st.Page(page_year, title="A year in detail", icon=":material/calendar_month:", url_path="year"),
             st.Page(page_extremes, title="Extremes and records", icon=":material/local_fire_department:", url_path="extremes"),
             st.Page(page_quality, title="Data and quality", icon=":material/fact_check:", url_path="quality"),
-            st.Page(page_sql, title="SQL queries", icon=":material/terminal:", url_path="sql"),
+            st.Page(page_pivot, title="Pivot table", icon=":material/pivot_table_chart:", url_path="pivot"),
         ],
         "Tools": [route],
     })

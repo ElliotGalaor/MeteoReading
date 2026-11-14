@@ -47,7 +47,7 @@ The full report, with every figure and the method, is in [reports/climate_report
 | **Exploratory machine learning**: PCA + k-means, choice of k by silhouette | [meteo/analysis.py](meteo/analysis.py) |
 | **Cross-validation** against an independent source (ERA5 reanalysis) | [meteo/era5.py](meteo/era5.py) |
 | **Data visualisation**: colour-blind-safe palette, one idea per chart | [reports/figures/](reports/figures/) |
-| **Dashboard**: 7 interactive pages, including a SQL editor | [dashboard/](dashboard/) |
+| **Dashboard**: 7 interactive pages, including a pivot table built from a whitelisted catalog (no SQL from the client, bound parameters, totals with `GROUPING SETS`) | [dashboard/](dashboard/), [meteo/pivot.py](meteo/pivot.py) |
 | **Geospatial data**: GPX/KML/GeoJSON parsing (safe XML), routing on OpenStreetMap, resampling, elevation, bearings, time interpolation, head/tail wind | [meteo/gps.py](meteo/gps.py), [meteo/routing.py](meteo/routing.py), [meteo/route_weather.py](meteo/route_weather.py) |
 | **Software quality**: externalised configuration, automated tests, `ruff` lint, pipeline reproducible in one command | [tests/](tests/), [config.yaml](config.yaml) |
 | **DevOps**: GitHub Actions CI (lint, tests on 3 Python versions, **Docker** image with its data built once, smoke-tested and published to GHCR, weekly data refresh) and CD (that same image promoted on **Google Cloud Run**: staging, then production after approval, keyless authentication through Workload Identity Federation) | [.github/workflows/](.github/workflows/), [Dockerfile](Dockerfile), [docs/DEPLOY.md](docs/DEPLOY.md) |
@@ -134,8 +134,27 @@ docker run -p 8080:8080 ghcr.io/elliotgalaor/meteoreading:latest
 | **A year in detail** | every day of a year compared with the normal (mean and 10th-90th percentiles) |
 | **Extremes and records** | city × decade heatmap, then vs now, records, filterable heat episodes |
 | **Data and quality** | pipeline diagram, quality summary, station network, series splicing, ERA5 validation, limitations |
-| **SQL queries** | live SQL editor on the warehouse (read-only, disk access blocked), CSV export |
+| **Pivot table** | cross any dimension (city, year, decade, season, month, département, altitude…) with any measure and aggregation, on 6 datasets up to the 25 million daily records; filters, totals, colour scale, CSV export, and the generated query shown |
 | **Route weather** | weather along a route drawn on the map, uploaded or picked from the samples: map, profile, point-by-point reading, nearby station observations |
+
+## Pivot table, without client-side SQL
+
+The dashboard does not accept SQL: an earlier version had a free SQL editor, which is an open door to injection
+even on a read-only database (heavy queries, reading every table). The **pivot table** page replaces it:
+
+- the user only **picks from lists**: a dataset, one or two dimensions in rows, one in columns, a measure, an
+  aggregation (no sum of temperatures: each measure lists the aggregations that make sense) and filter values;
+- the query is **assembled on the server** in [meteo/pivot.py](meteo/pivot.py) from a fixed catalog of SQL
+  fragments; anything not in the catalog is refused, and the filter values are **bound parameters** (`?`), never
+  written into the SQL text. The tests try injections through every input;
+- **totals** come from `GROUPING SETS`, so they are computed on the underlying values: the total of a median is
+  the median of all the values, not the median of the medians;
+- the connection stays **read-only with no file access**: two locks rather than one;
+- the page shows the generated query and its bound values, which keeps the SQL visible for a reviewer.
+
+Six datasets, from the yearly indicators per city (1,500 rows) to every validated daily record (25 million rows,
+aggregated in about 0.1 s). The annotated SQL queries remain available from the command line
+(`python -m meteo query sql/example_queries.sql`).
 
 ## Route weather reading
 
@@ -240,6 +259,7 @@ MeteoReading/
 │   ├── era5.py            # Open-Meteo cross-validation
 │   ├── gps.py             # GPS tracks: parsing, distances, sampling, timing
 │   ├── routing.py         # track from map clicks: routing, resampling, elevation
+│   ├── pivot.py           # pivot tables: catalog, query assembly, totals
 │   ├── route_weather.py   # weather reading along a track
 │   ├── viz.py, palette.py # static charts
 │   └── report.py, fmt.py  # HTML report
