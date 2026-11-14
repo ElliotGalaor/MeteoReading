@@ -8,6 +8,9 @@ analytical warehouse, draws statistically sound conclusions and presents them in
 and an **HTML report**. It also gives a **weather reading along any GPS track**: draw a route on the map, import a GPX/KML/GeoJSON
 file or pick a sample, and see the conditions at the time you pass each point.
 
+**Try it online: [meteoreading-fqwbevysja-ew.a.run.app](https://meteoreading-fqwbevysja-ew.a.run.app)**
+(Google Cloud Run; after a quiet period, the first page takes a few seconds to start).
+
 > Business question: *how much have large French cities warmed since 1951, and what does it change in practice
 > (extreme heat, frost, rainfall)?*
 
@@ -98,6 +101,11 @@ python -m pytest             # tests
 ## Deployment
 
 The dashboard runs on **Google Cloud Run**, deployed by GitHub Actions:
+
+| Environment | URL | Deployed |
+|---|---|---|
+| Production | [meteoreading-fqwbevysja-ew.a.run.app](https://meteoreading-fqwbevysja-ew.a.run.app) | after approval |
+| Staging | [meteoreading-staging-fqwbevysja-ew.a.run.app](https://meteoreading-staging-fqwbevysja-ew.a.run.app) | automatically, after each merge to `main` |
 
 - **continuous integration** on every pull request and push: `ruff` and `actionlint`, tests on Python 3.12, 3.13
   and 3.14, then a Docker image built **with its data** (the pipeline runs during the build) and smoke-tested:
