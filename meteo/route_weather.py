@@ -2,9 +2,10 @@
 
 For each point sampled along the route, fetch the hourly weather from Open-Meteo and
 interpolate it at the time the traveller is there:
-- trip in the next 15 days or the last ~3 months -> forecast API (best models for the
+- trip in the next 15 days or the last ~2 months -> forecast API (best models for the
   area, e.g. Météo-France AROME/ARPEGE over France);
 - older trip -> ERA5 reanalysis archive (what the weather actually was).
+If the forecast API returns empty values for the trip's hours, the archive is used instead when it covers them.
 
 The wind is projected on the direction of travel to get head/tail/cross wind.
 """
@@ -21,7 +22,9 @@ from .gps import Track, sample_points
 
 FORECAST_API = "https://api.open-meteo.com/v1/forecast"
 ARCHIVE_API = "https://archive-api.open-meteo.com/v1/archive"
-FORECAST_PAST_DAYS = 90      # the forecast API keeps ~92 days of past data
+# The forecast API accepts dates up to 92 days back, but only returns values for about the last 65 days
+# (nulls before): stay well inside, and fall back to the archive if values are missing anyway.
+FORECAST_PAST_DAYS = 60
 FORECAST_FUTURE_DAYS = 15    # and forecasts 16 days ahead (today included)
 ARCHIVE_DELAY_DAYS = 6       # ERA5 is published with a ~5-day delay
 HOURLY = ["temperature_2m", "apparent_temperature", "precipitation", "precipitation_probability",
@@ -29,6 +32,7 @@ HOURLY = ["temperature_2m", "apparent_temperature", "precipitation", "precipitat
           # for the danger and comfort scores (route_scores.py); the archive has no probability, visibility or UV
           "is_day", "dew_point_2m", "snowfall", "visibility", "uv_index"]
 RAIN_THRESHOLD = 0.2         # mm/h: below this, the hour counts as dry
+CORE = ["temperature_2m", "precipitation", "wind_speed_10m", "weather_code"]   # needed for every reading
 
 # WMO weather codes -> (label, icon)
 WEATHER_CODES = {
@@ -137,6 +141,17 @@ def interpolate_at(hourly: pd.DataFrame, t: pd.Timestamp) -> dict:
     code = hourly["weather_code"].iloc[nearest] if "weather_code" in hourly else np.nan
     out["weather_code"] = int(code) if pd.notna(code) else None
     return out
+
+
+def missing_hours(samples: pd.DataFrame, hourly: list[pd.DataFrame]) -> int:
+    """Number of points whose passage time is not framed by complete hourly values (the API returned nulls)."""
+    missing = 0
+    for h, t in zip(hourly, samples["time"], strict=True):
+        dt = np.abs(epoch_seconds(h["time"]) - float(epoch_seconds([t])[0]))
+        near = h.loc[dt <= 3600, [c for c in CORE if c in h]]
+        if near.empty or len(near.columns) < len(CORE) or near.isna().any().any():
+            missing += 1
+    return missing
 
 
 def wind_components(speed, wind_from_deg, bearing_deg):
@@ -256,13 +271,21 @@ def read_route(track: Track, max_points: int = 40, session=None, today: date | N
     samples = sample_points(track, max_points=max_points)
     start, end = samples["time"].min().date(), samples["time"].max().date()
     # one day of margin on each side for time zones and interpolation at day boundaries
+    today = today or date.today()
     source = choose_source(start, end, today)
     q_start, q_end = start - timedelta(days=1), end + timedelta(days=1)
     if source == "forecast":
-        today = today or date.today()
-        q_start = max(q_start, today - timedelta(days=FORECAST_PAST_DAYS))
-        q_end = min(q_end, today + timedelta(days=FORECAST_FUTURE_DAYS))
-    hourly, elevations, tz = fetch_hourly(samples, q_start, q_end, source, session=session)
+        f_start = max(q_start, today - timedelta(days=FORECAST_PAST_DAYS))
+        f_end = min(q_end, today + timedelta(days=FORECAST_FUTURE_DAYS))
+        hourly, elevations, tz = fetch_hourly(samples, f_start, f_end, source, session=session)
+        if missing_hours(samples, hourly) and end <= today - timedelta(days=ARCHIVE_DELAY_DAYS):
+            source = "archive"   # the forecast API has no values for these days, the archive does
+    if source == "archive":
+        hourly, elevations, tz = fetch_hourly(samples, q_start, q_end, source, session=session)
+    if missing_hours(samples, hourly):
+        raise ValueError("The weather service has no data for the times of this trip. Weather is available for the "
+                         f"next {FORECAST_FUTURE_DAYS + 1} days and for the past; the most recent days may not be "
+                         "complete yet.")
     df = build_reading_table(samples, hourly, elevations)
     stats, insights = summarize(df, tz)
     return RouteReading(track=track, points=df, source=source, timezone=tz, insights=insights, stats=stats)

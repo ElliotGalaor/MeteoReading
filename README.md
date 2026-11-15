@@ -174,7 +174,7 @@ Then the tool:
 2. **times each point**: the recorded timestamps for a past activity, or an estimate for a planned trip
    (departure time + speed, with extra time for climbs when walking or cycling);
 3. **samples up to 40 points** at least 1 km apart and fetches the hourly weather for all of them in one batch:
-   the **Open-Meteo forecast API** for the last 3 months and the next 16 days (best models for the area, e.g.
+   the **Open-Meteo forecast API** for the last 2 months and the next 16 days (best models for the area, e.g.
    Météo-France AROME/ARPEGE over France), the **ERA5 archive** for older trips;
 4. **interpolates the weather at the exact time** you pass each point (wind as a vector), adjusts temperatures to
    the altitude, and splits the wind into **headwind / tailwind / crosswind** along your heading;

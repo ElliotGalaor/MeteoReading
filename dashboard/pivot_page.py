@@ -6,7 +6,7 @@ import streamlit as st
 from matplotlib.colors import LinearSegmentedColormap
 
 from meteo.pivot import TOTAL, Measure, PivotResult, PivotSpec, datasets, filter_values, run_pivot, year_range
-from ui import HEAT_STOPS, RAIN_STOPS, TH, _connect, num, page_header
+from ui import HEAT_STOPS, RAIN_STOPS, SURFACE, TH, _connect, num, page_header
 
 CATALOG = datasets(TH)
 NONE = "(none)"
@@ -18,8 +18,12 @@ EXAMPLES = {
     "Station network": dict(dataset="stations", rows=["altitude"], column="dep", measure="stations", agg="Count"),
     "25 million records": dict(dataset="records", rows=["dep"], column="decade", measure="tx", agg="Mean"),
 }
-COLOURS = {"heat": LinearSegmentedColormap.from_list("heat", HEAT_STOPS),
-           "blue": LinearSegmentedColormap.from_list("blue", RAIN_STOPS)}
+# Empty cells take the page colour: by default a colour map paints them in transparent black, which pandas writes
+# as opaque black, the darkest colour of both scales
+COLOURS = {"heat": LinearSegmentedColormap.from_list("heat", HEAT_STOPS).with_extremes(bad=SURFACE),
+           "blue": LinearSegmentedColormap.from_list("blue", RAIN_STOPS).with_extremes(bad=SURFACE)}
+# Light text only on cells dark enough for it: at this luminance both text colours reach about 4.3:1
+TEXT_THRESHOLD = 0.17
 
 
 @st.cache_data(show_spinner=False)
@@ -70,7 +74,7 @@ def _style(result: PivotResult, measure: Measure, colour: bool):
     body_rows = t.index[t[result.row_labels[0]] != TOTAL]
     styler = t.style.format(f"{{:,.{result.decimals}f}}", subset=values, na_rep="–")
     if colour and body_cols and len(body_rows):
-        styler = styler.background_gradient(cmap=COLOURS[measure.scale], axis=None,
+        styler = styler.background_gradient(cmap=COLOURS[measure.scale], axis=None, text_color_threshold=TEXT_THRESHOLD,
                                             subset=pd.IndexSlice[body_rows, body_cols])
     return styler
 
@@ -139,7 +143,7 @@ def page_pivot():
     st.caption(f"{num(int(detail.sum()), 0)} cells from {num(int(result.long.loc[detail, 'n'].sum()), 0)} values, "
                f"computed in {num(result.elapsed * 1000, 0)} ms")
     height = min(36 * (len(result.table) + 1) + 4, 640)
-    st.dataframe(_style(result, measure, colour), hide_index=True, height=height)
+    st.dataframe(_style(result, measure, colour), hide_index=True, height=height, placeholder="–")
     st.download_button("Download as CSV", result.table.to_csv(index=False).encode("utf-8"), "pivot_table.csv",
                        "text/csv", icon=":material/download:")
     with st.expander("The query that ran"):

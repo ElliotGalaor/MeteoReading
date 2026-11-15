@@ -20,7 +20,15 @@ from meteo.gps import (
     to_gpx,
     with_times,
 )
-from meteo.route_weather import build_reading_table, choose_source, interpolate_at, read_route, summarize, wind_components
+from meteo.route_weather import (
+    build_reading_table,
+    choose_source,
+    epoch_seconds,
+    interpolate_at,
+    read_route,
+    summarize,
+    wind_components,
+)
 
 GPX = b"""<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1">
@@ -123,6 +131,7 @@ def test_source_selection():
     today = date(2026, 11, 14)
     assert choose_source(date(2026, 11, 15), date(2026, 11, 15), today) == "forecast"
     assert choose_source(date(2026, 10, 1), date(2026, 10, 1), today) == "forecast"
+    assert choose_source(date(2026, 9, 1), date(2026, 9, 1), today) == "archive"   # the forecast API has no values then
     assert choose_source(date(2025, 7, 15), date(2025, 7, 15), today) == "archive"
     with pytest.raises(ValueError):
         choose_source(date(2026, 12, 25), date(2026, 12, 25), today)
@@ -167,17 +176,28 @@ def test_summary_finds_rain_and_gusts():
 
 
 class FakeSession:
-    """Stands in for requests.Session: returns one location per requested coordinate."""
+    """Stands in for requests.Session: returns one location per requested coordinate.
+
+    `empty` lists the APIs ("forecast", "archive") that answer with nulls only, as the forecast API does for dates
+    it accepts but no longer has."""
+
+    def __init__(self, empty=()):
+        self.empty, self.calls = empty, []
 
     def get(self, url, params, timeout):
+        api = "archive" if "archive" in url else "forecast"
+        self.calls.append(api)
         n = len(params["latitude"].split(","))
         times = pd.date_range(params["start_date"], periods=24 * 4, freq="h", tz="UTC")
+
+        def values(v):
+            return [None if api in self.empty else v] * len(times)
         loc = {"elevation": 250.0, "timezone": "Europe/Paris",
-               "hourly": {"time": (times.astype("int64") // 10**9).tolist(),
-                          **{k: [12.0] * len(times) for k in ("temperature_2m", "apparent_temperature",
-                                                              "wind_speed_10m", "wind_gusts_10m", "cloud_cover")},
-                          "precipitation": [0.0] * len(times), "precipitation_probability": [5] * len(times),
-                          "weather_code": [1] * len(times), "wind_direction_10m": [180.0] * len(times)}}
+               "hourly": {"time": epoch_seconds(times).astype(int).tolist(),
+                          **{k: values(12.0) for k in ("temperature_2m", "apparent_temperature",
+                                                       "wind_speed_10m", "wind_gusts_10m", "cloud_cover")},
+                          "precipitation": values(0.0), "precipitation_probability": values(5),
+                          "weather_code": values(1), "wind_direction_10m": values(180.0)}}
 
         class Resp:
             status_code = 200
@@ -195,3 +215,24 @@ def test_read_route_end_to_end_without_network():
     assert len(r.points) >= 2
     assert (r.points["headwind"] < 0).all()   # wind from the south, riding north: tailwind
     assert r.insights[0].startswith("Dry all the way")
+
+
+def _ride_on(day: str):
+    t = parse_track(GPX, "ride.gpx")
+    return with_times(t, passage_times(t, pd.Timestamp(f"{day} 08:00", tz="Europe/Paris"), speed_kmh=15))
+
+
+def test_empty_forecast_falls_back_to_the_archive():
+    session = FakeSession(empty=("forecast",))
+    r = read_route(_ride_on("2026-10-15"), session=session, today=date(2026, 11, 14))
+    assert session.calls == ["forecast", "archive"]
+    assert r.source == "archive" and r.points["temperature_2m"].notna().all()
+    assert r.points["condition"].ne("Unknown").all()
+
+
+def test_no_weather_data_gives_a_clear_message():
+    # Two days ago: too recent for the archive, and the forecast API answers with nulls
+    with pytest.raises(ValueError, match="no data for the times of this trip"):
+        read_route(_ride_on("2026-11-12"), session=FakeSession(empty=("forecast", "archive")), today=date(2026, 11, 14))
+    with pytest.raises(ValueError, match="no data"):
+        read_route(_ride_on("2025-07-15"), session=FakeSession(empty=("archive",)), today=date(2026, 11, 14))

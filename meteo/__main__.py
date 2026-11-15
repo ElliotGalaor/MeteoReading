@@ -111,7 +111,10 @@ def cmd_route(cfg, args):
         track = with_times(track, passage_times(track, start, args.speed or preset["speed"],
                                                 preset["climb_min_per_100m"]))
     s = summary(track)
-    reading = read_route(track)
+    try:
+        reading = read_route(track)
+    except (ValueError, RuntimeError) as exc:
+        raise SystemExit(f"error: {exc}") from None
     pts = reading.points
     local = pts["time"].dt.tz_convert(reading.timezone)
     print(f"\n{track.name}: {s['distance_km']:.1f} km, {local.iloc[0]:%a %d %b %Y %H:%M} -> {local.iloc[-1]:%H:%M} "
