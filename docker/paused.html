@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Paused · Météo Analytics</title>
+  <style>
+    :root { --bg: #fcfcfb; --ink: #0b0b0b; --muted: #52514e; --accent: #2a78d6; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--ink);
+           font-family: "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; }
+    main { max-width: 32rem; padding: 2rem 1.5rem; }
+    h1 { font-size: 1.6rem; margin: 0 0 .75rem; }
+    p { color: var(--muted); line-height: 1.5; }
+    a.button { display: inline-block; margin-top: 1rem; padding: .6rem 1.2rem; border-radius: .5rem;
+               background: var(--accent); color: #fff; text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>The dashboard is paused</h1>
+    <p>Nothing happened in this tab for a while, so it disconnected: the server can then go to sleep instead of
+       running for an open tab. Your page is one click away.</p>
+    <a class="button" id="resume" href="/">Resume</a>
+  </main>
+  <script>
+    // Back to the page the visitor was on (a path of this site only)
+    const from = new URLSearchParams(location.search).get("from");
+    if (from && from.startsWith("/") && !from.startsWith("//")) document.getElementById("resume").href = from;
+  </script>
+</body>
+</html>

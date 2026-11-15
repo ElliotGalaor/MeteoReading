@@ -32,9 +32,19 @@ RUN echo "Data version: ${DATA_VERSION}" \
 
 
 FROM base AS app
+# IDLE_PAUSE_MINUTES: an idle tab disconnects after that long (dashboard/idle.py), so the service can scale to zero
 ENV PORT=8080 \
     STREAMLIT_SERVER_HEADLESS=true \
-    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
+    STREAMLIT_SERVER_FILE_WATCHER_TYPE=none \
+    IDLE_PAUSE_MINUTES=20
+
+# Caddy in front of Streamlit: compression, security headers, robots.txt, the "paused" page (docker/Caddyfile)
+COPY --from=caddy:2.11.9-alpine /usr/bin/caddy /usr/bin/caddy
+
+# Unprivileged user. The files stay owned by root: the app only reads them (the warehouse is opened read-only),
+# and a `chown -R` would copy the whole warehouse into a new layer
+RUN useradd --create-home --uid 10001 appuser
 
 COPY config.yaml .
 COPY .streamlit ./.streamlit
@@ -44,9 +54,7 @@ COPY dashboard ./dashboard
 COPY samples ./samples
 COPY --from=data /app/data/warehouse.duckdb /app/data/pipeline_stats.json ./data/
 COPY --from=data /app/reports ./reports
-
-# Unprivileged user; the warehouse is only ever opened read-only
-RUN useradd --create-home --uid 10001 appuser && chown -R appuser /app
+COPY docker ./docker
 USER appuser
 
 # Cloud Run sets PORT (8080 by default); the same image runs anywhere with `docker run -p 8080:8080`
@@ -54,4 +62,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\", \"8080\")}/_stcore/health', timeout=4)"
 
-CMD ["sh", "-c", "exec streamlit run dashboard/app.py --server.port=${PORT} --server.address=0.0.0.0"]
+# Streamlit on 127.0.0.1:8501, Caddy on $PORT in front of it (docker/start.sh)
+CMD ["bash", "docker/start.sh"]

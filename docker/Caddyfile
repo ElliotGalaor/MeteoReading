@@ -1,0 +1,59 @@
+# Front of the container, in front of Streamlit (which listens on 127.0.0.1:8501 only):
+# - compresses responses: the dashboard's JavaScript goes from 7.6 MB to about 2.6 MB on a first visit;
+# - adds the security headers Streamlit does not send;
+# - answers robots.txt (staging is not indexed) and hides Streamlit's internal metrics;
+# - serves the page shown when an idle tab pauses itself (see dashboard/idle.py).
+{
+	admin off
+	auto_https off
+	persist_config off
+	log default {
+		output stderr
+		format console
+		level ERROR
+	}
+}
+
+:{$PORT:8080} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		# The maps and components are same-origin iframes: framing is allowed for this site only
+		Content-Security-Policy "frame-ancestors 'self'"
+		X-Frame-Options "SAMEORIGIN"
+		-Server
+	}
+
+	@staging header_regexp Host ^meteoreading-staging
+	header @staging X-Robots-Tag "noindex, nofollow"
+
+	handle /robots.txt {
+		header Content-Type "text/plain; charset=utf-8"
+		respond @staging <<TXT
+			User-agent: *
+			Disallow: /
+			TXT 200
+		respond <<TXT
+			User-agent: *
+			Allow: /
+			TXT 200
+	}
+
+	# Cache, session and memory figures of the server: not for the public
+	handle /_stcore/metrics {
+		respond 404
+	}
+
+	handle /paused.html {
+		root * /app/docker
+		file_server
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:8501
+	}
+}
