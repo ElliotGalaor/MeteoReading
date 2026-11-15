@@ -99,7 +99,7 @@ def cmd_route(cfg, args):
 
     from .gps import ACTIVITIES, parse_track, passage_times, summary, with_times
     from .route_scores import assess
-    from .route_weather import read_route
+    from .route_weather import clock_format, read_route, track_timezone
 
     path = Path(args.track)
     track = parse_track(path.read_bytes(), path.name)
@@ -107,7 +107,11 @@ def cmd_route(cfg, args):
         if not args.start:
             raise SystemExit("This track has no timestamps: add --start 'YYYY-MM-DD HH:MM'")
         preset = ACTIVITIES[args.activity.capitalize()]
-        start = pd.Timestamp(args.start, tz=args.tz)
+        tz = args.tz
+        if tz is None:   # the time zone where the track starts
+            first = track.points.iloc[0]
+            tz = track_timezone(float(first["lat"]), float(first["lon"])) or "Europe/Paris"
+        start = pd.Timestamp(args.start).tz_localize(tz, nonexistent="shift_forward", ambiguous=True)
         track = with_times(track, passage_times(track, start, args.speed or preset["speed"],
                                                 preset["climb_min_per_100m"]))
     s = summary(track)
@@ -130,10 +134,10 @@ def cmd_route(cfg, args):
     for a in scores.advice:
         print(f"  - {a.title}: {a.text}")
     table = pd.DataFrame({
-        "km": pts["dist_km"].round(1), "time": local.dt.strftime("%H:%M"), "ele_m": pts["ele_profile"].round(0),
+        "km": pts["dist_km"].round(1), "time": local.dt.strftime(clock_format(local)), "ele_m": pts["ele_profile"].round(0),
         "conditions": pts["condition"], "temp_c": pts["temperature_2m"].round(1),
         "rain_mm_h": pts["precipitation"].round(1), "wind": pts["wind_from"] + " " + pts["wind_speed_10m"].round(0).astype(int).astype(str),
-        "headwind": pts["headwind"].round(0), "gusts": pts["wind_gusts_10m"].round(0),
+        "headwind": pts["headwind"].round(0) + 0.0, "gusts": pts["wind_gusts_10m"].round(0),   # + 0.0: no "-0.0"
     })
     print("\n" + table.to_string(index=False))
     if args.out:
@@ -169,7 +173,7 @@ def main(argv: list[str] | None = None) -> int:
     p_r.add_argument("--activity", choices=["walking", "cycling", "driving"], default="cycling",
                      help="sets the speed of a planned trip, and the danger and comfort scores")
     p_r.add_argument("--speed", type=float, help="average speed in km/h (default: the activity's)")
-    p_r.add_argument("--tz", default="Europe/Paris", help="time zone of --start")
+    p_r.add_argument("--tz", help="time zone of --start (default: the one where the track starts)")
     p_r.add_argument("--out", help="save the point-by-point reading to this CSV file")
     p_r.add_argument("--png", help="save a profile chart (elevation, temperature, rain, wind) to this PNG file")
     p_r.set_defaults(func=cmd_route)

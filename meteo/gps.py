@@ -8,13 +8,16 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from xml.etree.ElementTree import ParseError
 from xml.sax.saxutils import escape
 
 import numpy as np
 import pandas as pd
+from defusedxml import DefusedXmlException
 from defusedxml import ElementTree as ET
 
 MAX_POINTS = 200_000
+ELE_DEADBAND_M = 5.0      # altitude changes smaller than this are noise
 EARTH_RADIUS_KM = 6371.0
 
 # Rough travel-time model: flat speed (km/h) + extra minutes per 100 m of ascent
@@ -30,6 +33,7 @@ ACTIVITIES = {
 class Track:
     name: str
     points: pd.DataFrame  # lat, lon, ele (NaN if unknown), time (UTC, NaT if unknown), dist_km
+    time_issue: str | None = None   # why the file's timestamps were not used, if it had some
 
     @property
     def has_time(self) -> bool:
@@ -46,17 +50,25 @@ class Track:
 
 # --- Parsing ------------------------------------------------------------------------
 def parse_track(data: bytes, filename: str) -> Track:
-    """Read a GPX, KML or GeoJSON file into a Track."""
+    """Read a GPX, KML or GeoJSON file into a Track. Any unreadable file raises a ValueError with a plain message."""
     ext = Path(filename).suffix.lower()
     name = Path(filename).stem
-    if ext == ".gpx":
-        rows, found_name = _parse_gpx(data)
-    elif ext == ".kml":
-        rows, found_name = _parse_kml(data)
-    elif ext in (".geojson", ".json"):
-        rows, found_name = _parse_geojson(data)
-    else:
+    parsers = {".gpx": ("GPX", _parse_gpx), ".kml": ("KML", _parse_kml),
+               ".geojson": ("GeoJSON", _parse_geojson), ".json": ("GeoJSON", _parse_geojson)}
+    if ext not in parsers:
         raise ValueError(f"Unsupported file type '{ext}': use .gpx, .kml or .geojson")
+    kind, parser = parsers[ext]
+    if not data.strip():
+        raise ValueError("the file is empty.")
+    try:
+        rows, found_name = parser(data)
+    except DefusedXmlException:
+        raise ValueError("the file declares XML entities or a DTD, which are refused for security reasons.") from None
+    except ParseError as exc:
+        line = exc.position[0] if getattr(exc, "position", None) else "?"
+        raise ValueError(f"this is not a valid {kind} file: the XML is broken or cut off (line {line}).") from None
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise ValueError("this is not a valid GeoJSON file: the JSON is broken or cut off.") from None
     return build_track(rows, found_name or name)
 
 
@@ -77,13 +89,18 @@ def build_track(rows: list[tuple], name: str = "Track") -> Track:
         raise ValueError("The track needs at least 2 valid points")
     # Times are only used if (almost) every point has one and they move forward
     t = df["time"]
-    if t.notna().mean() < 0.9 or not t.dropna().is_monotonic_increasing:
+    time_issue = None
+    if t.notna().any() and t.notna().mean() < 0.9:
+        time_issue = "too many points have no timestamp"
+    elif t.notna().any() and not t.dropna().is_monotonic_increasing:
+        time_issue = "the timestamps are not in order"
+    if time_issue or t.isna().all():
         df["time"] = pd.NaT
     elif t.isna().any():
         df["time"] = t.interpolate(limit_direction="both")
     df["time"] = pd.to_datetime(df["time"], utc=True)
     df["dist_km"] = cumulative_distance(df["lat"].to_numpy(), df["lon"].to_numpy())
-    return Track(name=name, points=df)
+    return Track(name=name, points=df, time_issue=time_issue)
 
 
 def _local(tag: str) -> str:
@@ -123,9 +140,11 @@ def _parse_kml(data: bytes) -> tuple[list[tuple], str | None]:
     if coords and len(whens) == len(coords):
         rows = []
         for when, c in zip(whens, coords, strict=True):
-            parts = c.split()
-            rows.append((parts[1], parts[0], parts[2] if len(parts) > 2 else None, when))
-        return rows, name
+            parts = (c or "").split()
+            if len(parts) >= 2:
+                rows.append((parts[1], parts[0], parts[2] if len(parts) > 2 else None, when))
+        if rows:
+            return rows, name
     rows = []
     for el in root.iter():
         if _local(el.tag) == "coordinates" and el.text:
@@ -138,24 +157,44 @@ def _parse_kml(data: bytes) -> tuple[list[tuple], str | None]:
     return rows, name
 
 
+def _point(c) -> tuple | None:
+    """GeoJSON position [lon, lat(, ele)] -> (lat, lon, ele), or None if it is not one."""
+    if isinstance(c, (list, tuple)) and len(c) >= 2:
+        return c[1], c[0], c[2] if len(c) > 2 else None
+    return None
+
+
 def _parse_geojson(data: bytes) -> tuple[list[tuple], str | None]:
     obj = json.loads(data)
+    if not isinstance(obj, dict):
+        raise ValueError("this GeoJSON file holds no Feature, FeatureCollection or geometry.")
     features = obj.get("features") or ([obj] if obj.get("type") == "Feature" else [{"geometry": obj}])
-    rows, name = [], None
-    for feat in features:
-        geom = feat.get("geometry") or {}
-        props = feat.get("properties") or {}
+    rows, points, name = [], [], None
+    for feat in features if isinstance(features, list) else []:
+        if not isinstance(feat, dict):
+            continue
+        geom = feat.get("geometry") if isinstance(feat.get("geometry"), dict) else {}
+        props = feat.get("properties") if isinstance(feat.get("properties"), dict) else {}
         name = name or props.get("name")
         times = props.get("coordTimes") or props.get("times")
-        lines = {"LineString": [geom.get("coordinates")],
-                 "MultiLineString": geom.get("coordinates")}.get(geom.get("type"), [])
-        for li, line in enumerate(lines or []):
-            line_times = times[li] if times and isinstance(times[0], list) else times
-            for pi, c in enumerate(line or []):
-                t = line_times[pi] if line_times and pi < len(line_times) else None
-                rows.append((c[1], c[0], c[2] if len(c) > 2 else None, t))
+        times = times if isinstance(times, list) else None
+        kind, coords = geom.get("type"), geom.get("coordinates")
+        if kind in ("Point", "MultiPoint"):
+            # Points only count if there is no line, like the waypoints of a GPX file
+            for c in [coords] if kind == "Point" else coords or []:
+                if (p := _point(c)) is not None:
+                    points.append((*p, None))
+            continue
+        lines = {"LineString": [coords], "MultiLineString": coords}.get(kind) or []
+        for li, line in enumerate(lines if isinstance(lines, list) else []):
+            line_times = times[li] if times and isinstance(times[0], list) and li < len(times) else times
+            for pi, c in enumerate(line if isinstance(line, list) else []):
+                if (p := _point(c)) is not None:
+                    t = line_times[pi] if line_times and pi < len(line_times) else None
+                    rows.append((*p, t))
+    rows = rows or points
     if not rows:
-        raise ValueError("No LineString found in the GeoJSON file")
+        raise ValueError("No line or points found in the GeoJSON file")
     return rows, name
 
 
@@ -171,6 +210,14 @@ def cumulative_distance(lat: np.ndarray, lon: np.ndarray) -> np.ndarray:
     return np.concatenate([[0.0], np.cumsum(seg)])
 
 
+def segment_km(dist_km) -> np.ndarray:
+    """Distance around each point of a polyline (half of each neighbouring leg): shares of a route are over km."""
+    d = np.asarray(dist_km, dtype=float)
+    if len(d) < 2:
+        return np.ones(len(d))
+    return np.diff(np.concatenate([[0.0], (d[:-1] + d[1:]) / 2, [d[-1]]]))
+
+
 def bearing_deg(lat1, lon1, lat2, lon2):
     """Initial compass bearing from point 1 to point 2 (0 = north, 90 = east)."""
     p1, p2 = np.radians(lat1), np.radians(lat2)
@@ -181,23 +228,41 @@ def bearing_deg(lat1, lon1, lat2, lon2):
 
 
 def _smooth(e: pd.Series) -> pd.Series:
-    """Light rolling median against GPS altitude noise (skipped on short tracks, where it would erase climbs)."""
-    return e.rolling(5, center=True, min_periods=1).median() if len(e) >= 15 else e
+    """Rolling median (removes spikes) then mean (removes jitter) against altitude noise; skipped on short tracks,
+    where it would erase climbs."""
+    if len(e) < 15:
+        return e
+    return e.rolling(5, center=True, min_periods=1).median().rolling(5, center=True, min_periods=1).mean()
+
+
+def climbs(e: np.ndarray, band: float = ELE_DEADBAND_M) -> tuple[np.ndarray, np.ndarray]:
+    """Metres gained and lost at each point, ignoring ups and downs smaller than `band` (a dead band, as GPS apps
+    do): summing every small difference would count the ±10 m noise of GPS or DEM altitudes as climbing."""
+    gain, loss = np.zeros(len(e)), np.zeros(len(e))
+    if not len(e):
+        return gain, loss
+    ref = e[0]
+    for i in range(1, len(e)):
+        if e[i] - ref >= band:
+            gain[i], ref = e[i] - ref, e[i]
+        elif ref - e[i] >= band:
+            loss[i], ref = ref - e[i], e[i]
+    return gain, loss
 
 
 def elevation_stats(ele: pd.Series) -> dict:
-    """Ascent and descent on a lightly smoothed profile (raw GPS altitude is noisy)."""
+    """Ascent and descent on a lightly smoothed profile, with a dead band (raw altitude is noisy)."""
     e = ele.dropna()
     if len(e) < 2:
         return {"ascent_m": None, "descent_m": None, "min_ele": None, "max_ele": None}
-    diff = _smooth(e).diff().dropna()
-    return {"ascent_m": float(diff[diff > 0].sum()), "descent_m": float(-diff[diff < 0].sum()),
+    gain, loss = climbs(_smooth(e).to_numpy())
+    return {"ascent_m": float(gain.sum()), "descent_m": float(loss.sum()),
             "min_ele": float(e.min()), "max_ele": float(e.max())}
 
 
 def cumulative_ascent(ele: pd.Series) -> np.ndarray:
     e = _smooth(ele.interpolate(limit_direction="both").fillna(0))
-    return np.concatenate([[0.0], np.cumsum(np.clip(np.diff(e.to_numpy()), 0, None))])
+    return np.cumsum(climbs(e.to_numpy())[0])
 
 
 def resample_path(lat, lon, step_km: float = 0.2, max_points: int = 1000) -> tuple[np.ndarray, np.ndarray]:

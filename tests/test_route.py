@@ -7,7 +7,6 @@ from datetime import date
 import numpy as np
 import pandas as pd
 import pytest
-from defusedxml import EntitiesForbidden
 
 from meteo.gps import (
     bearing_deg,
@@ -84,8 +83,45 @@ def test_rejects_bad_files():
         parse_track(b"<gpx></gpx>", "empty.gpx")
     bomb = b"""<?xml version="1.0"?><!DOCTYPE lolz [<!ENTITY lol "lol"><!ENTITY lol2 "&lol;&lol;&lol;">]>
       <gpx><wpt lat="1" lon="1"><name>&lol2;</name></wpt></gpx>"""
-    with pytest.raises(EntitiesForbidden):  # defusedxml refuses entity declarations
+    with pytest.raises(ValueError, match="entities"):  # defusedxml refuses entity declarations
         parse_track(bomb, "bomb.gpx")
+
+
+@pytest.mark.parametrize(("data", "filename", "message"), [
+    (b"", "empty.gpx", "empty"),
+    (b"   \n", "empty.kml", "empty"),
+    (GPX[: len(GPX) // 2], "cut.gpx", "not a valid GPX file"),
+    (bytes(range(256)) * 4, "binary.gpx", "not a valid GPX file"),
+    (b"<kml><Document>", "cut.kml", "not a valid KML file"),
+    (b"", "empty.geojson", "empty"),
+    (b'{"type": "LineString", "coordinates": [[2.35, 48.85]', "cut.geojson", "not a valid GeoJSON file"),
+    (bytes(range(128, 256)), "binary.geojson", "not a valid GeoJSON file"),
+    (b"[[2.35, 48.85], [2.13, 48.8]]", "array.geojson", "no Feature"),
+    (b'{"type": "LineString", "coordinates": [[2.35], [2.13]]}', "short.geojson", "No line or points"),
+])
+def test_unreadable_files_give_a_plain_message(data, filename, message):
+    # Only ValueError, which the page shows as a message (anything else would be a traceback)
+    with pytest.raises(ValueError, match=message):
+        parse_track(data, filename)
+
+
+def test_short_coordinates_are_skipped():
+    geo = {"type": "LineString", "coordinates": [[2.35], [2.35, 48.85], "x", [2.13, 48.80, 130]]}
+    t = parse_track(json.dumps(geo).encode(), "line.geojson")
+    assert len(t.points) == 2 and t.points["ele"].iloc[-1] == 130
+    kml = b"""<kml xmlns:gx="http://www.google.com/kml/ext/2.2"><Placemark><gx:Track>
+      <when>2025-07-15T06:00:00Z</when><gx:coord>5.0</gx:coord>
+      <when>2025-07-15T06:10:00Z</when><gx:coord>5.0 45.0 200</gx:coord>
+      <when>2025-07-15T06:20:00Z</when><gx:coord>5.0 45.05 210</gx:coord></gx:Track></Placemark></kml>"""
+    assert len(parse_track(kml, "track.kml").points) == 2
+
+
+def test_geojson_points_are_read_like_gpx_waypoints():
+    geo = {"type": "FeatureCollection", "features": [
+        {"type": "Feature", "geometry": {"type": "Point", "coordinates": [2.35, 48.85]}, "properties": {}},
+        {"type": "Feature", "geometry": {"type": "Point", "coordinates": [2.13, 48.80]}, "properties": {}}]}
+    t = parse_track(json.dumps(geo).encode(), "points.geojson")
+    assert len(t.points) == 2 and t.distance_km > 10
 
 
 def test_non_monotonic_times_are_ignored():
@@ -236,3 +272,87 @@ def test_no_weather_data_gives_a_clear_message():
         read_route(_ride_on("2026-11-12"), session=FakeSession(empty=("forecast", "archive")), today=date(2026, 11, 14))
     with pytest.raises(ValueError, match="no data"):
         read_route(_ride_on("2025-07-15"), session=FakeSession(empty=("archive",)), today=date(2026, 11, 14))
+
+
+def test_no_value_is_repeated_beyond_the_forecast_horizon():
+    # The rain probability stops after 10 hours while the other variables go on (as near Open-Meteo's horizon)
+    prob = np.full(48, np.nan)
+    prob[:10] = np.linspace(10, 55, 10)
+    h = _hourly(precipitation_probability=prob)
+    t0 = pd.Timestamp("2025-07-15 00:00", tz="UTC")
+    assert interpolate_at(h, t0 + pd.Timedelta(hours=4, minutes=30))["precipitation_probability"] == pytest.approx(32.5)
+    assert interpolate_at(h, t0 + pd.Timedelta(hours=9, minutes=30))["precipitation_probability"] == pytest.approx(55)
+    assert np.isnan(interpolate_at(h, t0 + pd.Timedelta(hours=20))["precipitation_probability"])
+    assert interpolate_at(h, t0 + pd.Timedelta(hours=20))["temperature_2m"] == pytest.approx(30)
+
+
+def test_short_gaps_are_bridged_long_gaps_are_not():
+    from meteo.route_weather import interp_valid
+
+    x = np.arange(0, 10) * 3600.0
+    y = np.arange(0, 10, dtype=float)
+    y[3:5] = np.nan                                              # 3 hours between the valid values at 2 h and 5 h
+    assert interp_valid(3.5 * 3600, x, y) == pytest.approx(3.5)
+    y[3:7] = np.nan                                              # 5 hours between 2 h and 7 h: too long
+    assert np.isnan(interp_valid(4 * 3600, x, y))
+    assert interp_valid(-1800, x, y) == 0 and np.isnan(interp_valid(-7200, x, y))
+
+
+def test_times_show_the_zone_when_the_clocks_change():
+    from meteo.route_weather import clock_format
+
+    night = pd.Series(pd.date_range("2026-10-25 00:30", periods=4, freq="30min", tz="UTC")).dt.tz_convert("Europe/Paris")
+    assert night.dt.strftime(clock_format(night)).tolist() == ["02:30 CEST", "02:00 CET", "02:30 CET", "03:00 CET"]
+    day = pd.Series(pd.date_range("2026-07-14 08:00", periods=3, freq="h", tz="Europe/Paris"))
+    assert clock_format(day) == "%H:%M"
+    two_days = pd.Series(pd.date_range("2026-07-14 20:00", periods=8, freq="h", tz="Europe/Paris"))
+    assert clock_format(two_days) == "%a %H:%M"
+
+
+def test_track_timezone_from_the_weather_service():
+    from meteo.route_weather import track_timezone
+
+    class Tz:
+        def __init__(self, answer):
+            self.answer = answer
+
+        def get(self, url, params, timeout):
+            if isinstance(self.answer, Exception):
+                raise self.answer
+
+            class Resp:
+                status_code = 200
+                json = staticmethod(lambda: {"timezone": self.answer})
+            return Resp()
+
+    assert track_timezone(35.68, 139.69, session=Tz("Asia/Tokyo")) == "Asia/Tokyo"
+    assert track_timezone(35.68, 139.69, session=Tz(ConnectionError("offline"))) is None
+
+
+def test_altitude_noise_is_not_counted_as_climbing():
+    from meteo.gps import elevation_stats
+
+    rng = np.random.default_rng(0)
+    flat = pd.Series(100 + rng.uniform(-10, 10, 200))                 # ±10 m of noise on a flat road
+    climb = pd.Series(np.linspace(100, 400, 200) + rng.uniform(-10, 10, 200))
+    assert elevation_stats(flat)["ascent_m"] < 40                       # summing every difference gives ~1,300 m
+    assert elevation_stats(climb)["ascent_m"] == pytest.approx(300, abs=40)
+
+
+def test_unusable_timestamps_say_why():
+    rows = [(45.0, 5.0 + i / 100, 200, f"2025-07-15T06:{i:02d}:00Z") for i in range(10)]
+    rows[4], rows[5] = rows[5], rows[4]
+    t = build_track(rows)
+    assert not t.has_time and t.time_issue == "the timestamps are not in order"
+    assert build_track([(45.0, 5.0 + i / 100, 200, None) for i in range(10)]).time_issue is None
+
+
+def test_activity_is_guessed_from_whole_words(monkeypatch):
+    monkeypatch.syspath_prepend("dashboard")
+    from route_page import _guess_activity
+
+    assert _guess_activity("Carnac coastal ride") == "Cycling"
+    assert _guess_activity("Brunoy loop") == "Cycling"
+    assert _guess_activity("Morning run") == "Walking"
+    assert _guess_activity("Road trip to Nice") == "Driving"
+    assert _guess_activity("Lyon to Marseille by car") == "Driving"

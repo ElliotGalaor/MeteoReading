@@ -12,7 +12,7 @@ def reading(n: int = 10, **cols) -> pd.DataFrame:
     """A weather reading like route_weather builds it: mild, dry, calm, by day, unless told otherwise."""
     base = {
         "dist_km": np.linspace(0, 45, n),
-        "time": pd.date_range("2026-06-20 08:00", periods=n, freq="15min", tz="UTC"),
+        "time": pd.date_range("2099-06-20 08:00", periods=n, freq="15min", tz="UTC"),   # a planned trip
         "hours_here": np.full(n, 0.25),
         "temperature_2m": np.full(n, 17.0), "apparent_temperature": np.full(n, 17.0),
         "precipitation": np.zeros(n), "weather_code": np.ones(n, dtype=int),
@@ -133,3 +133,47 @@ def test_points_table_for_the_charts():
     a = assess(reading(precipitation=1.0), "Walking", "UTC")
     assert {"dist_km", "time", "danger", "comfort", "h_Gusts", "p_Rain"} <= set(a.points.columns)
     assert len(a.points) == 10 and a.points["comfort"].between(0, 100).all()
+
+
+def test_past_trips_get_no_forecast_wording():
+    before, after = pd.Timestamp("2099-06-19", tz="UTC"), pd.Timestamp("2099-06-21", tz="UTC")
+    calm = reading()
+    assert "look again" in assess(calm, "Cycling", "UTC", now=before).advice[-1].text
+    good = assess(calm, "Cycling", "UTC", now=after).advice
+    assert good[-1].title == "Good conditions" and "forecast" not in good[-1].text.lower()
+    gusty = reading(wind_gusts_10m=52.0)
+    assert any("warnings" in x.title for x in assess(gusty, "Cycling", "UTC", now=before).advice)
+    assert not any("warnings" in x.title for x in assess(gusty, "Cycling", "UTC", now=after).advice)
+
+
+def test_score_level_matches_the_number_shown():
+    # A danger just under 25 that rounds to 25 must not be called "Low" next to "25 / 100"
+    from meteo.route_scores import DANGER_LEVELS, Score, level
+
+    assert level(int(round(24.6)), DANGER_LEVELS) == "Moderate"
+    for gust in np.arange(40, 120, 0.5):
+        s: Score = assess(reading(wind_gusts_10m=gust), "Cycling", "UTC").danger
+        assert s.level == level(s.value, DANGER_LEVELS)
+
+
+def test_drizzle_at_freezing_point_counts_in_the_score_and_the_reading():
+    from meteo.route_weather import ICE_RAIN_MM
+
+    icy = reading(temperature_2m=0.5, apparent_temperature=-3.0, precipitation=ICE_RAIN_MM)
+    a = assess(icy, "Driving", "UTC")
+    assert a.danger.value > 0 and not any(x.title == "Good conditions" for x in a.advice)
+    trace = reading(temperature_2m=0.5, apparent_temperature=-3.0, precipitation=ICE_RAIN_MM / 2)
+    assert assess(trace, "Driving", "UTC").danger.value == 0
+
+
+def test_headwind_share_is_over_distance_like_the_reading():
+    # Slow uphill into the wind for the first half of the km, fast downhill after: time and distance shares differ
+    n = 10
+    df = reading(n, headwind=[20.0] * 5 + [0.0] * 5, hours_here=[0.5] * 5 + [0.1] * 5)
+    advice = assess(df, "Cycling", "UTC").advice
+    assert any(x.title == "Headwind on 50% of the way" for x in advice)
+
+
+def test_no_negative_zero_in_temperatures():
+    a = assess(reading(temperature_2m=2.0, apparent_temperature=-0.4), "Walking", "UTC")
+    assert all("-0 °C" not in x.title for x in a.advice)

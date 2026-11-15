@@ -1,6 +1,7 @@
 """Dashboard page: weather reading along a GPS track (sample, uploaded, or drawn on a map)."""
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, time, timedelta
 
 import folium
@@ -13,8 +14,16 @@ from plotly.subplots import make_subplots
 from streamlit_folium import st_folium
 
 from meteo.gps import ACTIVITIES, Track, parse_track, passage_times, sample_points, summary, to_gpx, with_times
-from meteo.route_scores import DANGER_LEVELS, Assessment, Score, assess, level
-from meteo.route_weather import FORECAST_FUTURE_DAYS, api_weight, nearby_station_obs, read_route
+from meteo.route_scores import DANGER_LEVELS, Assessment, Score, assess, is_past, level
+from meteo.route_weather import (
+    FORECAST_FUTURE_DAYS,
+    api_weight,
+    clock_format,
+    nearby_station_obs,
+    read_route,
+    track_timezone,
+    whole,
+)
 from meteo.routing import geocode, track_from_waypoints, waypoints_from_drawings
 from ui import (
     AXIS,
@@ -41,16 +50,21 @@ TIMEZONES = ["Europe/Paris", "UTC", "Europe/London", "Europe/Madrid", "Europe/Ro
 
 
 @st.cache_data(show_spinner=False)
-def _parse(data: bytes, filename: str) -> tuple[pd.DataFrame, str]:
+def _parse(data: bytes, filename: str) -> tuple[pd.DataFrame, str, str | None]:
     t = parse_track(data, filename)
-    return t.points, t.name
+    return t.points, t.name, t.time_issue
+
+
+@st.cache_data(show_spinner=False, ttl=86400)
+def _timezone(lat: float, lon: float) -> str | None:
+    return track_timezone(lat, lon)
 
 
 @st.cache_data(show_spinner=False)
 def _samples() -> dict[str, str]:
     out = {}
     for p in sorted(SAMPLES_DIR.glob("*.gpx")):
-        _, name = _parse(p.read_bytes(), p.name)
+        _, name, _ = _parse(p.read_bytes(), p.name)
         out[name] = str(p)
     return out
 
@@ -80,17 +94,29 @@ def _geocode(name: str) -> list[dict]:
 
 
 def _guess_activity(name: str) -> str:
-    n = name.lower()
-    if any(w in n for w in ("car", "drive", "driving", "voiture", "road trip")):
+    """From whole words of the track name ("Carnac coastal ride" is not a car trip)."""
+    words = set(re.findall(r"[a-zà-ÿ]+", name.lower()))
+    if words & {"car", "drive", "driving", "voiture", "roadtrip"} or "road trip" in name.lower():
         return "Driving"
-    if any(w in n for w in ("walk", "hike", "run", "rando", "trail", "marche")):
+    if words & {"walk", "walking", "hike", "hiking", "run", "running", "rando", "randonnée", "trail", "marche"}:
         return "Walking"
     return "Cycling"
 
 
-def _zoom(lat: pd.Series, lon: pd.Series) -> float:
-    extent = max(lat.max() - lat.min(), (lon.max() - lon.min()) * np.cos(np.radians(lat.mean())), 0.005)
-    return float(np.clip(np.log2(360 / extent) - 1.3, 3, 14))
+def _zoom(lat: pd.Series, lon: pd.Series, width_px: float, height_px: float) -> float:
+    """Zoom at which the track fits in width_px x height_px (web maps: 512 px for 360° at zoom 0, Mercator)."""
+    span_x = max(float(lon.max() - lon.min()), 1e-4)                                   # x is linear in longitude
+    span_y = max(float(lat.max() - lat.min()), 1e-4) / np.cos(np.radians(lat.mean()))  # y stretched by 1/cos(lat)
+    zoom = min(np.log2(width_px * 360 / (512 * span_x)), np.log2(height_px * 360 / (512 * span_y)))
+    return float(np.clip(zoom, 3, 14))
+
+
+def _phone() -> bool:
+    """A phone, from the browser's user agent: the map is then about 350 px wide instead of 700."""
+    try:
+        return "Mobi" in (st.context.headers.get("User-Agent") or "")
+    except Exception:
+        return False
 
 
 def _warehouse_last_date() -> date | None:
@@ -113,6 +139,7 @@ def page_route():
         if built is None:
             return
         points, name = built
+        time_issue = None
         left, right = st.columns([1.3, 1], gap="large")
         with left:
             st.markdown(f"**{name}**")
@@ -129,7 +156,7 @@ def page_route():
                         st.info("Drop a track exported from Strava, Garmin, Komoot, Google Earth… "
                                 "or draw one on the map.")
                         return
-                    points, name = _parse(up.getvalue(), up.name)
+                    points, name, time_issue = _parse(up.getvalue(), up.name)
                 else:
                     samples = _samples()
                     if not samples:
@@ -138,7 +165,7 @@ def page_route():
                     names = list(samples)
                     default = next((i for i, n in enumerate(names) if n.startswith("Paris")), 0)
                     name = st.selectbox("Sample", names, index=default)
-                    points, name = _parse(open(samples[name], "rb").read(), samples[name])
+                    points, name, time_issue = _parse(open(samples[name], "rb").read(), samples[name])
             except ValueError as exc:
                 st.error(f"Could not read this track: {exc}")
                 return
@@ -151,8 +178,13 @@ def page_route():
             timing = st.segmented_control("Timing", ["Recorded times", "Plan a new trip"], default="Recorded times")
         else:
             timing = "Plan a new trip"
-            st.caption("This track has no timestamps: choose when you set off and how fast you go.")
+            why = f"its timestamps cannot be used ({time_issue})" if time_issue else "this track has no timestamps"
+            st.caption(f"{why[0].upper()}{why[1:]}: choose when you set off and how fast you go.")
         if timing != "Plan a new trip":
+            if track.points["time"].max().date() > date.today() + timedelta(days=FORECAST_FUTURE_DAYS):
+                st.warning(f"These recorded times are more than {FORECAST_FUTURE_DAYS + 1} days ahead, beyond the "
+                           "forecasts: choose “Plan a new trip” to set a departure date.")
+                return
             activity = st.selectbox("Activity", options, index=options.index(guessed),
                                     help="Sets the danger and comfort scores: the same gust is a danger on a bike, "
                                          "not in a car.")
@@ -169,8 +201,18 @@ def page_route():
             preset = ACTIVITIES[activity]
             speed = c4.number_input("Speed (km/h)", 1.0, 150.0, float(preset["speed"]), step=0.5,
                                     help="Average speed on the flat; time is added for climbs when walking or cycling.")
-            tz = c5.selectbox("Time zone", TIMEZONES)
-            start = pd.Timestamp(datetime.combine(day, hour), tz=tz)
+            # Default: the time zone where the track starts (a 09:00 departure in Tokyo is 09:00 Tokyo time)
+            first = track.points.iloc[0]
+            local_tz = _timezone(round(float(first["lat"]), 2), round(float(first["lon"]), 2)) or "Europe/Paris"
+            zones = TIMEZONES if local_tz in TIMEZONES else [local_tz, *TIMEZONES]
+            tz = c5.selectbox("Time zone", zones, index=zones.index(local_tz),
+                              help="The departure time is read in this time zone; by default, the one where "
+                                   "the track starts.")
+            naive = pd.Timestamp(datetime.combine(day, hour))
+            start = naive.tz_localize(tz, nonexistent="shift_forward", ambiguous=True)
+            if start.tz_localize(None) != naive:
+                st.info(f"{hour:%H:%M} does not exist on {day:%d %B} in {tz}: the clocks go forward that night. "
+                        f"Departure at {start:%H:%M}.")
             track = with_times(track, passage_times(track, start, speed, preset["climb_min_per_100m"]))
 
     if mode == "Upload a file":
@@ -193,15 +235,14 @@ def page_route():
         return
 
     local = pts["time"].dt.tz_convert(tz)
-    multi_day = local.dt.date.nunique() > 1
     scores = assess(pts, activity, tz)
-    pts = pts.assign(local=local, local_str=local.dt.strftime("%a %d %b %H:%M" if multi_day else "%H:%M"),
+    pts = pts.assign(local=local, local_str=local.dt.strftime(clock_format(local).replace("%a", "%a %d %b")),
                      danger=scores.points["danger"].to_numpy(), comfort=scores.points["comfort"].to_numpy())
 
     st.subheader("The reading")
     k = st.columns(4)
-    k[0].metric("Temperature", f"{stats['temp_min']:.0f} to {stats['temp_max']:.0f} °C", border=True,
-                help=f"Feels like down to {stats['feels_min']:.0f} °C.")
+    k[0].metric("Temperature", f"{whole(stats['temp_min'])} to {whole(stats['temp_max'])} °C", border=True,
+                help=f"Feels like down to {whole(stats['feels_min'])} °C.")
     rain_txt = "< 0.1 mm" if 0 < stats["rain_mm"] < 0.1 else f"{stats['rain_mm']:.1f} mm"
     k[1].metric("Rain on the way", rain_txt, border=True,
                 help=f"On {stats['rain_share']:.0%} of the route (hours with ≥ 0.2 mm/h at the time you pass).")
@@ -273,7 +314,7 @@ def _scores_panel(scores: Assessment, pts: pd.DataFrame, source: str) -> None:
         st.markdown(METHOD)
 
     st.markdown("<div class='chart-title'>What to plan for</div>", unsafe_allow_html=True)
-    if source == "archive":
+    if is_past(pts):
         st.caption("A past trip: the advice says what those conditions called for.")
     for a in scores.advice:
         st.markdown(f"<div class='advice {a.kind}'>{a.icon} <b>{a.title}</b><br><span>{a.text}</span></div>",
@@ -319,19 +360,23 @@ def _scores_chart(scores: Assessment, pts: pd.DataFrame) -> None:
 def _draw_track() -> tuple[pd.DataFrame, str] | None:
     """Map where the user clicks waypoints; returns the resulting track (points, name)."""
     c1, c2, c3 = st.columns([2, 1.1, 1.2], vertical_alignment="bottom")
-    place = c1.text_input("Go to a place", placeholder="Town, mountain, address…", key="draw_place")
+    place = c1.text_input("Go to a place", placeholder="Town, village, mountain…", key="draw_place")
     activity = c2.selectbox("Route for", list(ACTIVITIES), index=1, key="draw_activity")
     follow = c3.toggle("Follow roads and paths", value=True, key="draw_follow",
                        help="Snap the line to roads and paths suited to the activity (OpenStreetMap routing). "
                             "Off: straight lines between your points, e.g. off-trail.")
     center, zoom = (46.6, 2.6), 6
     if place:
-        hits = _geocode(place)
+        try:
+            hits = _geocode(place)
+        except OSError:   # requests' errors (connection, timeout, HTTP error) are OSErrors
+            hits = None
+            c1.caption("The place search is not answering: try again in a moment.")
         if hits:
             center, zoom = (hits[0]["lat"], hits[0]["lon"]), 12
             c1.caption(f"Centred on {hits[0]['label']}")
-        else:
-            c1.caption("Place not found.")
+        elif hits is not None:
+            c1.caption("Place not found: try the name of a town, village or mountain.")
     m = folium.Map(location=center, zoom_start=zoom, tiles="OpenStreetMap", control_scale=True)
     Draw(draw_options={"polyline": {"shapeOptions": {"color": SERIES[0], "weight": 4}, "metric": True},
                        "polygon": False, "rectangle": False, "circle": False, "circlemarker": False, "marker": False},
@@ -387,7 +432,9 @@ def _map(track: Track, pts: pd.DataFrame, tz: str) -> None:
     fig.add_trace(go.Scattermap(lat=ends["lat"], lon=ends["lon"], mode="markers+text", text=["Start", "Finish"],
                                 textposition="top right", marker=dict(size=9, color=INK), hoverinfo="skip",
                                 textfont=dict(color=INK, size=13)))
-    fig.update_layout(map=dict(style="carto-positron", zoom=_zoom(full["lat"], full["lon"]),
+    # Room for the track and its Start / Finish labels
+    zoom = _zoom(full["lat"], full["lon"], 190 if _phone() else 520, 330)   # minus the colour bar
+    fig.update_layout(map=dict(style="carto-positron", zoom=zoom,
                                center=dict(lat=float(full["lat"].mean()), lon=float(full["lon"].mean()))),
                       showlegend=False)
     chart(fig, 460, f"{choice} along the route", "Hover over a dot for the full reading at that point",

@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 from .download import make_session
-from .gps import Track, sample_points
+from .gps import Track, sample_points, segment_km
 
 FORECAST_API = "https://api.open-meteo.com/v1/forecast"
 ARCHIVE_API = "https://archive-api.open-meteo.com/v1/archive"
@@ -32,6 +32,8 @@ HOURLY = ["temperature_2m", "apparent_temperature", "precipitation", "precipitat
           # for the danger and comfort scores (route_scores.py); the archive has no probability, visibility or UV
           "is_day", "dew_point_2m", "snowfall", "visibility", "uv_index"]
 RAIN_THRESHOLD = 0.2         # mm/h: below this, the hour counts as dry
+ICE_RAIN_MM = 0.1            # mm/h of rain or drizzle at 1 °C or below: risk of ice (also used by route_scores)
+MAX_GAP_S = 3 * 3600         # interpolate across at most 3 hours without a value
 CORE = ["temperature_2m", "precipitation", "wind_speed_10m", "weather_code"]   # needed for every reading
 
 # WMO weather codes -> (label, icon)
@@ -93,7 +95,10 @@ def fetch_hourly(points: pd.DataFrame, start: date, end: date, source: str, sess
             "start_date": start.isoformat(), "end_date": end.isoformat(),
             "timezone": "auto", "timeformat": "unixtime", "wind_speed_unit": "kmh",
         }
-        resp = session.get(api, params=params, timeout=60)
+        try:
+            resp = session.get(api, params=params, timeout=60)
+        except OSError as exc:   # requests' errors (connection, timeout, retries exhausted) are OSErrors
+            raise RuntimeError("The weather service is not answering: try again in a moment.") from exc
         if resp.status_code != 200:
             try:
                 reason = resp.json().get("reason", resp.text[:200])
@@ -118,28 +123,52 @@ def epoch_seconds(times) -> np.ndarray:
     return ((t - pd.Timestamp("1970-01-01", tz="UTC")) / pd.Timedelta(seconds=1)).to_numpy(dtype=float)
 
 
+def interp_valid(tx: float, x: np.ndarray, y: np.ndarray, max_gap: float = MAX_GAP_S) -> float:
+    """Linear interpolation at `tx` between the valid (non-NaN) hours around it.
+
+    NaN when the valid hours around `tx` are more than `max_gap` seconds apart, or when `tx` is more than an hour
+    outside them: near the forecast horizon, a variable stops before the others (e.g. the rain probability), and
+    repeating its last value would show a forecast that does not exist."""
+    ok = ~np.isnan(y)
+    x, y = x[ok], y[ok]
+    if not len(x):
+        return np.nan
+    i = int(np.searchsorted(x, tx))
+    if i < len(x) and x[i] == tx:
+        return float(y[i])
+    if i == 0 or i == len(x):   # before the first or after the last valid hour
+        j = 0 if i == 0 else len(x) - 1
+        return float(y[j]) if abs(x[j] - tx) <= 3600 else np.nan
+    if x[i] - x[i - 1] > max_gap:
+        return np.nan
+    return float(np.interp(tx, x[i - 1:i + 1], y[i - 1:i + 1]))
+
+
 def interpolate_at(hourly: pd.DataFrame, t: pd.Timestamp) -> dict:
     """Weather at an exact time from hourly values (linear in time, wind as a vector)."""
     x = epoch_seconds(hourly["time"])
     tx = float(epoch_seconds([t])[0])
+
+    def values(col: str) -> np.ndarray:
+        return pd.to_numeric(hourly[col], errors="coerce").to_numpy(dtype=float)
+
     out = {}
     for col in ("temperature_2m", "apparent_temperature", "precipitation", "precipitation_probability",
                 "wind_speed_10m", "wind_gusts_10m", "cloud_cover", "is_day", "dew_point_2m", "snowfall",
                 "visibility", "uv_index"):
-        if col in hourly and hourly[col].notna().any():
-            y = pd.to_numeric(hourly[col], errors="coerce").to_numpy(dtype=float)
-            ok = ~np.isnan(y)
-            out[col] = float(np.interp(tx, x[ok], y[ok]))
-        else:
-            out[col] = np.nan
-    if "wind_direction_10m" in hourly:
-        ws = pd.to_numeric(hourly["wind_speed_10m"], errors="coerce").to_numpy(dtype=float)
-        wd = np.radians(pd.to_numeric(hourly["wind_direction_10m"], errors="coerce").to_numpy(dtype=float))
-        u, v = np.interp(tx, x, ws * np.sin(wd)), np.interp(tx, x, ws * np.cos(wd))
-        out["wind_direction_10m"] = float((np.degrees(np.arctan2(u, v)) + 360) % 360)
-    nearest = int(np.argmin(np.abs(x - tx)))
-    code = hourly["weather_code"].iloc[nearest] if "weather_code" in hourly else np.nan
-    out["weather_code"] = int(code) if pd.notna(code) else None
+        out[col] = interp_valid(tx, x, values(col)) if col in hourly else np.nan
+    if "wind_direction_10m" in hourly and "wind_speed_10m" in hourly:
+        ws, wd = values("wind_speed_10m"), np.radians(values("wind_direction_10m"))
+        u, v = interp_valid(tx, x, ws * np.sin(wd)), interp_valid(tx, x, ws * np.cos(wd))
+        out["wind_direction_10m"] = float((np.degrees(np.arctan2(u, v)) + 360) % 360) if pd.notna(u + v) else np.nan
+    out["weather_code"] = None
+    if "weather_code" in hourly:
+        codes = values("weather_code")
+        ok = np.flatnonzero(~np.isnan(codes))
+        if len(ok):
+            nearest = ok[np.argmin(np.abs(x[ok] - tx))]
+            if abs(x[nearest] - tx) <= 3600:
+                out["weather_code"] = int(codes[nearest])
     return out
 
 
@@ -181,6 +210,18 @@ def build_reading_table(samples: pd.DataFrame, hourly: list[pd.DataFrame], eleva
 
 
 # --- Summary and insights ------------------------------------------------------------------
+def clock_format(local: pd.Series) -> str:
+    """strftime format for the times of a trip: the day on multi-day trips, the zone when the clocks change
+    during the trip (otherwise 02:30 CEST would be followed by 02:00 CET)."""
+    fmt = "%a %H:%M" if local.dt.date.nunique() > 1 else "%H:%M"
+    return fmt + " %Z" if len({t.utcoffset() for t in local}) > 1 else fmt
+
+
+def whole(x) -> str:
+    """A whole number for display, without the "-0" that rounding -0.4 gives."""
+    return f"{int(round(float(x)))}"
+
+
 def _runs(mask: np.ndarray) -> list[tuple[int, int]]:
     """Index ranges [start, end] of consecutive True values."""
     runs, start = [], None
@@ -197,11 +238,10 @@ def _runs(mask: np.ndarray) -> list[tuple[int, int]]:
 
 def summarize(df: pd.DataFrame, tz: str) -> tuple[dict, list[str]]:
     local = df["time"].dt.tz_convert(tz)
-    clock = "%a %H:%M" if local.dt.date.nunique() > 1 else "%H:%M"   # add the day on multi-day trips
+    clock = clock_format(local)
     rain = df["precipitation"].fillna(0)
     rainy = (rain >= RAIN_THRESHOLD).to_numpy()
-    seg_km = np.diff(np.concatenate([[0], (df["dist_km"].to_numpy()[:-1] + df["dist_km"].to_numpy()[1:]) / 2,
-                                     [df["dist_km"].iloc[-1]]]))
+    seg_km = segment_km(df["dist_km"])
     total_km = float(df["dist_km"].iloc[-1]) or 1.0
     head = df["headwind"].to_numpy()
     stats = {
@@ -231,7 +271,7 @@ def summarize(df: pd.DataFrame, tz: str) -> tuple[dict, list[str]]:
         insights.append(f"In total, {amount} on {stats['rain_share']:.0%} of the route.")
 
     i_min = int(df["temperature_2m"].idxmin())
-    t_line = f"Temperature from {stats['temp_min']:.0f} °C to {stats['temp_max']:.0f} °C"
+    t_line = f"Temperature from {whole(stats['temp_min'])} °C to {whole(stats['temp_max'])} °C"
     if stats["temp_max"] - stats["temp_min"] >= 3:
         t_line += f" (coldest at km {df['dist_km'].iloc[i_min]:.0f}"
         ele = df["ele_profile"].iloc[i_min]
@@ -239,7 +279,7 @@ def summarize(df: pd.DataFrame, tz: str) -> tuple[dict, list[str]]:
     else:
         t_line += "."
     if stats["feels_min"] < stats["temp_min"] - 2:
-        t_line += f" Feels like {stats['feels_min']:.0f} °C with the wind."
+        t_line += f" Feels like {whole(stats['feels_min'])} °C with the wind."
     insights.append(t_line)
 
     if stats["headwind_share"] >= 0.25 or stats["tailwind_share"] >= 0.25:
@@ -258,9 +298,21 @@ def summarize(df: pd.DataFrame, tz: str) -> tuple[dict, list[str]]:
     codes = set(df["weather_code"].dropna().astype(int))
     if codes & {95, 96, 99}:
         insights.append("⚠️ Thunderstorms possible on the route.")
-    if codes & {56, 57, 66, 67, 71, 73, 75, 77, 85, 86} or ((df["temperature_2m"] <= 1) & (rain > 0)).any():
+    if codes & {56, 57, 66, 67, 71, 73, 75, 77, 85, 86} or ((df["temperature_2m"] <= 1) & (rain >= ICE_RAIN_MM)).any():
         insights.append("⚠️ Risk of snow or ice.")
     return stats, insights
+
+
+def track_timezone(lat: float, lon: float, session=None) -> str | None:
+    """IANA time zone at a point (Open-Meteo resolves it from the coordinates), or None if it cannot be had."""
+    session = session or make_session()
+    try:
+        resp = session.get(FORECAST_API, timeout=15, params={
+            "latitude": f"{lat:.3f}", "longitude": f"{lon:.3f}", "timezone": "auto", "daily": "sunrise",
+            "forecast_days": 1})
+        return resp.json().get("timezone") if resp.status_code == 200 else None
+    except (OSError, ValueError):
+        return None
 
 
 # --- Entry point ----------------------------------------------------------------------------------
