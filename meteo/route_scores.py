@@ -26,6 +26,9 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+from .gps import segment_km
+from .route_weather import ICE_RAIN_MM, clock_format, whole
+
 THUNDER, HAIL = {95}, {96, 99}
 FREEZING = {56, 57, 66, 67}
 SNOW = {71, 73, 75, 77, 85, 86}
@@ -143,7 +146,7 @@ def hazards(df: pd.DataFrame, p: Profile) -> pd.DataFrame:
     temp, feels = column(df, "temperature_2m"), column(df, "apparent_temperature")
     rain, snowfall = np.nan_to_num(column(df, "precipitation"), nan=0.0), np.nan_to_num(column(df, "snowfall"), nan=0.0)
     freezing, snowing = codes_in(df, FREEZING), codes_in(df, SNOW) | (snowfall > 0)
-    ice = np.where(freezing, 90.0, np.where((temp <= 1) & (rain >= 0.1) & ~snowing, p.wet_frost, 0.0))
+    ice = np.where(freezing, 90.0, np.where((temp <= 1) & (rain >= ICE_RAIN_MM) & ~snowing, p.wet_frost, 0.0))
     snow = np.where(snowing, np.minimum(p.snow + ramp(snowfall, 0, 3) / 2, 100), 0.0)
     storm = np.where(codes_in(df, HAIL), min(p.storm + 20, 100), np.where(codes_in(df, THUNDER), p.storm, 0.0))
     fog_code = np.where(codes_in(df, FOG), 50 * p.visibility, 0.0)
@@ -174,7 +177,8 @@ def danger_score(df: pd.DataFrame, h: pd.DataFrame) -> Score:
         if h[name].iloc[i] >= SIGNIFICANT:
             factors.append(Factor(name, float(h[name].iloc[i]), float(df["dist_km"].iloc[i]), df["time"].iloc[i]))
     factors.sort(key=lambda f: -f.value)
-    return Score(int(round(value)), level(value, DANGER_LEVELS), factors)
+    value = int(round(value))   # the level of the number shown, not of the unrounded one
+    return Score(value, level(value, DANGER_LEVELS), factors)
 
 
 # --- Comfort ---------------------------------------------------------------------------------
@@ -217,13 +221,14 @@ def comfort_score(df: pd.DataFrame, pen: pd.DataFrame) -> tuple[Score, np.ndarra
             i = int(np.argmax(pen[name].to_numpy()))
             factors.append(Factor(name, mean, float(df["dist_km"].iloc[i]), df["time"].iloc[i]))
     factors.sort(key=lambda f: -f.value)
-    return Score(int(round(value)), level(value, COMFORT_LEVELS), factors), point
+    value = int(round(value))
+    return Score(value, level(value, COMFORT_LEVELS), factors), point
 
 
 # --- Advice -----------------------------------------------------------------------------------
-def advise(df: pd.DataFrame, activity: str, h: pd.DataFrame, tz: str) -> list[Advice]:
+def advise(df: pd.DataFrame, activity: str, h: pd.DataFrame, tz: str, past: bool = False) -> list[Advice]:
     local = df["time"].dt.tz_convert(tz)
-    clock = "%a %H:%M" if local.dt.date.nunique() > 1 else "%H:%M"
+    clock = clock_format(local)
 
     def where(mask) -> str:
         """'around km 12 (14:30)' for the first point where `mask` is true."""
@@ -276,16 +281,16 @@ def advise(df: pd.DataFrame, activity: str, h: pd.DataFrame, tz: str) -> list[Ad
                 "Drink regularly (about half a litre per hour of effort), set off earlier, cover your head and "
                 "slow down in the hottest hours.")
         kind = "danger" if (h["Heat"] >= SIGNIFICANT).any() else "comfort"
-        out.append(Advice("🥵", f"Heat: feels like up to {np.nanmax(feels):.0f} °C", text, kind))
+        out.append(Advice("🥵", f"Heat: feels like up to {whole(np.nanmax(feels))} °C", text, kind))
     cold = feels <= 5
     if cold.any() and not car:
         text = ("Several thin layers, gloves and a hat" +
                 (", a windproof jacket and overshoes: riding adds wind chill." if bike else "."))
         kind = "danger" if (h["Cold"] >= SIGNIFICANT).any() else "comfort"
-        out.append(Advice("🧤", f"Cold: feels like down to {np.nanmin(feels):.0f} °C", text, kind))
+        out.append(Advice("🧤", f"Cold: feels like down to {whole(np.nanmin(feels))} °C", text, kind))
     temps = column(df, "temperature_2m")
     if not car and np.nanmax(temps) - np.nanmin(temps) >= 8:
-        out.append(Advice("🧥", f"From {np.nanmin(temps):.0f} to {np.nanmax(temps):.0f} °C along the way",
+        out.append(Advice("🧥", f"From {whole(np.nanmin(temps))} to {whole(np.nanmax(temps))} °C along the way",
                           "Altitude or time of day: bring a layer you can put on and take off.", "comfort"))
     if (uv >= 6).any() and not car:
         out.append(Advice("🕶️", f"Strong sun (UV index up to {uv.max():.0f})",
@@ -297,7 +302,7 @@ def advise(df: pd.DataFrame, activity: str, h: pd.DataFrame, tz: str) -> list[Ad
         out.append(Advice("🌙", f"In the dark {where(night)}", text, "danger" if bike else "comfort"))
     if not car:
         head = column(df, "headwind")
-        w = weights(df)
+        w = segment_km(df["dist_km"])   # over km, like the reading's "headwind on X% of the route"
         head_share = float(w[head > 5].sum() / w.sum())
         tail_share = float(w[head < -5].sum() / w.sum())
         if head_share >= 0.4 and tail_share < 0.15:
@@ -305,10 +310,13 @@ def advise(df: pd.DataFrame, activity: str, h: pd.DataFrame, tz: str) -> list[Ad
                               "Plan more time and energy. Done the other way round, most of it would be with the "
                               "wind behind you, if the wind holds.", "comfort"))
 
-    if (h.drop(columns="Darkness").max() >= WARN_FROM).any():   # night is not in the weather warnings
+    warning = (h.drop(columns="Darkness").max() >= WARN_FROM).any()   # night is not in the weather warnings
+    if warning and not past:
         out.append(Advice("📢", "Check the official warnings before you go",
                           "In France: Météo-France vigilance (vigilance.meteofrance.fr). Forecasts change: look "
                           "again on the day.", "info"))
+    elif not out and past:
+        out.append(Advice("👍", "Good conditions", "Nothing in the weather called for special care.", "info"))
     elif not out:
         out.append(Advice("👍", "Good conditions", "Nothing in the forecast calls for special care: enjoy the trip. "
                           "Forecasts change, so look again on the day.", "info"))
@@ -317,8 +325,16 @@ def advise(df: pd.DataFrame, activity: str, h: pd.DataFrame, tz: str) -> list[Ad
 
 
 # --- Entry point ------------------------------------------------------------------------------
-def assess(df: pd.DataFrame, activity: str, tz: str) -> Assessment:
-    """Danger and comfort scores and advice for a weather reading (the table built by route_weather)."""
+def is_past(df: pd.DataFrame, now: pd.Timestamp | None = None) -> bool:
+    """Whether the trip was over before `now` (default: the current time)."""
+    now = now if now is not None else pd.Timestamp.now(tz="UTC")
+    return bool(pd.to_datetime(df["time"], utc=True).max() < now)
+
+
+def assess(df: pd.DataFrame, activity: str, tz: str, now: pd.Timestamp | None = None) -> Assessment:
+    """Danger and comfort scores and advice for a weather reading (the table built by route_weather).
+
+    For a trip already over, the advice does not talk about forecasts."""
     if activity not in PROFILES:
         raise ValueError(f"Unknown activity {activity!r}: choose one of {', '.join(PROFILES)}")
     p = PROFILES[activity]
@@ -331,4 +347,4 @@ def assess(df: pd.DataFrame, activity: str, tz: str) -> Assessment:
         h.add_prefix("h_").reset_index(drop=True),
         pen.add_prefix("p_").reset_index(drop=True),
     ], axis=1)
-    return Assessment(activity, danger_score(df, h), comfort, advise(df, activity, h, tz), points)
+    return Assessment(activity, danger_score(df, h), comfort, advise(df, activity, h, tz, is_past(df, now)), points)
