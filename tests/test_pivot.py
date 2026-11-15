@@ -19,6 +19,10 @@ def con():
         CREATE TABLE city_monthly AS SELECT * FROM (VALUES
             ('A', 2000, 12, 5.0, true), ('A', 2000, 1, 4.0, true), ('A', 2000, 6, 20.0, true)
         ) t(city, year, month, tmean, valid_temp)""")
+    # The daily data behind the city tables runs from 1 Jan 1990 to 30 Jun 1993: 1993 is not complete
+    c.execute("CREATE TABLE city_daily AS SELECT DATE '1990-01-01' AS date UNION ALL SELECT DATE '1993-06-30'")
+    c.execute("""
+        CREATE TABLE dim_station AS SELECT * FROM (VALUES ('s1', 120), ('s2', 180), ('s3', 900)) t(station_id, altitude)""")
     return c
 
 
@@ -86,7 +90,7 @@ def test_months_keep_their_calendar_order_and_the_total_comes_last(con):
 
 def test_filter_choices_and_year_bounds(con):
     assert filter_values(con, "yearly", "city") == ["A", "B"]
-    assert year_range(con, "yearly") == (1990, 1993)
+    assert year_range(con, "yearly") == (1990, 1992)          # complete years only
     assert year_range(con, "stations") is None
 
 
@@ -102,3 +106,32 @@ def test_empty_cells_keep_the_page_colour(con, monkeypatch):
     empty = dict(styler.ctx[(1, cols.index("1992"))])
     assert empty["background-color"] == pivot_page.SURFACE
     assert dict(styler.ctx[(0, cols.index("1992"))])["background-color"] not in ("#000000", pivot_page.SURFACE)
+
+
+def test_measure_named_like_a_row_dimension(con):
+    r = run_pivot(con, spec(dataset="stations", rows=["altitude"], column=None, measure="altitude", agg="Mean"))
+    assert list(r.table.columns) == ["Altitude", "Altitude · mean"]
+    assert r.table["Altitude · mean"].iloc[0] == pytest.approx(150)       # numbers, not strings
+
+
+def test_winter_runs_from_december_to_february(con):
+    sql, _ = build_query(spec(dataset="monthly", rows=["year"], column="season", years=(2000, 2001)))
+    assert "CASE WHEN month = 12 THEN 1 ELSE 0 END" in sql                 # December goes with the next winter
+    r = run_pivot(con, spec(dataset="monthly", rows=["year"], column="season"))
+    table = r.table.set_index("Year")
+    assert table.loc["2000", "Winter"] == pytest.approx(4.0)              # January 2000 only
+    assert table.loc["2001", "Winter"] == pytest.approx(5.0)              # December 2000
+    sql, _ = build_query(spec(dataset="monthly", rows=["year"], column="month"))
+    assert "CASE WHEN month = 12" not in sql                               # without the season, calendar years
+
+
+def test_the_cell_cap_ignores_totals(con, monkeypatch):
+    import meteo.pivot as pivot
+
+    monkeypatch.setattr(pivot, "MAX_CELLS", 4)
+    monkeypatch.setattr(pivot, "ROW_LIMIT", 10)
+    ok = run_pivot(con, spec(column="year", years=(1990, 1991)))   # 4 cells (+ 5 totals): accepted
+    assert (ok.long.filter(regex=r"^g\d+$") == 0).all(axis=1).sum() == 4
+    monkeypatch.setattr(pivot, "MAX_CELLS", 3)
+    with pytest.raises(ValueError, match="More than 3 cells"):
+        run_pivot(con, spec(column="year", years=(1990, 1991)))

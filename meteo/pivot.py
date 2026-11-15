@@ -24,6 +24,9 @@ AMOUNT_AGGS = ("Mean", "Median", "Min", "Max", "Sum", "Std dev", "Count")
 AGGREGATIONS = {"Mean": "avg({})", "Median": "median({})", "Min": "min({})", "Max": "max({})", "Sum": "sum({})",
                 "Std dev": "stddev_samp({})", "Count": "count({})"}
 MAX_CELLS = 20_000
+# The cap is on the cells, not on the totals: with at most MAX_CELLS cells, totals add at most one per row and
+# column, plus the grand total, so a complete answer has fewer rows than this
+ROW_LIMIT = 2 * MAX_CELLS + 2
 TOTAL = "Total"
 
 
@@ -33,6 +36,7 @@ class Dimension:
     sql: str                                   # expression on the dataset's table, sorting in the natural order
     labels: Callable[[object], str] | None = None   # how a value is shown (month 1 -> "Jan")
     filterable: bool = False                   # offered as a filter (a category with few values)
+    season_sql: str | None = None              # expression used when the season is also picked (winter year)
 
 
 @dataclass(frozen=True)
@@ -54,6 +58,9 @@ class Dataset:
     dimensions: dict[str, Dimension]
     measures: dict[str, Measure]
     year_sql: str | None = None                # expression of the year, for the year range filter
+    season_year_sql: str | None = None         # the same, with December counted in the next year's winter
+    span_sql: str | None = None                # first and last day of the data behind it: complete years only
+    row_name: str = "rows"                     # what one row is, for counts ("years", "days"…)
 
 
 @dataclass
@@ -89,8 +96,14 @@ def _dep() -> Dimension:
     return Dimension("Département", "dep", filterable=True)
 
 
-def _decade(year: str) -> Dimension:
-    return Dimension("Decade", f"({year}) // 10 * 10", labels=lambda v: f"{int(v)}s")
+def _decade(year: str, season_year: str | None = None) -> Dimension:
+    return Dimension("Decade", f"({year}) // 10 * 10", labels=lambda v: f"{int(v)}s",
+                     season_sql=f"({season_year}) // 10 * 10" if season_year else None)
+
+
+def _season_year(year: str, month: str) -> str:
+    """Year of the season: December belongs to the winter of the next year (winter 1963 = Dec 1962 to Feb 1963)."""
+    return f"({year}) + CASE WHEN {month} = 12 THEN 1 ELSE 0 END"
 
 
 def _month(month: str) -> Dimension:
@@ -105,10 +118,14 @@ def _season(month: str) -> Dimension:
 
 
 def _calendar(year: str, month: str | None) -> dict[str, Dimension]:
-    dims = {"year": Dimension("Year", year), "decade": _decade(year)}
-    if month:
-        dims |= {"season": _season(month), "month": _month(month)}
-    return dims
+    if not month:
+        return {"year": Dimension("Year", year), "decade": _decade(year)}
+    sy = _season_year(year, month)
+    return {"year": Dimension("Year", year, season_sql=sy), "decade": _decade(year, sy),
+            "season": _season(month), "month": _month(month)}
+
+
+CITY_SPAN = "SELECT min(date), max(date) FROM city_daily"   # the city tables are all built from city_daily
 
 
 def datasets(th: dict | None = None) -> dict[str, Dataset]:
@@ -130,7 +147,7 @@ def datasets(th: dict | None = None) -> dict[str, Dataset]:
     return {
         "yearly": Dataset(
             "Yearly indicators by city", "city_yearly",
-            "One row per city and per year, 1951-2025. Incomplete years are left out of each measure.",
+            "One row per city and per year. Incomplete years are left out of each measure.",
             {"city": _city()} | _calendar("year", None),
             {
                 "tmean": temp("Mean temperature", "tmean", "valid_temp"),
@@ -149,7 +166,7 @@ def datasets(th: dict | None = None) -> dict[str, Dataset]:
                 "longest_dry_spell": days("Longest dry spell", "longest_dry_spell", "valid_rain", agg="Max"),
                 "heatwave_days": days("Heatwave days", "heatwave_days", "valid_temp", "heat"),
             },
-            year_sql="year",
+            year_sql="year", span_sql=CITY_SPAN, row_name="years",
         ),
         "monthly": Dataset(
             "Monthly values by city", "city_monthly",
@@ -162,11 +179,11 @@ def datasets(th: dict | None = None) -> dict[str, Dataset]:
                 "rr": rain("Monthly rainfall", "rr", "valid_rain", decimals=0),
                 "rain_days": days(f"Rain days (RR ≥ {th['rain_day']} mm)", "rain_days", "valid_rain"),
             },
-            year_sql="year",
+            year_sql="year", season_year_sql=_season_year("year", "month"), span_sql=CITY_SPAN, row_name="months",
         ),
         "daily": Dataset(
             "Daily values by city", "city_daily",
-            "One row per city and per day, 1951-2025 (about 550,000 rows).",
+            "One row per city and per day (about 550,000 rows).",
             {"city": _city()} | _calendar("year(date)", "month(date)"),
             {
                 "tmean": temp("Mean temperature", "tmean"),
@@ -176,7 +193,8 @@ def datasets(th: dict | None = None) -> dict[str, Dataset]:
                 "ffm": Measure("Mean wind speed", "ffm", "m/s"),
                 "fxi": Measure("Strongest gust", "fxi", "m/s", agg="Max"),
             },
-            year_sql="year(date)",
+            year_sql="year(date)", season_year_sql=_season_year("year(date)", "month(date)"), span_sql=CITY_SPAN,
+            row_name="days",
         ),
         "heatwaves": Dataset(
             "Heatwaves", "city_heatwaves",
@@ -189,7 +207,8 @@ def datasets(th: dict | None = None) -> dict[str, Dataset]:
                 "n_days": Measure("Length", "n_days", "days", aggs=AMOUNT_AGGS, scale="heat"),
                 "tx_peak": temp("Peak temperature", "tx_peak", agg="Max"),
             },
-            year_sql="year(start_date)",
+            year_sql="year(start_date)", season_year_sql=_season_year("year(start_date)", "month(start_date)"),
+            span_sql=CITY_SPAN, row_name="heatwaves",
         ),
         "stations": Dataset(
             "Weather stations", "dim_station",
@@ -205,6 +224,7 @@ def datasets(th: dict | None = None) -> dict[str, Dataset]:
                 "completeness_temp": Measure("Temperature completeness", "100 * completeness_temp", "%", decimals=0),
                 "n_rows": Measure("Daily records", "n_rows", "rows", agg="Sum", aggs=AMOUNT_AGGS, decimals=0),
             },
+            row_name="stations",
         ),
         "records": Dataset(
             "All daily records (25 million rows)", "obs_daily",
@@ -218,7 +238,8 @@ def datasets(th: dict | None = None) -> dict[str, Dataset]:
                 "rr": rain("Daily rainfall", "rr"),
                 "fxi": Measure("Strongest gust", "fxi", "m/s", agg="Max"),
             },
-            year_sql="year(date)",
+            year_sql="year(date)", season_year_sql=_season_year("year(date)", "month(date)"),
+            span_sql="SELECT min(date), max(date) FROM obs_daily", row_name="daily records",
         ),
     }
 
@@ -241,7 +262,10 @@ def build_query(spec: PivotSpec, catalog: dict[str, Dataset] = DATASETS) -> tupl
     keys = [*spec.rows] + ([spec.column] if spec.column else [])
     if len(set(keys)) != len(keys):
         raise ValueError("A dimension can only be used once")
-    exprs = [_pick(ds.dimensions, k, "dimension").sql for k in keys]
+    # With the season, the year and decade are those of the season (December goes with the next winter)
+    season = "season" in keys
+    dims = [_pick(ds.dimensions, k, "dimension") for k in keys]
+    exprs = [d.season_sql if season and d.season_sql else d.sql for d in dims]
     measure = _pick(ds.measures, spec.measure, "measure")
     if spec.agg not in measure.aggs:
         raise ValueError(f"{spec.agg!r} does not apply to {measure.label}: choose one of {', '.join(measure.aggs)}")
@@ -258,7 +282,8 @@ def build_query(spec: PivotSpec, catalog: dict[str, Dataset] = DATASETS) -> tupl
         if ds.year_sql is None:
             raise ValueError(f"{ds.label} has no year to filter on")
         lo, hi = (int(y) for y in spec.years)   # anything that is not a number stops here
-        where.append(f"{ds.year_sql} BETWEEN ? AND ?")
+        year_sql = ds.season_year_sql if season and ds.season_year_sql else ds.year_sql
+        where.append(f"{year_sql} BETWEEN ? AND ?")
         params += [lo, hi]
 
     n_rows = len(spec.rows)
@@ -274,7 +299,7 @@ def build_query(spec: PivotSpec, catalog: dict[str, Dataset] = DATASETS) -> tupl
     value = AGGREGATIONS[spec.agg].format(measure.sql)
     sql = (f"SELECT {', '.join(select)},\n       {value} AS value, count({measure.sql}) AS n\n"
            f"FROM {ds.table}\n" + (f"WHERE {' AND '.join(where)}\n" if where else "") + f"{group}\n"
-           f"ORDER BY {', '.join(f'g{i}, d{i}' for i in range(len(keys)))}\nLIMIT {MAX_CELLS + 1}")
+           f"ORDER BY {', '.join(f'g{i}, d{i}' for i in range(len(keys)))}\nLIMIT {ROW_LIMIT}")
     return sql, params
 
 
@@ -298,7 +323,8 @@ def run_pivot(con, spec: PivotSpec, catalog: dict[str, Dataset] = DATASETS) -> P
     t0 = time.perf_counter()
     long = con.execute(sql, params).df()
     elapsed = time.perf_counter() - t0
-    if len(long) > MAX_CELLS:
+    cells = int((long.filter(regex=r"^g\d+$") == 0).all(axis=1).sum())
+    if len(long) >= ROW_LIMIT or cells > MAX_CELLS:
         raise ValueError(f"More than {MAX_CELLS:,} cells: add a filter or choose broader dimensions")
     ds = catalog[spec.dataset]
     measure = ds.measures[spec.measure]
@@ -320,7 +346,8 @@ def run_pivot(con, spec: PivotSpec, catalog: dict[str, Dataset] = DATASETS) -> P
         table.columns = [str(c) for c in table.columns]
         table = table.reset_index()
     else:
-        table = frame[row_labels + ["value"]].rename(columns={"value": measure.label})
+        name = measure.label if measure.label not in row_labels else f"{measure.label} · {spec.agg.lower()}"
+        table = frame[row_labels + ["value"]].rename(columns={"value": name})
     for name in row_labels:
         table[name] = table[name].astype(str)
     return PivotResult(table, row_labels, long, sql, params, elapsed, measure.unit, decimals)
@@ -340,4 +367,13 @@ def year_range(con, dataset: str, catalog: dict[str, Dataset] = DATASETS) -> tup
     if ds.year_sql is None:
         return None
     lo, hi = con.execute(f"SELECT min({ds.year_sql}), max({ds.year_sql}) FROM {ds.table}").fetchall()[0]
-    return int(lo), int(hi)
+    if lo is None:
+        return None
+    lo, hi = int(lo), int(hi)
+    if ds.span_sql:
+        # Complete years only: a partial year (the current one) would look warmer or drier than the others
+        first, last = con.execute(ds.span_sql).fetchall()[0]
+        if first is not None:
+            lo = max(lo, first.year if (first.month, first.day) == (1, 1) else first.year + 1)
+            hi = min(hi, last.year if (last.month, last.day) == (12, 31) else last.year - 1)
+    return (lo, hi) if lo <= hi else None
