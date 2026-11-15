@@ -40,10 +40,23 @@ def _year_range(dataset: str) -> tuple[int, int] | None:
 
 @st.cache_data(show_spinner=False, max_entries=200)
 def _run(dataset: str, rows: tuple, column: str | None, measure: str, agg: str, filters: tuple,
-         years: tuple | None, totals: bool) -> PivotResult:
+         years: tuple | None, totals: bool) -> PivotResult | str:
+    """The result, or the reason it was refused (cached as well, so a refused query is not run again)."""
     spec = PivotSpec(dataset, list(rows), column, measure, agg, {k: list(v) for k, v in filters}, years, totals)
-    with _connect() as con:
-        return run_pivot(con, spec, CATALOG)
+    try:
+        with _connect() as con:
+            return run_pivot(con, spec, CATALOG)
+    except ValueError as exc:
+        return str(exc)
+
+
+def _plural(n: int, word: str) -> str:
+    return f"{num(n, 0)} {word}{'' if n == 1 else 's'}"
+
+
+def _listing(words: list[str]) -> str:
+    """"a", "a and b", "a, b and c"."""
+    return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
 
 
 def _apply_example(name: str) -> None:
@@ -56,8 +69,14 @@ def _apply_example(name: str) -> None:
     state[f"pv_col_{ds}"] = ex["column"] or NONE
     state[f"pv_measure_{ds}"] = ex["measure"]
     state[f"pv_agg_{ds}_{ex['measure']}"] = ex["agg"]
-    for key in [k for k in state if k.startswith((f"pv_f_{ds}_", f"pv_years_{ds}"))]:
-        del state[key]
+    # Reset the filters by giving the widgets a value: deleting their keys left the old values on screen, and the
+    # browser sent them back at the next change
+    for key, dim in CATALOG[ds].dimensions.items():
+        if dim.filterable:
+            state[f"pv_f_{ds}_{key}"] = []
+    bounds = _year_range(ds)
+    if bounds:
+        state[f"pv_years_{ds}"] = bounds
 
 
 def _on_example() -> None:
@@ -115,8 +134,9 @@ def page_pivot():
             filters[key] = tuple(chosen)
     years = None
     if bounds:
-        lo, hi = f_cols[len(filterable)].slider("Years", bounds[0], bounds[1], bounds, key=f"pv_years_{ds_key}")
-        years = (lo, hi) if (lo, hi) != bounds else None
+        st.session_state.setdefault(f"pv_years_{ds_key}", bounds)
+        years = f_cols[len(filterable)].slider("Years", bounds[0], bounds[1], key=f"pv_years_{ds_key}",
+                                               help="Complete years only: the current year is not over.")
     t1, t2, _ = st.columns([1, 1, 3])
     totals = t1.toggle("Totals", value=True, help="Computed on the underlying values: the total of a median is the "
                                                   "median of all the values.")
@@ -125,26 +145,39 @@ def page_pivot():
     if not rows:
         st.info("Pick at least one dimension for the rows.")
         return
-    try:
-        result = _run(ds_key, tuple(rows), None if column == NONE else column, measure_key, agg,
-                      tuple(sorted(filters.items())), years, totals)
-    except ValueError as exc:
-        st.warning(str(exc))
+    result = _run(ds_key, tuple(rows), None if column == NONE else column, measure_key, agg,
+                  tuple(sorted(filters.items())), tuple(years) if years else None, totals)
+    if isinstance(result, str):
+        st.warning(result)
         return
     if result.long.empty:
         st.info("No data for this selection.")
         return
 
     detail = (result.long.filter(regex=r"^g\d+$") == 0).all(axis=1)
-    by = " and ".join(dims[k].label.lower() for k in rows + ([] if column == NONE else [column]))
-    unit = "" if agg == "Count" else f" ({measure.unit})"
-    what = measure.label if agg == "Count" else f"{measure.label}{unit} · {agg.lower()}"
+    picked = rows + ([] if column == NONE else [column])
+    by = _listing([dims[k].label.lower() for k in picked])
+    if measure.aggs == ("Count",):        # the measure is itself a count (heatwaves, stations)
+        what = measure.label
+    elif agg == "Count":                  # how many rows have a value: say what is counted
+        what = f"Number of {ds.row_name} with data ({measure.label.lower()})"
+    else:
+        what = f"{measure.label} ({measure.unit}) · {agg.lower()}"
     st.markdown(f"<div class='chart-title'>{what} by {by}</div>", unsafe_allow_html=True)
-    st.caption(f"{num(int(detail.sum()), 0)} cells from {num(int(result.long.loc[detail, 'n'].sum()), 0)} values, "
+    st.caption(f"{_plural(int(detail.sum()), 'cell')} from {_plural(int(result.long.loc[detail, 'n'].sum()), 'value')}, "
                f"computed in {num(result.elapsed * 1000, 0)} ms")
+    if "decade" in picked and agg in ("Count", "Sum") and years:
+        lo, hi = years
+        partial = [f"the {d}s hold {min(hi, d + 9) - max(lo, d) + 1} years" for d in sorted({lo // 10 * 10, hi // 10 * 10})
+                   if max(lo, d) > d or min(hi, d + 9) < d + 9]
+        if partial:
+            st.caption(f"Here {_listing(partial)}: compare decades per year rather than by their totals.")
     height = min(36 * (len(result.table) + 1) + 4, 640)
     st.dataframe(_style(result, measure, colour), hide_index=True, height=height, placeholder="–")
-    st.download_button("Download as CSV", result.table.to_csv(index=False).encode("utf-8"), "pivot_table.csv",
+    csv = result.table.copy()
+    for c in [c for c in csv.columns if c not in result.row_labels]:
+        csv[c] = csv[c].round(result.decimals).astype("Int64" if result.decimals == 0 else float)
+    st.download_button("Download as CSV", csv.to_csv(index=False).encode("utf-8"), "pivot_table.csv",
                        "text/csv", icon=":material/download:")
     with st.expander("The query that ran"):
         st.caption("Assembled on the server from the catalog in meteo/pivot.py; the filter values are bound to the "
