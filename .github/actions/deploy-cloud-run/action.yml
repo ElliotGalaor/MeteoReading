@@ -7,6 +7,10 @@ inputs:
   image-ref:
     description: GHCR image pinned by digest (ghcr.io/owner/repo@sha256:...)
     required: true
+  commit:
+    description: Short commit the image was built from (Cloud Run label); defaults to the workflow's commit
+    required: false
+    default: ""
   service:
     description: Cloud Run service name
     required: true
@@ -76,6 +80,7 @@ runs:
         REGION: ${{ inputs.region }}
         PROJECT_ID: ${{ inputs.project-id }}
         RUNTIME_SA: ${{ inputs.runtime-service-account }}
+        COMMIT: ${{ inputs.commit }}
       run: |
         # Streamlit keeps one WebSocket per visitor: session affinity, long timeout, moderate concurrency.
         # Scales to zero between visits (free tier), CPU boost to shorten cold starts. A single instance at
@@ -84,7 +89,7 @@ runs:
               --port 8080 --memory 2Gi --cpu 1 --cpu-boost
               --min-instances 0 --max-instances 1 --concurrency 20
               --session-affinity --timeout 3600 --allow-unauthenticated
-              --labels "app=meteoreading,commit=${GITHUB_SHA:0:7}" --quiet)
+              --labels "app=meteoreading,commit=${COMMIT:-${GITHUB_SHA:0:7}}" --quiet)
         if [ -n "$RUNTIME_SA" ]; then args+=(--service-account "$RUNTIME_SA"); fi
         gcloud run deploy "$SERVICE" "${args[@]}"
         url=$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format 'value(status.url)')

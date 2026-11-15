@@ -9,7 +9,8 @@
 #   - an Artifact Registry Docker repository that keeps only the 3 most recent images;
 #   - a "github-deployer" service account, allowed to deploy Cloud Run services and push images, nothing else;
 #   - a "meteoreading-run" service account the app runs as, with no role at all;
-#   - a Workload Identity pool and provider that trust GitHub's OIDC tokens for this repository only:
+#   - a Workload Identity pool and provider that trust GitHub's OIDC tokens for the main branch of this
+#     repository only:
 #     GitHub Actions gets short-lived credentials, no service account key is ever created.
 # It ends by printing the GitHub variables to set.
 set -euo pipefail
@@ -66,16 +67,23 @@ gcloud artifacts repositories add-iam-policy-binding "$REPOSITORY" --location "$
 gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SA" --member "serviceAccount:$DEPLOY_SA" \
     --role roles/iam.serviceAccountUser > /dev/null
 
-echo "5/5 Workload Identity Federation (GitHub OIDC, repository $GITHUB_REPOSITORY only)"
+echo "5/5 Workload Identity Federation (GitHub OIDC, main branch of $GITHUB_REPOSITORY only)"
 gcloud iam workload-identity-pools describe "$POOL" --location global > /dev/null 2>&1 \
     || gcloud iam workload-identity-pools create "$POOL" --location global --display-name "GitHub Actions"
-gcloud iam workload-identity-pools providers describe "$PROVIDER" --location global \
-        --workload-identity-pool "$POOL" > /dev/null 2>&1 \
-    || gcloud iam workload-identity-pools providers create-oidc "$PROVIDER" --location global \
+# Only workflows running on main get credentials: a workflow pushed to another branch cannot deploy (the
+# production approval would otherwise be skipped by calling gcloud directly). Applied again on every run.
+CONDITION="assertion.repository == '$GITHUB_REPOSITORY' && assertion.ref == 'refs/heads/main'"
+if gcloud iam workload-identity-pools providers describe "$PROVIDER" --location global \
+        --workload-identity-pool "$POOL" > /dev/null 2>&1; then
+    gcloud iam workload-identity-pools providers update-oidc "$PROVIDER" --location global \
+        --workload-identity-pool "$POOL" --attribute-condition "$CONDITION" > /dev/null
+else
+    gcloud iam workload-identity-pools providers create-oidc "$PROVIDER" --location global \
         --workload-identity-pool "$POOL" --display-name "GitHub OIDC" \
         --issuer-uri "https://token.actions.githubusercontent.com" \
         --attribute-mapping "google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref" \
-        --attribute-condition "assertion.repository == '$GITHUB_REPOSITORY'"
+        --attribute-condition "$CONDITION"
+fi
 gcloud iam service-accounts add-iam-policy-binding "$DEPLOY_SA" --role roles/iam.workloadIdentityUser \
     --member "principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$POOL/attribute.repository/$GITHUB_REPOSITORY" \
     > /dev/null

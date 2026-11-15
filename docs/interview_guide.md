@@ -25,8 +25,8 @@ after a quiet period wakes the instance up).
 6. **Route weather**: choose "Draw on the map", search "Annecy", click a few points around the lake and finish
    the line: the route snaps to the roads, then the reading appears for tomorrow 9:00. Switch the map to
    "Headwind", then open the Mont Ventoux sample (recorded on 15 July 2025): the temperature drops along the climb.
-   Under "Safety and comfort", switch the activity from cycling to driving: the same gusts stop counting as a
-   danger, and the advice changes.
+   With the "Activity" selector at the top, next to "Timing", switch from cycling to driving: the same gusts stop
+   counting as a danger in "Safety and comfort", and the advice changes.
 
 ## Likely questions
 
@@ -104,10 +104,11 @@ monthly budget is spent, then reopens them the next month. Why half: billing dat
 half absorbs that delay. Each service also runs one instance at most, which bounds what an hour can cost.
 
 **What would you do with more time?**
-Extend to the whole of France (it is one configuration setting), add sunshine and humidity, schedule a daily
-refresh, and deploy the dashboard online.
+Extend to the whole of France (it is one configuration setting), add sunshine and humidity, homogenise the
+series (Hamed and Rao's modified Mann-Kendall test, breakpoint detection), and add the official Météo-France
+heatwave indicator. The site is already online with a weekly data refresh.
 
 **How do you make sure the code works?**
-39 automated tests, including an end-to-end test on a small synthetic dataset that reproduces every pitfall
+Over 80 automated tests, including an end-to-end test on a small synthetic dataset that reproduces every pitfall
 found in the real data: suspect quality code, impossible value, TN > TX, duplicate, ID with a leading zero,
 station that moves.

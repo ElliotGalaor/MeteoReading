@@ -1,4 +1,5 @@
-# Tested versions: Python 3.14, pandas 3.1, DuckDB 2.0, Streamlit 1.67, Plotly 7.1
+# Minimum versions; CI tests Python 3.12 to 3.14 with the latest releases. The Docker image (Python 3.13) installs
+# the exact versions of constraints.txt.
 pandas>=2.2
 numpy>=1.26
 scipy>=1.11
