@@ -25,6 +25,18 @@ same image runs anywhere:
 docker run -p 8080:8080 ghcr.io/elliotgalaor/meteoreading:latest
 ```
 
+Inside, [Caddy](https://caddyserver.com) listens on port 8080 in front of Streamlit (which only listens on
+127.0.0.1:8501), see [docker/Caddyfile](../docker/Caddyfile):
+
+- it **compresses** the responses: a first visit downloads about 2.7 MB instead of 7.7 MB (Streamlit sends its
+  JavaScript uncompressed, and Cloud Run does not compress either);
+- it adds the **security headers** Streamlit does not send (HSTS, `nosniff`, framing limited to the site itself,
+  referrer and permissions policies);
+- it answers `robots.txt` (staging asks not to be indexed) and hides Streamlit's internal metrics;
+- it serves the page shown when an idle tab pauses itself (see Costs).
+
+[docker/start.sh](../docker/start.sh) starts both processes, and stops the container if either stops.
+
 The data is downloaded again at most once a day (the CI passes the date as `DATA_VERSION`), and **every Monday**
 a scheduled CI run rebuilds the image with the latest observations; CD then deploys it like any other image.
 
@@ -33,15 +45,19 @@ a scheduled CI run rebuilds the image with the latest observations; CD then depl
 For a portfolio with occasional visitors, this stays within Google Cloud's free tier:
 
 - **Cloud Run** (tier 1 regions such as `europe-west1`): a monthly free allowance of CPU time, memory time and
-  requests (about 50 hours of an instance). The services scale to zero, so nothing runs between visits; a visit
-  starts an instance in a few seconds (cold start).
+  requests (about 50 hours of an instance). The services scale to zero between visits; a visit starts an
+  instance in about 10 seconds (cold start).
+  **A visit lasts as long as the tab stays open**: Streamlit keeps a WebSocket open, and Cloud Run bills the
+  instance while a request is open. So a tab without any click, key or scroll for 20 minutes disconnects and shows
+  a "paused" page, one click away from the same page ([dashboard/idle.py](../dashboard/idle.py),
+  `IDLE_PAUSE_MINUTES` in the Dockerfile); a forgotten tab no longer keeps an instance running.
 - **Artifact Registry**: 0.5 GB of free storage, then about 0.10 USD per GB and per month. The repository keeps
   only the 3 most recent images, and they share most of their layers.
 
 A billing account is still required by Google, and **a Google Cloud budget only sends alerts: it never stops
 anything**. The cost is capped at **5 USD per month** in three ways:
 
-1. **A single instance at most** per service: the worst hour costs about 0.10 USD, never more.
+1. **A single instance at most** per service: the worst hour costs about 0.10 USD per service, never more.
 2. **A monthly budget** of 4.30 EUR (the billing account is in euros: about 5 USD), with e-mail alerts at
    50%, 90% and 100%.
 3. **A kill switch**, the `budget-guard` Cloud Function ([deploy/budget_guard](../deploy/budget_guard/main.py)).
@@ -149,7 +165,9 @@ on the [package page](https://github.com/ElliotGalaor/MeteoReading/pkgs/containe
 
 ## Limits
 
-- **Cold start**: after a while without visits, the first page takes a few seconds to load.
+- **Cold start**: after a while without visits, the first page takes about 10 seconds to load (the container
+  starts, then the page downloads about 2.7 MB).
+- **Idle tabs pause** after 20 minutes without interaction (see Costs): one click on "Resume" brings the page back.
 - **Monthly budget**: if half the budget is spent, the site answers with an error 404 until the next month.
 - **One instance**: up to 20 visitors at a time; beyond that, new visitors get an error until one leaves.
 - **Route weather** calls the free Open-Meteo and OpenStreetMap routing services from the server: fine for a
