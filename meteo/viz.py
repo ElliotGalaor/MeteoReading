@@ -362,7 +362,7 @@ def route_profile(points: pd.DataFrame, track_points: pd.DataFrame, path: Path, 
     ax.plot(km, points["temperature_2m"], color=SERIES[1], marker="o", ms=4, label="temperature")
     ax.plot(km, points["apparent_temperature"], color=SERIES[0], marker="o", ms=4, label="feels like")
     ax.set_ylabel("°C")
-    ax.legend(loc="upper right", ncols=2)
+    ax.legend(loc="best", ncols=2)   # wherever it hides the fewest points
     ax = axes[2]
     ax.bar(km, points["precipitation"].fillna(0), width=max(km.max() / len(km) * 0.6, 0.2), color=BLUE, linewidth=0)
     ax.set_ylim(0, max(points["precipitation"].max() * 1.3, 1))

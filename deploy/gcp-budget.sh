@@ -17,10 +17,16 @@
 # It can be run again safely, for instance with another amount.
 set -euo pipefail
 
-PROJECT_ID="${1:?usage: bash deploy/gcp-budget.sh <PROJECT_ID> [AMOUNT] [REGION]}"
+PROJECT_ID="${1:?usage: bash deploy/gcp-budget.sh <PROJECT_ID> [AMOUNT] [REGION] [SERVICE...]}"
 AMOUNT="${2:-4.30}"
 REGION="${3:-europe-west1}"
-SERVICES=(meteoreading-staging meteoreading)
+# The Cloud Run services to close: the default names, or the ones given after the region (if CLOUD_RUN_SERVICE
+# renames them in the GitHub environments, pass the same names here)
+if [ $# -gt 3 ]; then
+    SERVICES=("${@:4}")
+else
+    SERVICES=(meteoreading-staging meteoreading)
+fi
 CLOSE_AT=0.5
 REPOSITORY=meteoreading
 RUNTIME_SA_NAME=meteoreading-run

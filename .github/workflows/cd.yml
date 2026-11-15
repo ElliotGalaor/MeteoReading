@@ -38,6 +38,7 @@ jobs:
       packages: read
     outputs:
       ref: ${{ steps.resolve.outputs.ref }}
+      commit: ${{ steps.resolve.outputs.commit }}
     steps:
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -68,10 +69,17 @@ jobs:
             exit 1
           fi
           echo "ref=$repo@$digest" >> "$GITHUB_OUTPUT"
+          # The commit the image was built from (label set by docker/metadata-action in CI): after a rollback,
+          # the service is labelled with the deployed code, not with the current main
+          revision=$(docker buildx imagetools inspect "$repo@$digest" \
+                     --format '{{ index .Image.Config.Labels "org.opencontainers.image.revision" }}' 2>/dev/null || true)
+          if [[ "$revision" =~ ^[0-9a-f]{7,40}$ ]]; then commit="${revision:0:7}"; else commit=unknown; fi
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
           {
             echo "### Image to deploy"
             echo "- tag: \`$tag\`"
             echo "- digest: \`$digest\`"
+            echo "- commit: \`$commit\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   staging:
@@ -104,6 +112,7 @@ jobs:
         uses: ./.github/actions/deploy-cloud-run
         with:
           image-ref: ${{ needs.image.outputs.ref }}
+          commit: ${{ needs.image.outputs.commit }}
           service: ${{ vars.CLOUD_RUN_SERVICE || 'meteoreading-staging' }}
           project-id: ${{ vars.GCP_PROJECT_ID }}
           region: ${{ vars.GCP_REGION || 'europe-west1' }}
@@ -144,6 +153,7 @@ jobs:
         uses: ./.github/actions/deploy-cloud-run
         with:
           image-ref: ${{ needs.image.outputs.ref }}
+          commit: ${{ needs.image.outputs.commit }}
           service: ${{ vars.CLOUD_RUN_SERVICE || 'meteoreading' }}
           project-id: ${{ vars.GCP_PROJECT_ID }}
           region: ${{ vars.GCP_REGION || 'europe-west1' }}

@@ -39,6 +39,10 @@ Inside, [Caddy](https://caddyserver.com) listens on port 8080 in front of Stream
 
 The data is downloaded again at most once a day (the CI passes the date as `DATA_VERSION`), and **every Monday**
 a scheduled CI run rebuilds the image with the latest observations; CD then deploys it like any other image.
+GitHub disables scheduled workflows in a public repository after **60 days without activity** (no commit, issue or
+pull request): the refresh then stops until the workflow is enabled again (**Actions** → **CI** → **Enable
+workflow**). The image installs the exact library versions of `constraints.txt`, so a rebuild only changes the
+data and the system packages of the base image.
 
 ## Costs
 
@@ -97,8 +101,11 @@ You need a Google Cloud project with billing enabled. Then open **[Cloud Shell](
 
 ```bash
 git clone https://github.com/ElliotGalaor/MeteoReading.git
-bash MeteoReading/deploy/gcp-setup.sh <PROJECT_ID> europe-west1
+bash MeteoReading/deploy/gcp-setup.sh <PROJECT_ID> europe-west1 ElliotGalaor/MeteoReading
 ```
+
+The third argument is the GitHub repository allowed to deploy (`owner/name`): **in a fork, give your own**, or
+the keyless access would trust this repository instead of yours.
 
 The script ([deploy/gcp-setup.sh](../deploy/gcp-setup.sh)) can be run again safely. It creates:
 
@@ -107,7 +114,7 @@ The script ([deploy/gcp-setup.sh](../deploy/gcp-setup.sh)) can be run again safe
 | Artifact Registry repository `meteoreading` | Cloud Run pulls images from Google's registry: CD copies the tested image there (same digest) |
 | Service account `github-deployer` | What GitHub Actions acts as: deploys Cloud Run services, pushes to that repository, nothing else |
 | Service account `meteoreading-run` | What the app runs as: no role at all, the app only calls public APIs |
-| Workload Identity pool `github` + provider `github-oidc` | Lets GitHub Actions, for **this repository only**, exchange its OIDC token for short-lived Google credentials: **no service account key** to create, store or rotate |
+| Workload Identity pool `github` + provider `github-oidc` | Lets GitHub Actions, for **the `main` branch of this repository only**, exchange its OIDC token for short-lived Google credentials: **no service account key** to create, store or rotate. A workflow pushed to another branch gets nothing, so it cannot deploy around the production approval. Running the script again applies this rule to an existing provider |
 
 It ends by printing the GitHub variables to set.
 
@@ -124,7 +131,9 @@ It ends by printing the GitHub variables to set.
    - **Deployment branches and tags**: **Selected branches and tags**, add `main`.
 
 The Cloud Run services are created by the first deploy: `meteoreading-staging` and `meteoreading`. To use other
-names, add a `CLOUD_RUN_SERVICE` variable to an environment.
+names, add a `CLOUD_RUN_SERVICE` variable to an environment, and give the same names to the budget script after the
+region (`bash deploy/gcp-budget.sh <PROJECT_ID> 4.30 europe-west1 <staging name> <production name>`), so that
+the kill switch guards them.
 
 Without `GCP_PROJECT_ID`, the deploy jobs do nothing and their log says so (forks, before the setup).
 

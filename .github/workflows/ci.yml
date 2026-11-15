@@ -19,7 +19,9 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  # Only pull request runs are cancelled: every run of main keeps its own image (rollbacks)
+  # Pull request runs cancel each other; runs of main are never cancelled once started, so each one that runs
+  # publishes its image (rollbacks). GitHub keeps at most one run waiting per group: when a third run of main
+  # arrives while one runs and one waits, the waiting one is dropped and its commit gets no image of its own.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:

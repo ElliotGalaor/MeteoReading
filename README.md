@@ -31,8 +31,8 @@ file or pick a sample, and see the conditions at the time you pass each point.
 | Annual rainfall | **no trend** (−0.4% per decade) | p = 0.59: not significant |
 | All-time record measured | **43.5 °C in Montpellier** on 28 June 2019 | |
 
-The full report, with every figure and the method, is in [reports/climate_report.html](reports/climate_report.html)
-(a single file to open in a browser). For a presentation: [docs/interview_guide.md](docs/interview_guide.md)
+The full report, with every figure and the method, is in [reports/climate_report.html](reports/climate_report.html):
+a single self-contained file, to download (GitHub shows its source) and open in a browser. For a presentation: [docs/interview_guide.md](docs/interview_guide.md)
 (pitch, 5-minute demo, likely questions).
 
 ## What the project demonstrates
@@ -119,7 +119,7 @@ The dashboard runs on **Google Cloud Run**, deployed by GitHub Actions:
 - **capped cost**: at most one instance per service, and a kill switch (a Cloud Function fed by the billing
   budget) takes the site offline if half of the 5 USD monthly budget is spent, then reopens it the next month.
 
-Set-up (one script in Cloud Shell, a few GitHub variables), costs and limits: [deployment guide](docs/DEPLOY.md).
+Set-up (two scripts in Cloud Shell, a few GitHub variables), costs and limits: [deployment guide](docs/DEPLOY.md).
 Run the same image locally:
 
 ```bash
@@ -249,7 +249,7 @@ To analyse the whole of France (overseas territories included), set `extra_depar
 
 - Non-homogenised series (changes of instruments, urbanisation around stations): only identified relocations are corrected.
 - Statistical tests assume independent years: the p-values are slightly optimistic (next step: Hamed and Rao's modified Mann-Kendall test).
-- Next steps: extend to the whole of France, add sunshine and humidity (the "autres paramètres" files), the official Météo-France heatwave indicator, schedule a daily refresh (cron or GitHub Actions), deploy the dashboard on Streamlit Community Cloud.
+- Next steps: extend to the whole of France, add sunshine and humidity (the "autres paramètres" files), the official Météo-France heatwave indicator. (The dashboard is already online, and its data is refreshed every Monday.)
 
 ## Structure
 
