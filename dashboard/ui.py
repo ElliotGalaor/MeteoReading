@@ -121,6 +121,14 @@ HEAT = colorscale(HEAT_STOPS)
 RAIN = colorscale(RAIN_STOPS)
 
 
+def is_phone() -> bool:
+    """A phone, from the browser's user agent (the layout cannot measure the screen)."""
+    try:
+        return "Mobi" in (st.context.headers.get("User-Agent") or "")
+    except Exception:
+        return False
+
+
 def chart(fig: go.Figure, height: int = 420, title: str | None = None, subtitle: str | None = None,
           margin: dict | None = None) -> None:
     """Title and subtitle in HTML above the chart: they wrap on small screens."""
@@ -129,7 +137,8 @@ def chart(fig: go.Figure, height: int = 420, title: str | None = None, subtitle:
         st.markdown(f"<div class='chart-title'>{title}</div>{sub}", unsafe_allow_html=True)
     has_legend = any(t.showlegend is not False for t in fig.data) and len(fig.data) > 1
     fig.update_layout(height=height, margin={"t": 40 if has_legend else 12, **(margin or {})})
-    st.plotly_chart(fig, theme=None, config=PLOTLY_CONFIG)
+    # Without hover, Plotly keeps its toolbar visible on touch screens, over legends and labels
+    st.plotly_chart(fig, theme=None, config=PLOTLY_CONFIG | ({"displayModeBar": False} if is_phone() else {}))
 
 
 def signed_color(values) -> list[str]:
@@ -171,7 +180,9 @@ CSS = f"""
 """
 
 
-def page_header(title: str, lead: str) -> None:
+def page_header(title: str, lead: str, tab: str | None = None) -> None:
+    """Title and lead of a page; the browser tab is named after the page (`tab`, or the title)."""
+    st.set_page_config(page_title=f"{tab or title} · Météo Analytics")
     st.markdown(CSS, unsafe_allow_html=True)
     st.title(title)
     st.markdown(f"<div class='lead'>{lead}</div>", unsafe_allow_html=True)

@@ -133,7 +133,8 @@ def page_route():
                 "Draw a route on the map, import a GPS track or pick a sample: get the weather along the route, "
                 "at the time you pass each point.")
 
-    mode = st.segmented_control("Track", ["Sample track", "Draw on the map", "Upload a file"], default="Sample track")
+    mode = st.segmented_control("Track", ["Sample track", "Draw on the map", "Upload a file"], default="Sample track",
+                                required=True)
     if mode == "Draw on the map":
         built = _draw_track()
         if built is None:
@@ -175,7 +176,8 @@ def page_route():
 
     with right:
         if track.has_time:
-            timing = st.segmented_control("Timing", ["Recorded times", "Plan a new trip"], default="Recorded times")
+            timing = st.segmented_control("Timing", ["Recorded times", "Plan a new trip"], default="Recorded times",
+                                            required=True)
         else:
             timing = "Plan a new trip"
             why = f"its timestamps cannot be used ({time_issue})" if time_issue else "this track has no timestamps"
@@ -401,7 +403,7 @@ def _draw_track() -> tuple[pd.DataFrame, str] | None:
 
 def _map(track: Track, pts: pd.DataFrame, tz: str) -> None:
     choice = st.segmented_control("Colour the route by", ["Temperature", "Rain", "Headwind", "Danger", "Comfort"],
-                                  default="Temperature")
+                                  default="Temperature", required=True)
     choice = choice or "Temperature"
     col, scale, unit = {"Temperature": ("temperature_2m", HEAT, "°C"), "Rain": ("precipitation", RAIN, "mm/h"),
                         "Headwind": ("headwind", DIVERGING, "km/h"), "Danger": ("danger", HEAT, "/ 100"),

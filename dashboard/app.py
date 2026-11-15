@@ -42,6 +42,7 @@ from ui import (
     city_colors,
     doy_climatology,
     era5,
+    is_phone,
     num,
     page_header,
     pvalue,
@@ -83,7 +84,7 @@ def page_overview():
     w, ex, pl = r["warming"], r["extremes"], r.get("pipeline", {})
     tr = w["france_trend_1951"]
     page_header(
-        f"Climate of 20 French cities, {START}-{END}",
+        f"Climate of 20 French cities, {START}-{END}", tab="Overview", lead=
         f"{num(pl.get('n_rows', 0), 0)} daily Météo-France records from {num(pl.get('n_stations', 0), 0)} stations. "
         f"All values are anomalies vs the {REF[0]}-{REF[1]} normal unless stated otherwise.",
     )
@@ -131,13 +132,20 @@ def page_overview():
         fig = go.Figure(go.Scattermap(
             lat=m["lat"], lon=m["lon"], mode="markers",
             marker=dict(size=17, color=m["slope"], colorscale=HEAT, cmin=0, opacity=0.95,
-                        colorbar=dict(title=dict(text="°C/dec.", side="top"), thickness=12, len=0.6)),
+                        colorbar=dict(title=dict(text="°C per decade", side="top"), thickness=10, len=0.7,
+                                      orientation="h", y=-0.02, yanchor="top")),
             customdata=np.stack([m["city"], m["slope"], m["delta"], m["station_name"]], axis=1),
             hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]:+.2f} °C per decade"
                           "<br>%{customdata[2]:+.2f} °C between 1961-1990 and 2011-2025"
                           "<br><span style='color:#52514e'>station: %{customdata[3]}</span><extra></extra>"))
-        fig.update_layout(map=dict(style="carto-positron", center=dict(lat=46.1, lon=2.9), zoom=4.0))
-        chart(fig, 420, "Warming rate by city", "Hover over a dot for details", margin=dict(l=0, r=0, b=0))
+        # Centred on the cities' bounds and zoomed to fit them all, Ajaccio included (narrower on phones)
+        lat0, lat1, lon0, lon1 = m["lat"].min(), m["lat"].max(), m["lon"].min(), m["lon"].max()
+        width = 300 if is_phone() else 420
+        zoom = min(np.log2(width * 360 / (512 * (lon1 - lon0 + 1))),
+                   np.log2(330 * 360 / (512 * (lat1 - lat0 + 1) / np.cos(np.radians((lat0 + lat1) / 2)))))
+        fig.update_layout(map=dict(style="carto-positron", center=dict(lat=(lat0 + lat1) / 2, lon=(lon0 + lon1) / 2),
+                                   zoom=float(zoom)))
+        chart(fig, 440, "Warming rate by city", "Hover over a dot for details", margin=dict(l=0, r=0, b=60))
 
     st.subheader("Key takeaways")
     pr, h = r["precipitation"], r["heterogeneity"]
@@ -180,15 +188,18 @@ def _city_series(col: str, season: str) -> pd.DataFrame:
 
 def page_city():
     page_header("Explore a city", "Compare up to three cities on the indicator of your choice.")
-    f = st.columns([2.2, 2, 1.3, 1.6])
+    f = st.columns([3, 2, 1.2, 1.5])
     sel = f[0].multiselect("Cities", CITIES, default=["Paris", "Marseille"], max_selections=3,
                            help="Three cities at most, so that each colour stays clearly distinct.")
     ind = f[1].selectbox("Indicator", list(INDICATORS))
     col, unit, seasonal_ok = INDICATORS[ind]
     season = f[2].selectbox("Season", SEASON_LABELS if seasonal_ok else ["Whole year"], disabled=not seasonal_ok,
                             help="Winter = December of the previous year, January and February.")
-    mode = f[3].segmented_control("Display", ["Values", "Anomaly"], default="Values")
+    mode = f[3].segmented_control("Display", ["Values", "Anomaly"], default="Values", required=True)
     period = st.slider("Period", START, END, (START, END))
+    if period[1] - period[0] < 1:
+        st.info("Pick a period of at least two years.")
+        return
     if not sel:
         st.info("Pick at least one city.")
         return
@@ -202,6 +213,9 @@ def page_city():
         normals = df[df["year"].between(*REF)].groupby("city")[col].mean()
         base = df["city"].map(normals)
         df[col] = (df[col] / base - 1) * 100 if relative else df[col] - base
+    # Moving average on the whole series, then cut to the period: narrowing the period must not change it
+    df = df.sort_values(["city", "year"])
+    df["avg"] = df.groupby("city")[col].transform(lambda s: rolling(s.reset_index(drop=True)).to_numpy())
     df = df[df["year"].between(*period)]
     y_unit = "%" if (anomaly and relative) else unit
 
@@ -212,12 +226,12 @@ def page_city():
         fig.add_scatter(x=d["year"], y=d[col], mode="lines", line=dict(color=c, width=1.2), opacity=0.45,
                         legendgroup=city, showlegend=False, name=city,
                         hovertemplate=f"{city}: %{{y:.1f}} {y_unit}<extra></extra>")
-        fig.add_scatter(x=d["year"], y=rolling(d[col].reset_index(drop=True)).to_numpy(), mode="lines",
+        fig.add_scatter(x=d["year"], y=d["avg"], mode="lines",
                         line=dict(color=c, width=2.8), legendgroup=city, name=city,
                         hovertemplate=f"{city} (10-yr avg): %{{y:.1f}} {y_unit}<extra></extra>")
     if anomaly:
         fig.add_hline(y=0, line=dict(color=MUTED, width=1))
-    fig.update_layout(hovermode="x unified", yaxis_title=y_unit)
+    fig.update_layout(hovermode="x unified", yaxis_title=y_unit, xaxis=dict(tickformat="d"))
     label = ind if season == "Whole year" else f"{ind} · {season.lower()}"
     chart(fig, 460, label + (f": anomaly vs the {REF[0]}-{REF[1]} normal" if anomaly else ""),
           f"Thin line: annual value · thick line: 10-year moving average · {period[0]}-{period[1]}")
@@ -231,13 +245,17 @@ def page_city():
             c_.metric(f"Trend in {city}", f"{signed(t.slope, 2)} {y_unit} / decade", border=True,
                       help=f"Linear regression, 95% CI [{num(t.ci_low, 2)}, {num(t.ci_high, 2)}]. "
                            f"Theil-Sen slope: {signed(t.sen_slope, 2)}.")
-            c_.markdown(f"<div class='kpi-note'>Mann-Kendall {pvalue(t.mk_p_value)} · trend {verdict}</div>",
-                        unsafe_allow_html=True)
+            # Both tests decide (significant = both p < 0.05), so both p-values are shown
+            c_.markdown(f"<div class='kpi-note'>Regression {pvalue(t.p_value)} · Mann-Kendall {pvalue(t.mk_p_value)}"
+                        f" · trend {verdict}</div>", unsafe_allow_html=True)
         except ValueError:
             c_.metric(f"Trend in {city}", "period too short", border=True)
 
     st.subheader("Seasonal cycle: then and now")
-    mcol = col if col in ("tmean", "tx", "tn", "rr") else "tmean"
+    # The monthly variable the indicator is about: rainfall for rain indicators, TX for hot days, TN for nights
+    mcol = {"hot_days": "tx", "very_hot_days": "tx", "heatwave_days": "tx", "tx_max": "tx", "tropical_nights": "tn",
+            "frost_days": "tn", "tn_min": "tn", "heavy_rain_days": "rr", "longest_dry_spell": "rr"}.get(col, col)
+    mcol = mcol if mcol in ("tmean", "tx", "tn", "rr") else "tmean"
     m = table("city_monthly")
     m = m[m["city"].isin(sel) & m["valid_rain" if mcol == "rr" else "valid_temp"]]
     fig = go.Figure()
@@ -255,6 +273,7 @@ def page_city():
         rs = table("ref_station")
         rs = rs[rs["city"].isin(sel)].copy()
         rs["role"] = np.where(rs["priority"] == 1, "main", "backup (spliced series)")
+        rs["completeness_temp"] = rs["completeness_temp"] * 100   # shown as "98%" whatever the browser's language
         st.dataframe(rs[["city", "role", "station_id", "station_name", "altitude", "distance_km",
                          "first_date", "last_date", "completeness_temp"]],
                      hide_index=True, column_config={
@@ -264,7 +283,7 @@ def page_city():
                          "first_date": st.column_config.DateColumn("Start", format="D MMM YYYY"),
                          "last_date": st.column_config.DateColumn("End", format="D MMM YYYY"),
                          "completeness_temp": st.column_config.ProgressColumn(
-                             f"Completeness {START}-{END}", min_value=0, max_value=1, format="percent")})
+                             f"Completeness {START}-{END}", min_value=0, max_value=100, format="%.0f%%")})
     source_note()
 
 
@@ -278,7 +297,7 @@ def page_year():
     years = list(range(last_year, START - 1, -1))
     year = f[1].selectbox("Year", years, index=years.index(2022) if 2022 in years else 0,
                           format_func=lambda y: f"{y} (in progress)" if y > END else str(y))
-    var_label = f[2].segmented_control("Variable", ["Maximum", "Minimum", "Mean"], default="Maximum")
+    var_label = f[2].segmented_control("Variable", ["Maximum", "Minimum", "Mean"], default="Maximum", required=True)
     var_label = var_label or "Maximum"
     col = {"Maximum": "tx", "Minimum": "tn", "Mean": "tmean"}[var_label]
 
@@ -289,7 +308,10 @@ def page_year():
     yr["doy"] = yr["date"].dt.day_of_year - ((yr["date"].dt.is_leap_year) & (yr["date"].dt.month > 2)).astype(int)
     yr = yr.merge(clim, on="doy")
     yr["anom"] = yr[col] - yr["mean"]
-    ref_dates = pd.Timestamp(year=year, month=1, day=1) + pd.to_timedelta(clim["doy"] - 1, unit="D")
+    # Normal days are numbered on a 365-day year: in a leap year, from 1 March they fall one day later
+    leap = pd.Timestamp(year=year, month=1, day=1).is_leap_year
+    ref_dates = pd.Timestamp(year=year, month=1, day=1) + pd.to_timedelta(
+        clim["doy"] - 1 + (leap & (clim["doy"] >= 60)), unit="D")
 
     k = st.columns(4)
     k[0].metric("Anomaly vs normal", f"{signed(yr['anom'].mean(), 1)} °C", border=True,
@@ -299,9 +321,11 @@ def page_year():
     above = (yr[col] > yr["p90"]).sum()
     k[2].metric("Days > 90th percentile", f"{above}", border=True,
                 help="Above the 90th percentile of the normal: about 10% of days (≈ 36 a year) in a stable climate.")
-    i_max = yr[col].idxmax()
-    k[3].metric("Maximum", f"{num(yr.loc[i_max, col], 1)} °C", border=True,
-                help=f"On {yr.loc[i_max, 'date'].strftime('%d %B %Y')}")
+    # The day that stands out for the variable: hottest day, coldest night, warmest day on average
+    kpi, i_k = {"Maximum": ("Hottest day", yr[col].idxmax()), "Minimum": ("Coldest night", yr[col].idxmin()),
+                "Mean": ("Warmest day", yr[col].idxmax())}[var_label]
+    k[3].metric(kpi, f"{num(yr.loc[i_k, col], 1)} °C", border=True,
+                help=f"{var_label} temperature, on {yr.loc[i_k, 'date'].strftime('%d %B %Y')}")
 
     fig = go.Figure()
     fig.add_scatter(x=ref_dates, y=clim["p90"], mode="lines", line=dict(width=0), hoverinfo="skip", showlegend=False)
@@ -347,8 +371,12 @@ def page_extremes():
     col = COUNT_INDICATORS[ind][0]
     scale = RAIN if col in ("frost_days", "heavy_rain_days") else HEAT
 
+    rain_ind = col in ("heavy_rain_days", "longest_dry_spell")
+    # A count of days per year, except the longest dry spell: the length of the year's longest run without rain
+    per_year = col != "longest_dry_spell"
+    unit_short, unit_long = ("days/yr", "days per year") if per_year else ("days", "days")
     y = table("city_yearly")
-    y = y[y["valid_temp"] & y["year"].between(START, END)].copy()
+    y = y[y["valid_rain" if rain_ind else "valid_temp"] & y["year"].between(START, END)].copy()
     y["decade"] = y["year"] // 10 * 10
     pv = y.pivot_table(index="city", columns="decade", values=col, aggfunc="mean")
     pv.columns = [f"{max(c, START)}-{str(min(c + 9, END))[2:]}" for c in pv.columns]
@@ -356,12 +384,13 @@ def page_extremes():
     fig = go.Figure(go.Heatmap(
         z=pv.values, x=pv.columns, y=pv.index, colorscale=scale, xgap=2, ygap=2,
         text=np.vectorize(lambda v: "" if np.isnan(v) else num(v, 0))(pv.values), texttemplate="%{text}",
-        textfont=dict(size=11), colorbar=dict(title=dict(text="days/yr", side="top"), thickness=12),
-        hovertemplate="<b>%{y}</b>, %{x}: %{z:.1f} days per year<extra></extra>"))
+        textfont=dict(size=11), colorbar=dict(title=dict(text=unit_short, side="top"), thickness=12),
+        hovertemplate="<b>%{y}</b>, %{x}: %{z:.1f} " + unit_long + "<extra></extra>"))
     fig.update_layout(xaxis=dict(side="top", showline=False, type="category", showgrid=False),
                       yaxis=dict(showline=False, type="category", showgrid=False))
     chart(fig, 640, ind, margin=dict(l=120, t=40),
-          subtitle="Average number of days per year, by decade (cities sorted by the latest decade)")
+          subtitle=("Average number of days per year" if per_year else "Average length of the year's longest dry "
+                    "spell, in days") + ", by decade (cities sorted by the latest decade)")
 
     old = y[y["year"].between(*OLD)].groupby("city")[col].mean()
     new = y[y["year"].between(*RECENT)].groupby("city")[col].mean()
@@ -378,7 +407,7 @@ def page_extremes():
     fig.add_scatter(x=dd["new"], y=dd.index, mode="markers", name=f"{RECENT[0]}-{RECENT[1]}",
                     marker=dict(color=SERIES[1], size=11, line=dict(color=SURFACE, width=2)),
                     hovertemplate="%{y}: %{x:.1f} days<extra>" + f"{RECENT[0]}-{RECENT[1]}</extra>")
-    fig.update_layout(xaxis_title="days per year", yaxis=dict(showgrid=False))
+    fig.update_layout(xaxis_title=unit_long, yaxis=dict(showgrid=False))
     chart(fig, 600, "Then and now", f"{OLD[0]}-{OLD[1]} average vs {RECENT[0]}-{RECENT[1]}")
 
     left, right = st.columns([1, 1], gap="large")
@@ -406,7 +435,7 @@ def page_extremes():
         hw = hw[hw["n_days"] >= min_days]
         if cities:
             hw = hw[hw["city"].isin(cities)]
-        st.dataframe(hw.sort_values(["n_days", "tx_peak"], ascending=False).head(200), hide_index=True, height=330,
+        st.dataframe(hw.sort_values(["n_days", "tx_peak"], ascending=False), hide_index=True, height=330,
                      column_order=["city", "start_date", "end_date", "n_days", "tx_peak", "tx_mean"],
                      column_config={
                          "city": "City",
@@ -415,7 +444,7 @@ def page_extremes():
                          "n_days": st.column_config.NumberColumn("Length", format="%d days"),
                          "tx_peak": st.column_config.NumberColumn("Peak", format="%.1f °C"),
                          "tx_mean": st.column_config.NumberColumn("Mean TX", format="%.1f °C")})
-        st.caption(f"{len(hw)} episodes match the filters.")
+        st.caption(f"{num(len(hw), 0)} episodes match the filters, longest first (scroll for more).")
     source_note()
 
 
@@ -428,7 +457,7 @@ def page_quality():
     build_s = sum(v for k, v in pl.items() if k.startswith("duration_"))
     st.graphviz_chart(f"""
     digraph {{
-      rankdir=LR; bgcolor="transparent"; nodesep=0.35; ranksep=0.45;
+      rankdir={"TB" if is_phone() else "LR"}; bgcolor="transparent"; nodesep=0.35; ranksep=0.45;
       node [shape=box style="rounded,filled" fillcolor="#ffffff" color="{GRID}" fontname="Segoe UI" fontsize=11 fontcolor="{INK}" margin="0.18,0.1"];
       edge [color="{MUTED}" arrowsize=0.7];
       api  [label="data.gouv.fr API\\nfile discovery"];
@@ -459,18 +488,22 @@ def page_quality():
     for c in ("suspect", "out_of_range", "inconsistent"):
         if c not in dq:
             dq[c] = 0
+    # Text, so that "11,326,531" reads the same as the rest of the page whatever the browser's language
+    for c in ("valid", "missing", "suspect", "out_of_range", "inconsistent"):
+        dq[c] = [num(v, 0) for v in dq[c]]
     st.dataframe(dq[["variable", "valid", "missing", "suspect", "out_of_range", "inconsistent", "pct_missing"]],
                  hide_index=True, column_config={
                      "variable": "Variable",
-                     "valid": st.column_config.NumberColumn("Valid", format="localized"),
-                     "missing": st.column_config.NumberColumn("Missing", format="localized"),
-                     "suspect": st.column_config.NumberColumn("Suspect (code 2)", format="localized"),
-                     "out_of_range": st.column_config.NumberColumn("Out of range", format="localized"),
-                     "inconsistent": st.column_config.NumberColumn("TN > TX", format="localized"),
+                     "valid": st.column_config.TextColumn("Valid"),
+                     "missing": st.column_config.TextColumn("Missing"),
+                     "suspect": st.column_config.TextColumn("Suspect (code 2)"),
+                     "out_of_range": st.column_config.TextColumn("Out of range"),
+                     "inconsistent": st.column_config.TextColumn("TN > TX"),
                      "pct_missing": st.column_config.ProgressColumn("% missing", min_value=0, max_value=100, format="%.0f%%")})
     st.markdown(
         "Météo-France already validates its data: very few values are rejected. **The real issue is completeness**: "
-        "most stations only measure rainfall, and the network keeps changing (openings, closures, relocations). "
+        "about half of the stations ever opened measured rainfall only, and the network keeps changing (openings, "
+        "closures, relocations). "
         "Hence the choice of long, complete stations, and series splicing when a station has moved.")
 
     nw = table("network_yearly")
@@ -490,6 +523,7 @@ def page_quality():
     for c in ("offset_tn", "offset_tx"):  # text: an empty cell rather than "None"
         rs[c] = [f"{signed(v, 2)} °C" if pd.notna(v) else "" for v in rs[c]]
     rs["n_overlap_days"] = [num(v, 0) if pd.notna(v) else "" for v in rs["n_overlap_days"]]
+    rs["completeness_temp"] = rs["completeness_temp"] * 100
     st.dataframe(rs[["city", "priority", "station_name", "altitude", "distance_km", "first_date", "last_date",
                      "completeness_temp", "offset_tn", "offset_tx", "n_overlap_days"]],
                  hide_index=True, height=420, column_config={
@@ -499,7 +533,7 @@ def page_quality():
                      "distance_km": st.column_config.NumberColumn("Distance", format="%.1f km"),
                      "first_date": st.column_config.DateColumn("Start", format="YYYY"),
                      "last_date": st.column_config.DateColumn("End", format="YYYY"),
-                     "completeness_temp": st.column_config.ProgressColumn(f"Completeness {START}-{END}", min_value=0, max_value=1, format="percent"),
+                     "completeness_temp": st.column_config.ProgressColumn(f"Completeness {START}-{END}", min_value=0, max_value=100, format="%.0f%%"),
                      "offset_tn": st.column_config.TextColumn("TN correction", help="Mean bias corrected, computed month by month"),
                      "offset_tx": st.column_config.TextColumn("TX correction"),
                      "n_overlap_days": st.column_config.TextColumn("Shared days", help="Days measured by both stations")})
