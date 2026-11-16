@@ -13,6 +13,7 @@ from folium.plugins import Draw
 from plotly.subplots import make_subplots
 from streamlit_folium import st_folium
 
+from meteo.geotrek import INSTANCES, fetch_gpx, nearby_treks
 from meteo.gps import ACTIVITIES, Track, parse_track, passage_times, sample_points, summary, to_gpx, with_times
 from meteo.route_scores import DANGER_LEVELS, Assessment, Score, assess, is_past, level
 from meteo.route_weather import (
@@ -58,6 +59,34 @@ def _parse(data: bytes, filename: str) -> tuple[pd.DataFrame, str, str | None]:
 @st.cache_data(show_spinner=False, ttl=86400)
 def _timezone(lat: float, lon: float) -> str | None:
     return track_timezone(lat, lon)
+
+
+@st.cache_data(show_spinner=False, ttl=6 * 3600, max_entries=100)
+def _nearby(lat: tuple, lon: tuple, radius_km: float) -> tuple[list[dict], list[str]]:
+    """Geotrek routes near a track (cached 6 hours: the parks do not change their routes every minute)."""
+    found, failed = nearby_treks(lat, lon, radius_km=radius_km, limit=10)
+    return [vars(s) | {"activity": s.activity} for s in found], failed
+
+
+@st.cache_data(show_spinner=False, ttl=6 * 3600, max_entries=50)
+def _geotrek_points(url: str) -> pd.DataFrame:
+    return parse_track(fetch_gpx(url), "route.gpx").points
+
+
+def _load_geotrek(route: dict) -> None:
+    """Replaces the track by a Geotrek route (callback of the "Read the weather" button)."""
+    try:
+        points = _geotrek_points(route["gpx_url"])
+    except (ValueError, RuntimeError) as exc:
+        st.session_state["geotrek_error"] = f"Could not load “{route['name']}”: {exc}"
+        return
+    st.session_state["route_geotrek"] = route | {"points": points}
+    st.session_state.pop("geotrek_error", None)
+    st.toast(f"Weather reading for “{route['name']}”: see the top of the page.", icon=":material/hiking:")
+
+
+def _clear_geotrek() -> None:
+    st.session_state.pop("route_geotrek", None)
 
 
 @st.cache_data(show_spinner=False)
@@ -134,8 +163,17 @@ def page_route():
                 "at the time you pass each point.")
 
     mode = st.segmented_control("Track", ["Sample track", "Draw on the map", "Upload a file"], default="Sample track",
-                                required=True)
-    if mode == "Draw on the map":
+                                required=True, key="route_mode", on_change=_clear_geotrek)
+    geo = st.session_state.get("route_geotrek")   # a route picked in "Routes nearby", in place of the track
+    if geo:
+        points, name, time_issue = geo["points"], geo["name"], None
+        left, right = st.columns([1.3, 1], gap="large")
+        with left:
+            st.markdown(f"**{name}**")
+            link = f" · [its page]({geo['page_url']})" if geo.get("page_url") else ""
+            st.caption(f"{geo['practice'] or 'Route'} from {geo['source']}, via Geotrek{link}")
+            st.button("Back to my track", icon=":material/undo:", on_click=_clear_geotrek)
+    elif mode == "Draw on the map":
         built = _draw_track()
         if built is None:
             return
@@ -172,7 +210,12 @@ def page_route():
                 return
     track = Track(name=name, points=points)
     options = list(ACTIVITIES)
-    guessed = st.session_state.get("draw_activity", "Cycling") if mode == "Draw on the map" else _guess_activity(track.name)
+    if geo:
+        guessed = geo["activity"]
+    elif mode == "Draw on the map":
+        guessed = st.session_state.get("draw_activity", "Cycling")
+    else:
+        guessed = _guess_activity(track.name)
 
     with right:
         if track.has_time:
@@ -217,7 +260,7 @@ def page_route():
                         f"Departure at {start:%H:%M}.")
             track = with_times(track, passage_times(track, start, speed, preset["climb_min_per_100m"]))
 
-    if mode == "Upload a file":
+    if mode == "Upload a file" and not geo:
         st.caption(f"**{track.name}**")
     s = summary(track)
     k = st.columns(4)
@@ -234,6 +277,7 @@ def page_route():
             pts, source, tz, insights, stats = _reading(track.points, track.name)
     except (ValueError, RuntimeError) as exc:
         st.error(str(exc))
+        _nearby_panel(track)
         return
 
     local = pts["time"].dt.tz_convert(tz)
@@ -266,6 +310,54 @@ def page_route():
              if source == "forecast" else "ERA5 reanalysis archive via the Open-Meteo API (what the weather actually was)")
     st.markdown(f"<div class='source'>Weather: {label}. Times in {tz}. Temperatures are adjusted to the altitude "
                 f"of each point (90 m terrain model).</div>", unsafe_allow_html=True)
+    _nearby_panel(track)
+
+
+def _nearby_panel(track: Track) -> None:
+    """Hiking, cycling and trail routes starting near the track, from the Geotrek sites of parks and départements."""
+    st.subheader("Routes nearby")
+    st.caption("Routes published by parks and départements on their Geotrek sites, starting near your track. "
+               "Pick one to read the weather along it.")
+    radius = st.select_slider("Starting within", [2, 5, 10, 20], value=10, format_func=lambda v: f"{v} km",
+                              key="geotrek_radius")
+    pts = track.points
+    keep = np.linspace(0, len(pts) - 1, min(len(pts), 100)).astype(int)
+    lat = tuple(np.round(pts["lat"].to_numpy()[keep], 3).tolist())
+    lon = tuple(np.round(pts["lon"].to_numpy()[keep], 3).tolist())
+    with st.spinner("Looking for routes nearby…"):
+        found, failed = _nearby(lat, lon, float(radius))
+    if geo := st.session_state.get("route_geotrek"):   # not the route being read
+        found = [r for r in found if (r["source"], r["trek_id"]) != (geo["source"], geo["trek_id"])]
+    if error := st.session_state.pop("geotrek_error", None):
+        st.error(error)
+    if not found:
+        st.info(f"No Geotrek route starts within {radius} km of this track. The sites queried cover these areas: "
+                + ", ".join(i.name for i in INSTANCES) + ".")
+    else:
+        table = pd.DataFrame(found)
+        event = st.dataframe(
+            table[["name", "practice", "length_km", "ascent_m", "distance_km", "source", "page_url"]],
+            hide_index=True, on_select="rerun", selection_mode="single-row",
+            key=f"geotrek_table_{hash((lat, lon, radius))}", placeholder="–",
+            column_config={
+                "name": st.column_config.TextColumn("Route", width="large"),
+                "practice": "Practice",
+                "length_km": st.column_config.NumberColumn("Length", format="%.1f km"),
+                "ascent_m": st.column_config.NumberColumn("Ascent", format="%d m"),
+                "distance_km": st.column_config.NumberColumn("Start", format="%.1f km away",
+                                                             help="Distance from your track to the route's start"),
+                "source": "Published by",
+                "page_url": st.column_config.LinkColumn("Page", display_text="Open"),
+            })
+        rows = event.selection.rows
+        if rows:
+            route = found[rows[0]]
+            st.button(f"Read the weather along “{route['name']}”", type="primary", icon=":material/hiking:",
+                      on_click=_load_geotrek, args=(route,))
+        else:
+            st.caption("Select a route in the table (box on the left of the row) to read the weather along it.")
+    if failed:
+        st.caption("Not reached this time: " + ", ".join(failed) + ".")
 
 
 DANGER_STATUS = {"Low": "good", "Moderate": "warning", "High": "serious", "Severe": "critical"}
