@@ -48,7 +48,7 @@ a single self-contained file, to download (GitHub shows its source) and open in 
 | **Cross-validation** against an independent source (ERA5 reanalysis) | [meteo/era5.py](meteo/era5.py) |
 | **Data visualisation**: colour-blind-safe palette, one idea per chart | [reports/figures/](reports/figures/) |
 | **Dashboard**: 7 interactive pages, including a pivot table built from a whitelisted catalog (no SQL from the client, bound parameters, totals with `GROUPING SETS`) | [dashboard/](dashboard/), [meteo/pivot.py](meteo/pivot.py) |
-| **Geospatial data**: GPX/KML/GeoJSON parsing (safe XML), routing on OpenStreetMap, resampling, elevation, bearings, time interpolation, head/tail wind | [meteo/gps.py](meteo/gps.py), [meteo/routing.py](meteo/routing.py), [meteo/route_weather.py](meteo/route_weather.py) |
+| **Geospatial data**: GPX/KML/GeoJSON parsing (safe XML), routing on OpenStreetMap, resampling, elevation, bearings, time interpolation, head/tail wind, nearby routes from public APIs | [meteo/gps.py](meteo/gps.py), [meteo/routing.py](meteo/routing.py), [meteo/route_weather.py](meteo/route_weather.py), [meteo/geotrek.py](meteo/geotrek.py) |
 | **Explainable scoring**: danger and comfort indices from documented, per-activity thresholds (piecewise linear, combined as independent risks, time-weighted), rule-based advice | [meteo/route_scores.py](meteo/route_scores.py) |
 | **Software quality**: externalised configuration, automated tests, `ruff` lint, pipeline reproducible in one command | [tests/](tests/), [config.yaml](config.yaml) |
 | **DevOps**: GitHub Actions CI (lint, tests on 3 Python versions, **Docker** image with its data built once, smoke-tested and published to GHCR, weekly data refresh) and CD (that same image promoted on **Google Cloud Run**: staging, then production after approval, keyless authentication through Workload Identity Federation) | [.github/workflows/](.github/workflows/), [Dockerfile](Dockerfile), [docs/DEPLOY.md](docs/DEPLOY.md) |
@@ -192,6 +192,11 @@ Then the tool:
      around km 238 (20:58): dipped headlights or fog lights, and slow down"), with a pointer to the official
      Météo-France warnings when a hazard is at least moderate.
      The thresholds are in [meteo/route_scores.py](meteo/route_scores.py) and tested.
+7. **suggests routes nearby**: hiking, cycling and trail routes starting near the track, from the public Geotrek
+   APIs of 11 parks and départements (Écrins, Vanoise, Vercors, Cévennes, the regional parks of Provence-Alpes-Côte
+   d'Azur, Loire-Atlantique, Doubs, Jura…, about 5,000 routes). Pick one and the reading switches to it.
+   Geotrek has no national API, so [meteo/geotrek.py](meteo/geotrek.py) queries only the instances near the track,
+   in parallel, with a bounding box, and ranks the routes by the distance from the track to their start.
 
 ![Weather along the Mont Ventoux climb](reports/figures/route_weather_example.png)
 
@@ -226,6 +231,9 @@ data.gouv.fr (API)          Open-Meteo (ERA5 API)
 - **Validation**: ERA5 (Copernicus) through the free [Open-Meteo](https://open-meteo.com/) API, 2015-2024.
 - **Route weather**: Open-Meteo forecast, archive, elevation and geocoding APIs; map tiles and routing from
   [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (routing servers hosted by FOSSGIS, for light use).
+- **Routes nearby**: the [Geotrek](https://geotrek.fr) sites of the parks and départements listed in
+  [meteo/geotrek.py](meteo/geotrek.py); the routes remain theirs, each one is shown with its source and a link to its
+  page.
 
 To analyse the whole of France (overseas territories included), set `extra_departments: all` in [config.yaml](config.yaml): about 1.3 GB and more than 100 million rows, without changing the code.
 
@@ -274,6 +282,7 @@ MeteoReading/
 │   ├── routing.py         # track from map clicks: routing, resampling, elevation
 │   ├── pivot.py           # pivot tables: catalog, query assembly, totals
 │   ├── route_weather.py   # weather reading along a track
+│   ├── geotrek.py         # routes nearby, from the Geotrek APIs of parks and départements
 │   ├── route_scores.py    # danger and comfort scores, advice
 │   ├── viz.py, palette.py # static charts
 │   └── report.py, fmt.py  # HTML report
