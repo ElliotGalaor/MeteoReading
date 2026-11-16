@@ -6,6 +6,7 @@ parsed with defusedxml, which rejects malicious documents (entity expansion atta
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from xml.etree.ElementTree import ParseError
@@ -47,12 +48,35 @@ class Track:
     def distance_km(self) -> float:
         return float(self.points["dist_km"].iloc[-1])
 
+    @property
+    def looks_scrambled(self) -> bool:
+        """Far longer than its own extent: points out of order (OpenStreetMap shuffles anonymous traces)."""
+        p = self.points
+        diag = float(haversine_km(p["lat"].min(), p["lon"].min(), p["lat"].max(), p["lon"].max()))
+        return self.distance_km > 10 and self.distance_km > 60 * max(diag, 0.05)
+
 
 # --- Parsing ------------------------------------------------------------------------
-def parse_track(data: bytes, filename: str) -> Track:
-    """Read a GPX, KML or GeoJSON file into a Track. Any unreadable file raises a ValueError with a plain message."""
+JOIN_KM = 0.5        # consecutive tracks whose ends are closer than this are one route (the days of a trip)
+MAX_TRACKS = 100     # more separate lines than this: a network or a collection of routes, not one route
+GEOJSON_TYPES = {"Feature", "FeatureCollection", "Point", "MultiPoint", "LineString", "MultiLineString",
+                 "Polygon", "MultiPolygon", "GeometryCollection"}
+
+
+@dataclass
+class _Piece:
+    """One route of a file (a GPX track, a KML placemark, a GeoJSON feature), as lines to chain into one."""
+    name: str | None
+    parts: list[list[tuple]]   # (lat, lon, ele, time) rows of each line
+
+
+def read_tracks(data: bytes, filename: str) -> list[Track]:
+    """The routes of a GPX, KML or GeoJSON file, in file order.
+
+    Tracks, placemarks or features are kept apart, except consecutive ones whose ends touch (the days of one trip).
+    Any unreadable file raises a ValueError with a plain message."""
     ext = Path(filename).suffix.lower()
-    name = Path(filename).stem
+    stem = Path(filename).stem
     parsers = {".gpx": ("GPX", _parse_gpx), ".kml": ("KML", _parse_kml),
                ".geojson": ("GeoJSON", _parse_geojson), ".json": ("GeoJSON", _parse_geojson)}
     if ext not in parsers:
@@ -61,15 +85,123 @@ def parse_track(data: bytes, filename: str) -> Track:
     if not data.strip():
         raise ValueError("the file is empty.")
     try:
-        rows, found_name = parser(data)
+        pieces, file_name = parser(data)
     except DefusedXmlException:
         raise ValueError("the file declares XML entities or a DTD, which are refused for security reasons.") from None
     except ParseError as exc:
         line = exc.position[0] if getattr(exc, "position", None) else "?"
         raise ValueError(f"this is not a valid {kind} file: the XML is broken or cut off (line {line}).") from None
-    except (json.JSONDecodeError, UnicodeDecodeError):
+    except json.JSONDecodeError:
         raise ValueError("this is not a valid GeoJSON file: the JSON is broken or cut off.") from None
-    return build_track(rows, found_name or name)
+    return _assemble(pieces, file_name or stem)
+
+
+def parse_track(data: bytes, filename: str) -> Track:
+    """One track from a file: its only route, or the longest one when it holds several (see read_tracks)."""
+    return main_track(read_tracks(data, filename))
+
+
+def main_track(tracks: list[Track]) -> Track:
+    """The track to use by default: the longest one whose points are in order."""
+    sane = [t for t in tracks if not t.looks_scrambled] or tracks
+    return max(sane, key=lambda t: t.distance_km)
+
+
+def _clean_name(name: str | None) -> str | None:
+    """'[Itinéraire] GR 3' -> 'GR 3' (a category tag some exports put before the name)."""
+    if not name or not name.strip():
+        return None
+    return re.sub(r"^\[[^\]]{1,30}\]\s*", "", name.strip()) or name.strip()
+
+
+def _assemble(pieces: list[_Piece], default_name: str) -> list[Track]:
+    total = sum(len(rows) for p in pieces for rows in p.parts)
+    if total > MAX_POINTS:
+        raise ValueError(f"Track too large ({total:,} points, maximum {MAX_POINTS:,})")
+    tracks = []
+    for p in pieces:
+        try:
+            tracks.append(build_track(chain_parts(p.parts), _clean_name(p.name) or default_name))
+        except ValueError:
+            continue   # a line with fewer than 2 valid points
+    if not tracks:
+        raise ValueError("The track needs at least 2 valid points")
+    tracks = _join_touching(tracks)
+    if len(tracks) > MAX_TRACKS:
+        raise ValueError(f"the file holds {len(tracks):,} separate lines: it looks like a network or a collection of "
+                         "routes, not one route. Export a single route.")
+    names = [t.name for t in tracks]
+    for i, t in enumerate(tracks, 1):   # tell apart tracks with the same name
+        if names.count(t.name) > 1:
+            t.name = f"{t.name} ({i})"
+    return tracks
+
+
+def _rows(track: Track) -> list[tuple]:
+    p = track.points
+    times = [t.isoformat() if pd.notna(t) else None for t in p["time"]]
+    return list(zip(p["lat"], p["lon"], p["ele"], times, strict=True))
+
+
+def _join_touching(tracks: list[Track]) -> list[Track]:
+    """Joins consecutive tracks when one ends where the next starts (and, with times, the next starts later)."""
+    out = [tracks[0]]
+    for nxt in tracks[1:]:
+        cur = out[-1]
+        a, b = cur.points.iloc[-1], nxt.points.iloc[0]
+        gap = float(haversine_km(a["lat"], a["lon"], b["lat"], b["lon"]))
+        if cur.has_time and nxt.has_time:
+            in_order = nxt.points["time"].iloc[0] >= cur.points["time"].iloc[-1]
+        else:
+            in_order = not cur.has_time and not nxt.has_time
+        if gap <= JOIN_KM and in_order:
+            out[-1] = build_track(_rows(cur) + _rows(nxt), cur.name)
+        else:
+            out.append(nxt)
+    return out
+
+
+def chain_parts(parts: list[list[tuple]]) -> list[tuple]:
+    """One line from the pieces of a MultiLineString (or a KML MultiGeometry): from the longest piece, the nearest
+    piece is added to whichever end it is closest to, reversed if needed. Timed pieces go in time order instead."""
+    parts = [p for p in parts if p]
+    if len(parts) <= 1:
+        return parts[0] if parts else []
+    if all(p[0][3] and p[-1][3] for p in parts):
+        try:
+            return [r for p in sorted(parts, key=lambda p: pd.Timestamp(p[0][3])) for r in p]
+        except (ValueError, TypeError):
+            pass
+
+    def ends(p):
+        try:
+            return float(p[0][0]), float(p[0][1]), float(p[-1][0]), float(p[-1][1])
+        except (TypeError, ValueError):
+            return np.nan, np.nan, np.nan, np.nan
+
+    e = np.array([ends(p) for p in parts])
+    order = np.argsort([-len(p) for p in parts])
+    chain = list(parts[order[0]])
+    left = [i for i in range(len(parts)) if i != order[0]]
+    while left:
+        s_lat, s_lon = float(chain[0][0]), float(chain[0][1])
+        t_lat, t_lon = float(chain[-1][0]), float(chain[-1][1])
+        sub = e[left]
+        # distances: tail -> start, tail -> end (reversed), end -> head, start -> head (reversed)
+        d = np.stack([haversine_km(t_lat, t_lon, sub[:, 0], sub[:, 1]), haversine_km(t_lat, t_lon, sub[:, 2], sub[:, 3]),
+                      haversine_km(sub[:, 2], sub[:, 3], s_lat, s_lon), haversine_km(sub[:, 0], sub[:, 1], s_lat, s_lon)])
+        d = np.where(np.isnan(d), np.inf, d)
+        how, k = np.unravel_index(int(np.argmin(d)), d.shape)
+        piece = parts[left.pop(int(k))]
+        if how == 0:
+            chain += piece
+        elif how == 1:
+            chain += piece[::-1]
+        elif how == 2:
+            chain = list(piece) + chain
+        else:
+            chain = list(piece[::-1]) + chain
+    return chain
 
 
 def build_track(rows: list[tuple], name: str = "Track") -> Track:
@@ -108,53 +240,87 @@ def _local(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
-def _parse_gpx(data: bytes) -> tuple[list[tuple], str | None]:
+def _child_text(el, name: str) -> str | None:
+    for child in el:
+        if _local(child.tag) == name and child.text and child.text.strip():
+            return child.text.strip()
+    return None
+
+
+def _gpx_point(el) -> tuple:
+    return el.get("lat"), el.get("lon"), _child_text(el, "ele"), _child_text(el, "time")
+
+
+def _parse_gpx(data: bytes) -> tuple[list[_Piece], str | None]:
     root = ET.fromstring(data)
-    found: dict[str, list[tuple]] = {"trkpt": [], "rtept": [], "wpt": []}
-    name = None
+    meta = next((el for el in root if _local(el.tag) == "metadata"), None)
+    # GPX 1.1: metadata/name; GPX 1.0: a name right under <gpx> (never a waypoint's name)
+    file_name = _child_text(meta, "name") if meta is not None else _child_text(root, "name")
+    tracks, routes, waypoints = [], [], []
     for el in root.iter():
         tag = _local(el.tag)
-        if tag in found:
-            ele = time = None
-            for child in el:
-                ctag = _local(child.tag)
-                if ctag == "ele":
-                    ele = child.text
-                elif ctag == "time":
-                    time = child.text
-            found[tag].append((el.get("lat"), el.get("lon"), ele, time))
-        elif tag == "name" and name is None and el.text and el.text.strip():
-            name = el.text.strip()
-    rows = found["trkpt"] or found["rtept"] or found["wpt"]
-    if not rows:
+        if tag == "trk":
+            rows = [_gpx_point(p) for seg in el if _local(seg.tag) == "trkseg" for p in seg if _local(p.tag) == "trkpt"]
+            tracks.append(_Piece(_child_text(el, "name") or file_name, [rows]))
+        elif tag == "rte":
+            rows = [_gpx_point(p) for p in el if _local(p.tag) == "rtept"]
+            routes.append(_Piece(_child_text(el, "name") or file_name, [rows]))
+        elif tag == "wpt":
+            waypoints.append(_gpx_point(el))
+    # Recorded tracks first, then planned routes; waypoints only when there is neither (a list of places to visit)
+    pieces = [p for p in tracks if p.parts[0]] or [p for p in routes if p.parts[0]]
+    if not pieces and waypoints:
+        pieces = [_Piece(file_name, [waypoints])]
+    if not pieces:
         raise ValueError("No track, route or waypoints found in the GPX file")
-    return rows, name
+    return pieces, file_name
 
 
-def _parse_kml(data: bytes) -> tuple[list[tuple], str | None]:
-    root = ET.fromstring(data)
-    name = next((el.text.strip() for el in root.iter() if _local(el.tag) == "name" and el.text), None)
-    # gx:Track (with timestamps) takes priority over plain LineString coordinates
-    whens = [el.text for el in root.iter() if _local(el.tag) == "when"]
-    coords = [el.text for el in root.iter() if _local(el.tag) == "coord"]
-    if coords and len(whens) == len(coords):
-        rows = []
-        for when, c in zip(whens, coords, strict=True):
-            parts = (c or "").split()
-            if len(parts) >= 2:
-                rows.append((parts[1], parts[0], parts[2] if len(parts) > 2 else None, when))
-        if rows:
-            return rows, name
+def _kml_coords(text: str | None) -> list[tuple]:
     rows = []
-    for el in root.iter():
-        if _local(el.tag) == "coordinates" and el.text:
-            for chunk in el.text.split():
-                parts = chunk.split(",")
-                if len(parts) >= 2:
-                    rows.append((parts[1], parts[0], parts[2] if len(parts) > 2 else None, None))
-    if not rows:
-        raise ValueError("No coordinates found in the KML file")
-    return rows, name
+    for chunk in (text or "").split():
+        parts = chunk.split(",")
+        if len(parts) >= 2:
+            rows.append((parts[1], parts[0], parts[2] if len(parts) > 2 else None, None))
+    return rows
+
+
+def _parse_kml(data: bytes) -> tuple[list[_Piece], str | None]:
+    root = ET.fromstring(data)
+    doc = next((el for el in root.iter() if _local(el.tag) == "Document"), root)
+    file_name = _child_text(doc, "name")
+    pieces, points = [], []
+    for pm in (el for el in root.iter() if _local(el.tag) == "Placemark"):
+        name = _child_text(pm, "name") or file_name
+        # gx:Track (with timestamps) takes priority over plain coordinates
+        tracks = [el for el in pm.iter() if _local(el.tag) == "Track"]
+        if tracks:
+            parts = []
+            for tr in tracks:
+                whens = [el.text for el in tr if _local(el.tag) == "when"]
+                coords = [el.text for el in tr if _local(el.tag) == "coord"]
+                rows = []
+                for when, c in zip(whens, coords, strict=False):
+                    v = (c or "").split()
+                    if len(v) >= 2:
+                        rows.append((v[1], v[0], v[2] if len(v) > 2 else None, when))
+                parts.append(rows)
+            if any(parts):
+                pieces.append(_Piece(name, parts))
+                continue
+        # Lines only: the coordinates of Point placemarks are points of interest, not part of the route
+        lines = [el for el in pm.iter() if _local(el.tag) in ("LineString", "LinearRing")]
+        parts = [_kml_coords(_child_text(line, "coordinates")) for line in lines]
+        if any(parts):
+            pieces.append(_Piece(name, [p for p in parts if p]))
+        elif not lines:
+            for pt in (el for el in pm.iter() if _local(el.tag) == "Point"):
+                points += _kml_coords(_child_text(pt, "coordinates"))
+    if not pieces and len(points) >= 2:   # only places: read them in order, like GPX waypoints
+        pieces = [_Piece(file_name, [points])]
+    if not pieces:
+        raise ValueError("No line found in the KML file")
+    return pieces, file_name
 
 
 def _point(c) -> tuple | None:
@@ -164,18 +330,38 @@ def _point(c) -> tuple | None:
     return None
 
 
-def _parse_geojson(data: bytes) -> tuple[list[tuple], str | None]:
-    obj = json.loads(data)
-    if not isinstance(obj, dict):
-        raise ValueError("this GeoJSON file holds no Feature, FeatureCollection or geometry.")
+def _load_json(data: bytes):
+    try:
+        return json.loads(data)
+    except UnicodeDecodeError:   # not UTF-8: some open-data exports are in Latin-1
+        return json.loads(data.decode("latin-1"))
+
+
+def _lines(geom: dict) -> list:
+    """The lines of a geometry (LineString, MultiLineString, GeometryCollection)."""
+    kind, coords = geom.get("type"), geom.get("coordinates")
+    if kind == "LineString":
+        return [coords]
+    if kind == "MultiLineString":
+        return coords if isinstance(coords, list) else []
+    if kind == "GeometryCollection":
+        return [line for g in geom.get("geometries") or [] if isinstance(g, dict) for line in _lines(g)]
+    return []
+
+
+def _parse_geojson(data: bytes) -> tuple[list[_Piece], str | None]:
+    obj = _load_json(data)
+    if not isinstance(obj, dict) or not (obj.get("type") in GEOJSON_TYPES or "features" in obj):
+        raise ValueError("this JSON file is not GeoJSON: it has no Feature, FeatureCollection or geometry.")
+    file_name = obj.get("name") if isinstance(obj.get("name"), str) else None
     features = obj.get("features") or ([obj] if obj.get("type") == "Feature" else [{"geometry": obj}])
-    rows, points, name = [], [], None
+    pieces, points = [], []
     for feat in features if isinstance(features, list) else []:
         if not isinstance(feat, dict):
             continue
         geom = feat.get("geometry") if isinstance(feat.get("geometry"), dict) else {}
         props = feat.get("properties") if isinstance(feat.get("properties"), dict) else {}
-        name = name or props.get("name")
+        name = props.get("name") if isinstance(props.get("name"), str) else None
         times = props.get("coordTimes") or props.get("times")
         times = times if isinstance(times, list) else None
         kind, coords = geom.get("type"), geom.get("coordinates")
@@ -185,17 +371,23 @@ def _parse_geojson(data: bytes) -> tuple[list[tuple], str | None]:
                 if (p := _point(c)) is not None:
                     points.append((*p, None))
             continue
-        lines = {"LineString": [coords], "MultiLineString": coords}.get(kind) or []
-        for li, line in enumerate(lines if isinstance(lines, list) else []):
+        parts = []
+        for li, line in enumerate(_lines(geom)):
             line_times = times[li] if times and isinstance(times[0], list) and li < len(times) else times
+            rows = []
             for pi, c in enumerate(line if isinstance(line, list) else []):
                 if (p := _point(c)) is not None:
                     t = line_times[pi] if line_times and pi < len(line_times) else None
                     rows.append((*p, t))
-    rows = rows or points
-    if not rows:
+            if rows:
+                parts.append(rows)
+        if parts:
+            pieces.append(_Piece(name or file_name, parts))
+    if not pieces and points:
+        pieces = [_Piece(file_name, [points])]
+    if not pieces:
         raise ValueError("No line or points found in the GeoJSON file")
-    return rows, name
+    return pieces, file_name
 
 
 # --- Geometry -----------------------------------------------------------------------

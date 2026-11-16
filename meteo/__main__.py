@@ -137,7 +137,7 @@ def cmd_query(cfg, args):
 def cmd_route(cfg, args):
     import pandas as pd
 
-    from .gps import ACTIVITIES, parse_track, passage_times, summary, with_times
+    from .gps import ACTIVITIES, main_track, passage_times, read_tracks, summary, with_times
     from .route_scores import assess
     from .route_weather import clock_format, read_route, track_timezone
 
@@ -145,9 +145,13 @@ def cmd_route(cfg, args):
     if not path.is_file():
         raise SystemExit(f"error: file not found: {path}")
     try:
-        track = parse_track(path.read_bytes(), path.name)
+        tracks = read_tracks(path.read_bytes(), path.name)
+        track = main_track(tracks)
     except ValueError as exc:
         raise SystemExit(f"error: could not read {path.name}: {exc}") from None
+    if len(tracks) > 1:
+        print(f"note: {path.name} holds {len(tracks)} separate tracks; reading the longest one in order, "
+              f"{track.name} ({track.distance_km:.1f} km)")
     if args.start or not track.has_time:
         if not args.start:
             raise SystemExit("error: this track has no timestamps: add --start 'YYYY-MM-DD HH:MM'")
