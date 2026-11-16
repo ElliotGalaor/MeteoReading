@@ -10,8 +10,9 @@ font = "sans-serif"
 
 [server]
 headless = true
-# Uploaded GPS tracks are small: cap uploads at 20 MB
-maxUploadSize = 20
+# Uploaded GPS tracks are small. The page refuses files above 20 MB with a message; the server accepts up to
+# 30 MB so that the page gets the file and can say why (Cloud Run caps a request at 32 MiB)
+maxUploadSize = 30
 
 [browser]
 gatherUsageStats = false

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from datetime import date, datetime, time, timedelta
 
 import folium
@@ -14,7 +15,18 @@ from plotly.subplots import make_subplots
 from streamlit_folium import st_folium
 
 from meteo.geotrek import INSTANCES, fetch_gpx, nearby_treks
-from meteo.gps import ACTIVITIES, Track, parse_track, passage_times, sample_points, summary, to_gpx, with_times
+from meteo.gps import (
+    ACTIVITIES,
+    Track,
+    main_track,
+    parse_track,
+    passage_times,
+    read_tracks,
+    sample_points,
+    summary,
+    to_gpx,
+    with_times,
+)
 from meteo.route_scores import DANGER_LEVELS, Assessment, Score, assess, is_past, level
 from meteo.route_weather import (
     FORECAST_FUTURE_DAYS,
@@ -50,10 +62,29 @@ TIMEZONES = ["Europe/Paris", "UTC", "Europe/London", "Europe/Madrid", "Europe/Ro
              "America/New_York", "America/Los_Angeles", "Asia/Tokyo"]
 
 
+MAX_UPLOAD_MB = 20   # checked here, under the server's limit (.streamlit/config.toml), to say why a file is refused
+
+
 @st.cache_data(show_spinner=False)
-def _parse(data: bytes, filename: str) -> tuple[pd.DataFrame, str, str | None]:
-    t = parse_track(data, filename)
-    return t.points, t.name, t.time_issue
+def _parse(data: bytes, filename: str) -> list[tuple[pd.DataFrame, str, str | None, bool]]:
+    """The tracks of a file: (points, name, why its timestamps are not used, points out of order)."""
+    return [(t.points, t.name, t.time_issue, t.looks_scrambled) for t in read_tracks(data, filename)]
+
+
+def _pick(tracks: list[tuple], key: str) -> tuple[pd.DataFrame, str, str | None]:
+    """The only track of a file, or the one picked when it holds several (default: the longest in order)."""
+    if len(tracks) == 1:
+        return tracks[0][:3]
+    objs = [Track(name=n, points=p) for p, n, _, _ in tracks]
+    default = objs.index(main_track(objs))
+
+    def label(i: int) -> str:
+        p, n, _, scrambled = tracks[i]
+        return f"{n} · {num(p['dist_km'].iloc[-1], 1)} km" + (" · points out of order" if scrambled else "")
+    i = st.selectbox(f"This file holds {len(tracks)} separate tracks: pick one", range(len(tracks)), index=default,
+                     format_func=label, key=key,
+                     help="Tracks that do not follow each other (different recordings, days or routes) are kept apart.")
+    return tracks[i][:3]
 
 
 @st.cache_data(show_spinner=False, ttl=86400)
@@ -93,7 +124,7 @@ def _clear_geotrek() -> None:
 def _samples() -> dict[str, str]:
     out = {}
     for p in sorted(SAMPLES_DIR.glob("*.gpx")):
-        _, name, _ = _parse(p.read_bytes(), p.name)
+        name = _parse(p.read_bytes(), p.name)[0][1]
         out[name] = str(p)
     return out
 
@@ -122,12 +153,20 @@ def _geocode(name: str) -> list[dict]:
     return geocode(name)
 
 
+WALKING_WORDS = {"walk", "walking", "hike", "hiking", "run", "running", "trail", "rando", "randonnee", "marche",
+                 "pied", "pedestre", "pieton", "sentier", "balade", "promenade", "gr", "grp", "pr", "trek", "raquette"}
+CYCLING_WORDS = {"bike", "cycling", "ride", "vtt", "vttae", "velo", "cyclo", "cyclotourisme", "gravel", "veloroute"}
+DRIVING_WORDS = {"car", "drive", "driving", "voiture", "roadtrip", "auto"}
+
+
 def _guess_activity(name: str) -> str:
-    """From whole words of the track name ("Carnac coastal ride" is not a car trip)."""
-    words = set(re.findall(r"[a-zà-ÿ]+", name.lower()))
-    if words & {"car", "drive", "driving", "voiture", "roadtrip"} or "road trip" in name.lower():
+    """From whole words of the track name, accents ignored ("Carnac coastal ride" is not a car trip, "GR 3 à pied" is a
+    walk). Cycling when nothing says otherwise."""
+    plain = unicodedata.normalize("NFKD", name.lower()).encode("ascii", "ignore").decode()
+    words = set(re.findall(r"[a-z]+", plain))
+    if words & DRIVING_WORDS or "road trip" in plain:
         return "Driving"
-    if words & {"walk", "walking", "hike", "hiking", "run", "running", "rando", "randonnée", "trail", "marche"}:
+    if words & WALKING_WORDS:
         return "Walking"
     return "Cycling"
 
@@ -190,12 +229,17 @@ def page_route():
         with left:
             try:
                 if mode == "Upload a file":
-                    up = st.file_uploader("GPX, KML or GeoJSON file", type=["gpx", "kml", "geojson", "json"])
+                    up = st.file_uploader("GPX, KML or GeoJSON file", type=["gpx", "kml", "geojson", "json"],
+                                          help=f"Up to {MAX_UPLOAD_MB} MB. A file with several tracks lets you pick one.")
                     if up is None:
                         st.info("Drop a track exported from Strava, Garmin, Komoot, Google Earth… "
                                 "or draw one on the map.")
                         return
-                    points, name, time_issue = _parse(up.getvalue(), up.name)
+                    if up.size > MAX_UPLOAD_MB * 1024 * 1024:
+                        st.error(f"{up.name} weighs {up.size / 1024 / 1024:.1f} MB: the limit is {MAX_UPLOAD_MB} MB. "
+                                 "Export a single route, or simplify the track.")
+                        return
+                    points, name, time_issue = _pick(_parse(up.getvalue(), up.name), f"pick_{up.name}_{up.size}")
                 else:
                     samples = _samples()
                     if not samples:
@@ -204,7 +248,8 @@ def page_route():
                     names = list(samples)
                     default = next((i for i, n in enumerate(names) if n.startswith("Paris")), 0)
                     name = st.selectbox("Sample", names, index=default)
-                    points, name, time_issue = _parse(open(samples[name], "rb").read(), samples[name])
+                    points, name, time_issue = _pick(_parse(open(samples[name], "rb").read(), samples[name]),
+                                                     f"pick_{name}")
             except ValueError as exc:
                 st.error(f"Could not read this track: {exc}")
                 return
@@ -231,7 +276,8 @@ def page_route():
                            "forecasts: choose “Plan a new trip” to set a departure date.")
                 return
             activity = st.selectbox("Activity", options, index=options.index(guessed),
-                                    help="Sets the danger and comfort scores: the same gust is a danger on a bike, "
+                                    help="Guessed from the track's name. Sets the danger and comfort scores: the "
+                                         "same gust is a danger on a bike, "
                                          "not in a car.")
         else:
             c1, c2 = st.columns(2)
@@ -242,7 +288,8 @@ def page_route():
             hour = c2.time_input("Departure time", time(9, 0), step=900)
             c3, c4, c5 = st.columns([1.2, 1, 1.2])
             activity = c3.selectbox("Activity", options, index=options.index(guessed),
-                                    help="Sets the speed, and the danger and comfort scores.")
+                                    help="Guessed from the track's name. Sets the speed, and the danger and comfort "
+                                         "scores.")
             preset = ACTIVITIES[activity]
             speed = c4.number_input("Speed (km/h)", 1.0, 150.0, float(preset["speed"]), step=0.5,
                                     help="Average speed on the flat; time is added for climbs when walking or cycling.")
