@@ -60,6 +60,16 @@ def make_session() -> requests.Session:
     return session
 
 
+def quick_session() -> requests.Session:
+    """HTTP session for calls made while a visitor waits on a page: a single retry, so that a slow or unavailable
+    site fails within seconds instead of minutes."""
+    retry = Retry(total=1, backoff_factor=0.5, status_forcelist=(429, 500, 502, 503, 504), allowed_methods=("GET",))
+    session = requests.Session()
+    session.mount("https://", HTTPAdapter(max_retries=retry, pool_maxsize=16))
+    session.headers["User-Agent"] = "meteo-analytics/1.0 (data analyst portfolio project)"
+    return session
+
+
 def discover_resources(
     payload: dict, departments: list[str] | str, periods: list[str]
 ) -> list[Resource]:

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, time, timedelta
 
 import folium
@@ -14,11 +15,13 @@ from folium.plugins import Draw
 from plotly.subplots import make_subplots
 from streamlit_folium import st_folium
 
-from meteo.geotrek import INSTANCES, fetch_gpx, nearby_treks
+from meteo.geotrek import INSTANCES, PASS_BAND_KM, fetch_route_file, nearby_treks
 from meteo.gps import (
     ACTIVITIES,
     Track,
+    haversine_km,
     main_track,
+    moving_hours,
     parse_track,
     passage_times,
     read_tracks,
@@ -27,6 +30,8 @@ from meteo.gps import (
     to_gpx,
     with_times,
 )
+from meteo.links import tracks_from_link
+from meteo.osm_routes import nearby_relations, relation_track
 from meteo.route_scores import DANGER_LEVELS, Assessment, Score, assess, is_past, level
 from meteo.route_weather import (
     FORECAST_FUTURE_DAYS,
@@ -92,32 +97,67 @@ def _timezone(lat: float, lon: float) -> str | None:
     return track_timezone(lat, lon)
 
 
+PAGE = 10                              # routes listed at a time
+NEARBY, LINK = "Nearby route", "From a link"
+MODES = ["Sample track", "Draw on the map", "Upload a file", LINK]
+
+
 @st.cache_data(show_spinner=False, ttl=6 * 3600, max_entries=100)
 def _nearby(lat: tuple, lon: tuple, radius_km: float) -> tuple[list[dict], list[str]]:
-    """Geotrek routes near a track (cached 6 hours: the parks do not change their routes every minute)."""
-    found, failed = nearby_treks(lat, lon, radius_km=radius_km, limit=10)
-    return [vars(s) | {"activity": s.activity} for s in found], failed
+    """Geotrek and OpenStreetMap routes near a track, queried in parallel (cached 6 hours: routes rarely change)."""
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        geotrek = pool.submit(nearby_treks, lat, lon, radius_km=radius_km)
+        osm = pool.submit(nearby_relations, lat, lon, radius_km=radius_km)
+        (found, failed), (more, failed_osm) = geotrek.result(), osm.result()
+    rows = [vars(s) | {"activity": s.activity, "nearness_km": s.nearness_km} for s in found + more]
+    return rows, failed + failed_osm
 
 
 @st.cache_data(show_spinner=False, ttl=6 * 3600, max_entries=50)
 def _geotrek_points(url: str) -> pd.DataFrame:
-    return parse_track(fetch_gpx(url), "route.gpx").points
+    return parse_track(*fetch_route_file(url)).points
 
 
-def _load_geotrek(route: dict) -> None:
-    """Replaces the track by a Geotrek route (callback of the "Read the weather" button)."""
+@st.cache_data(show_spinner=False, ttl=6 * 3600, max_entries=50)
+def _osm_points(relation_id: int, name: str) -> pd.DataFrame:
+    return relation_track(relation_id, name).points
+
+
+def _route_points(route: dict) -> pd.DataFrame:
+    if route["provider"] == "OpenStreetMap":
+        return _osm_points(route["trek_id"], route["name"])
+    return _geotrek_points(route["gpx_url"])
+
+
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=30)
+def _link_tracks(url: str) -> list[tuple[pd.DataFrame, str, str | None, bool]]:
+    return [(t.points, t.name, t.time_issue, t.looks_scrambled) for t in tracks_from_link(url)]
+
+
+def _load_route(route: dict) -> None:
+    """Replaces the track by a nearby route (callback of the "Read the weather" buttons)."""
     try:
-        points = _geotrek_points(route["gpx_url"])
+        points = _route_points(route)
     except (ValueError, RuntimeError) as exc:
-        st.session_state["geotrek_error"] = f"Could not load “{route['name']}”: {exc}"
+        st.session_state["nearby_error"] = f"Could not load “{route['name']}”: {exc}"
         return
+    if st.session_state.get("route_mode") != NEARBY:
+        st.session_state["route_prev_mode"] = st.session_state.get("route_mode", "Sample track")
     st.session_state["route_geotrek"] = route | {"points": points}
-    st.session_state.pop("geotrek_error", None)
-    st.toast(f"Weather reading for “{route['name']}”: see the top of the page.", icon=":material/hiking:")
+    st.session_state["route_mode"] = NEARBY          # the Track control shows what is being read
+    st.session_state["route_scroll_top"] = True       # and the page goes back up to the reading
+    st.session_state.pop("nearby_error", None)
+    st.session_state.pop("nearby_selected", None)
 
 
-def _clear_geotrek() -> None:
+def _back_to_track() -> None:
     st.session_state.pop("route_geotrek", None)
+    st.session_state["route_mode"] = st.session_state.pop("route_prev_mode", "Sample track")
+
+
+def _on_mode() -> None:
+    if st.session_state.get("route_mode") != NEARBY:
+        st.session_state.pop("route_geotrek", None)
 
 
 @st.cache_data(show_spinner=False)
@@ -201,17 +241,40 @@ def page_route():
                 "Draw a route on the map, import a GPS track or pick a sample: get the weather along the route, "
                 "at the time you pass each point.")
 
-    mode = st.segmented_control("Track", ["Sample track", "Draw on the map", "Upload a file"], default="Sample track",
-                                required=True, key="route_mode", on_change=_clear_geotrek)
+    if st.session_state.pop("route_scroll_top", False):   # after loading a nearby route, back to the reading
+        st.html("<script>(document.querySelector('[data-testid=\"stMain\"]') || document.scrollingElement)"
+                ".scrollTo({top: 0, behavior: 'smooth'}); window.scrollTo(0, 0);</script>", unsafe_allow_javascript=True)
     geo = st.session_state.get("route_geotrek")   # a route picked in "Routes nearby", in place of the track
-    if geo:
+    if st.session_state.get("route_mode") == NEARBY and not geo:
+        st.session_state["route_mode"] = "Sample track"
+    mode = st.segmented_control("Track", MODES + ([NEARBY] if geo else []), default="Sample track",
+                                required=True, key="route_mode", on_change=_on_mode)
+    if mode == NEARBY and geo:
         points, name, time_issue = geo["points"], geo["name"], None
         left, right = st.columns([1.3, 1], gap="large")
         with left:
             st.markdown(f"**{name}**")
             link = f" · [its page]({geo['page_url']})" if geo.get("page_url") else ""
-            st.caption(f"{geo['practice'] or 'Route'} from {geo['source']}, via Geotrek{link}")
-            st.button("Back to my track", icon=":material/undo:", on_click=_clear_geotrek)
+            via = "OpenStreetMap" if geo["provider"] == "OpenStreetMap" else f"{geo['source']}, via Geotrek"
+            st.caption(f"{geo['practice'] or 'Route'} from {via}{link}")
+            st.button("Back to my track", icon=":material/undo:", on_click=_back_to_track)
+    elif mode == LINK:
+        left, right = st.columns([1.3, 1], gap="large")
+        with left:
+            url = st.text_input("Link to a route", key="route_link",
+                                placeholder="https://rando.ecrins-parcnational.fr/trek/995106",
+                                help="A Geotrek route page, an OpenStreetMap relation or GPS trace, or a GPX, KML or "
+                                     "GeoJSON file on data.gouv.fr.")
+            if not url.strip():
+                st.info("Paste the link of a route found on a park's Geotrek site, on OpenStreetMap, or of a GPS file "
+                        "on data.gouv.fr: no need to download it first.")
+                return
+            try:
+                points, name, time_issue = _pick(_link_tracks(url.strip()), f"pick_link_{abs(hash(url.strip()))}")
+            except (ValueError, RuntimeError) as exc:
+                st.error(f"Could not read this link: {exc}")
+                return
+            st.markdown(f"**{name}**")
     elif mode == "Draw on the map":
         built = _draw_track()
         if built is None:
@@ -255,7 +318,7 @@ def page_route():
                 return
     track = Track(name=name, points=points)
     options = list(ACTIVITIES)
-    if geo:
+    if mode == NEARBY and geo:
         guessed = geo["activity"]
     elif mode == "Draw on the map":
         guessed = st.session_state.get("draw_activity", "Cycling")
@@ -305,15 +368,30 @@ def page_route():
             if start.tz_localize(None) != naive:
                 st.info(f"{hour:%H:%M} does not exist on {day:%d %B} in {tz}: the clocks go forward that night. "
                         f"Departure at {start:%H:%M}.")
-            track = with_times(track, passage_times(track, start, speed, preset["climb_min_per_100m"]))
+            # Long routes: split into days, each starting at the departure time (the stages of a multi-day route)
+            hours_per_day = None
+            total_h = float(moving_hours(track, speed, preset["climb_min_per_100m"])[-1])
+            if total_h > 10:
+                if st.toggle(f"Split into days (about {total_h:.0f} h on the move)", value=True, key="route_split",
+                             help="Each day goes on from where the previous one stopped, at the departure time."):
+                    default_h = {"Walking": 6.0, "Cycling": 5.0, "Driving": 8.0}[activity]
+                    hours_per_day = st.slider("Hours on the move per day", 2.0, 12.0, default_h, 0.5,
+                                              key="route_hours_per_day")
+                    days = int(np.ceil(total_h / hours_per_day - 1e-9))
+                    st.caption(f"{days} days, each starting at {hour:%H:%M}."
+                               + (" Beyond the 16 days of forecasts, the reading will stop." if days > 16 else ""))
+            track = with_times(track, passage_times(track, start, speed, preset["climb_min_per_100m"], hours_per_day))
 
-    if mode == "Upload a file" and not geo:
+    if mode == "Upload a file":
         st.caption(f"**{track.name}**")
     s = summary(track)
     k = st.columns(4)
     k[0].metric("Distance", f"{num(s['distance_km'], 1)} km", border=True)
     k[1].metric("Ascent", f"{num(s['ascent_m'], 0)} m" if s["ascent_m"] is not None else "–", border=True)
-    k[2].metric("Duration", f"{int(s['duration_h'])} h {int(s['duration_h'] % 1 * 60):02d}", border=True)
+    dur = s["duration_h"]   # departure to arrival, nights included on a multi-day plan
+    k[2].metric("Duration", f"{int(dur // 24)} d {int(dur % 24)} h" if dur >= 24 else f"{int(dur)} h {int(dur % 1 * 60):02d}",
+                border=True)
+    st.markdown("<div class='source'><a href='#routes-nearby'>Routes nearby ↓</a></div>", unsafe_allow_html=True)
     n_points = len(sample_points(track))
     k[3].metric("Weather points", f"{n_points}", border=True,
                 help=f"Points sampled along the route (at least 1 km apart). Cost: about "
@@ -324,7 +402,7 @@ def page_route():
             pts, source, tz, insights, stats = _reading(track.points, track.name)
     except (ValueError, RuntimeError) as exc:
         st.error(str(exc))
-        _nearby_panel(track)
+        _nearby_panel(track, activity)
         return
 
     local = pts["time"].dt.tz_convert(tz)
@@ -357,54 +435,184 @@ def page_route():
              if source == "forecast" else "ERA5 reanalysis archive via the Open-Meteo API (what the weather actually was)")
     st.markdown(f"<div class='source'>Weather: {label}. Times in {tz}. Temperatures are adjusted to the altitude "
                 f"of each point (90 m terrain model).</div>", unsafe_allow_html=True)
-    _nearby_panel(track)
+    _nearby_panel(track, activity)
 
 
-def _nearby_panel(track: Track) -> None:
-    """Hiking, cycling and trail routes starting near the track, from the Geotrek sites of parks and départements."""
-    st.subheader("Routes nearby")
-    st.caption("Routes published by parks and départements on their Geotrek sites, starting near your track. "
-               "Pick one to read the weather along it.")
-    radius = st.select_slider("Starting within", [2, 5, 10, 20], value=10, format_func=lambda v: f"{v} km",
-                              key="geotrek_radius")
+PRACTICE_GROUPS = [   # Geotrek names practices in French, OpenStreetMap in English: one set of filters for both
+    ("Mountain bike", ("vtt", "mountain", "enduro")), ("Cycling", ("velo", "cyclo", "gravel", "cycling", "bike")),
+    ("Trail running", ("trail",)), ("Snowshoe", ("raquette", "snowshoe")), ("Horse riding", ("cheval", "equestre", "horse")),
+    ("Walking", ("pied", "pedestre", "hiking", "walk", "rando", "marche", "accessible")),
+]
+
+
+def practice_group(practice: str) -> str:
+    plain = unicodedata.normalize("NFKD", (practice or "").lower()).encode("ascii", "ignore").decode()
+    return next((group for group, words in PRACTICE_GROUPS if any(w in plain for w in words)), "Other")
+
+
+def _duration(hours) -> str:
+    if hours is None or pd.isna(hours):
+        return ""
+    return f"{hours:g} h" if hours < 24 else f"{hours / 24:.0f} days"
+
+
+def _same_route(route: dict, track: Track) -> bool:
+    """The suggestion is the track itself (a Geotrek GPX uploaded, then suggested back)."""
+    if route.get("start_lat") is None or not route.get("length_km"):
+        return False
+    first = track.points.iloc[0]
+    start_gap = float(haversine_km(first["lat"], first["lon"], route["start_lat"], route["start_lon"]))
+    return start_gap < 0.2 and abs(route["length_km"] - track.distance_km) <= 0.05 * max(track.distance_km, 0.1)
+
+
+def _select_from_table(key: str, view: list[dict]) -> None:
+    rows = st.session_state[key].selection.rows
+    if rows:
+        st.session_state["nearby_selected"] = (view[rows[0]]["provider"], view[rows[0]]["trek_id"])
+
+
+def _select_from_map(key: str, view: list[dict]) -> None:
+    points = st.session_state[key].selection.points
+    if points and "customdata" in points[0]:
+        r = view[int(points[0]["customdata"][0])]
+        st.session_state["nearby_selected"] = (r["provider"], r["trek_id"])
+
+
+def _show_more(key: str) -> None:
+    st.session_state[key] = st.session_state.get(key, PAGE) + PAGE
+
+
+def _nearby_map(track: Track, view: list[dict], selected: dict | None, key: str) -> None:
+    """The track, the starts of the listed routes (numbered as in the list) and the selected route's line."""
+    pts = track.points
+    fig = go.Figure()
+    fig.add_trace(go.Scattermap(lat=pts["lat"], lon=pts["lon"], mode="lines", line=dict(width=4, color=INK),
+                                name="Your track", hoverinfo="skip"))
+    if selected:
+        try:
+            line = _route_points(selected)
+            fig.add_trace(go.Scattermap(lat=line["lat"], lon=line["lon"], mode="lines", name=selected["name"],
+                                        line=dict(width=4, color=SERIES[1]), hoverinfo="skip"))
+        except (ValueError, RuntimeError):
+            pass
+    starts = [(i, r) for i, r in enumerate(view) if r.get("start_lat") is not None]
+    if starts:
+        bike = [r["activity"] == "Cycling" for _, r in starts]
+        fig.add_trace(go.Scattermap(
+            lat=[r["start_lat"] for _, r in starts], lon=[r["start_lon"] for _, r in starts], mode="markers+text",
+            text=[str(i + 1) for i, _ in starts], textposition="top center", textfont=dict(color=INK, size=12),
+            marker=dict(size=13, color=[SERIES[2] if b else SERIES[0] for b in bike]),
+            customdata=[[i, r["name"], r["practice"]] for i, r in starts], name="Route starts",
+            hovertemplate="<b>%{customdata[1]}</b><br>%{customdata[2]} · click to select<extra></extra>"))
+    lat = list(pts["lat"]) + [r["start_lat"] for _, r in starts]
+    lon = list(pts["lon"]) + [r["start_lon"] for _, r in starts]
+    zoom = _zoom(pd.Series(lat), pd.Series(lon), 190 if _phone() else 520, 330)
+    fig.update_layout(map=dict(style="carto-positron", zoom=zoom,
+                               center=dict(lat=float(np.mean([min(lat), max(lat)])), lon=float(np.mean([min(lon), max(lon)])))),
+                      showlegend=False, margin=dict(l=0, r=0, t=0, b=0), height=380)
+    st.plotly_chart(fig, theme=None, key=key, on_select=lambda: _select_from_map(key, view), selection_mode="points",
+                    config={"displaylogo": False, "displayModeBar": False})
+
+
+def _nearby_panel(track: Track, activity: str) -> None:
+    """Routes near the track: Geotrek sites of parks and départements, and waymarked OpenStreetMap routes."""
+    st.subheader("Routes nearby", anchor="routes-nearby")
+    st.caption("Routes published by parks and départements on their Geotrek sites, and local waymarked routes from "
+               "OpenStreetMap, near your track. Pick one to read the weather along it.")
+    radius = st.slider("Search radius", 2.0, 50.0, 10.0, step=0.1, format="%.1f km", key="nearby_radius",
+                       help=f"Routes starting within this distance of your track, or whose line passes within "
+                            f"{PASS_BAND_KM:g} km of it.")
     pts = track.points
     keep = np.linspace(0, len(pts) - 1, min(len(pts), 100)).astype(int)
     lat = tuple(np.round(pts["lat"].to_numpy()[keep], 3).tolist())
     lon = tuple(np.round(pts["lon"].to_numpy()[keep], 3).tolist())
     with st.spinner("Looking for routes nearby…"):
-        found, failed = _nearby(lat, lon, float(radius))
-    if geo := st.session_state.get("route_geotrek"):   # not the route being read
-        found = [r for r in found if (r["source"], r["trek_id"]) != (geo["source"], geo["trek_id"])]
-    if error := st.session_state.pop("geotrek_error", None):
+        rows, failed = _nearby(lat, lon, round(float(radius), 1))
+    if error := st.session_state.pop("nearby_error", None):
         st.error(error)
-    if not found:
-        st.info(f"No Geotrek route starts within {radius} km of this track. The sites queried cover these areas: "
-                + ", ".join(i.name for i in INSTANCES) + ".")
-    else:
-        table = pd.DataFrame(found)
-        event = st.dataframe(
-            table[["name", "practice", "length_km", "ascent_m", "distance_km", "source", "page_url"]],
-            hide_index=True, on_select="rerun", selection_mode="single-row",
-            key=f"geotrek_table_{hash((lat, lon, radius))}", placeholder="–",
+    geo = st.session_state.get("route_geotrek")
+    rows = [r for r in rows if not (geo and (r["provider"], r["trek_id"]) == (geo["provider"], geo["trek_id"]))
+            and not _same_route(r, track)]
+    if not rows:
+        st.info(f"No route found within {radius:.1f} km of this track.")
+        with st.expander("Which areas are covered?"):
+            st.markdown("Geotrek sites: " + ", ".join(i.name for i in INSTANCES) + ". OpenStreetMap: local and "
+                        "regional waymarked routes, anywhere, within 10 km of the track.")
+        if failed:
+            st.caption("Not reached this time: " + ", ".join(failed) + ".")
+        return
+
+    for r in rows:
+        r["group"] = practice_group(r["practice"])
+    groups = [g for g, _ in PRACTICE_GROUPS + [("Other", ())] if any(r["group"] == g for r in rows)]
+    matching = {"Walking": {"Walking", "Trail running", "Snowshoe"}, "Cycling": {"Cycling", "Mountain bike"},
+                "Driving": set()}[activity]
+    default = [g for g in groups if g in matching]
+    c1, c2 = st.columns([3, 1.2], vertical_alignment="bottom")
+    chosen = c1.pills("Practice", groups, selection_mode="multi", default=default or groups,
+                      key=f"nearby_practice_{activity}_{abs(hash(tuple(groups)))}",
+                      help=f"By default, the practices that match your activity ({activity.lower()}).")
+    order = c2.selectbox("Sort by", ["Nearest", "Shortest", "Longest", "Least ascent"], key="nearby_sort")
+    rows = [r for r in rows if r["group"] in (chosen or groups)]
+    big = 1e9
+    sorters = {"Nearest": lambda r: (r["nearness_km"], r["name"]),
+               "Shortest": lambda r: (r["length_km"] if r["length_km"] else big, r["name"]),
+               "Longest": lambda r: (-(r["length_km"] or 0), r["name"]),
+               "Least ascent": lambda r: (r["ascent_m"] if r["ascent_m"] is not None else big, r["name"])}
+    rows.sort(key=sorters[order])
+    shown_key = f"nearby_shown_{abs(hash((lat, lon, round(float(radius), 1))))}"
+    view = rows[: st.session_state.get(shown_key, PAGE)]
+    st.caption(f"Showing {len(view)} of {len(rows)} routes · starts on the map are numbered as in the list"
+               if rows else "No route for these practices: pick another one above.")
+    sel_key = st.session_state.get("nearby_selected")
+    selected = next((r for r in view if (r["provider"], r["trek_id"]) == sel_key), None)
+    if view:
+        _nearby_map(track, view, selected, key=f"nearby_map_{shown_key}_{abs(hash(tuple(r['trek_id'] for r in view)))}")
+    if _phone():   # cards: a table needs a horizontal scroll on a phone
+        for i, r in enumerate(view):
+            with st.container(border=True):
+                st.markdown(f"**{i + 1}. {r['name']}**")
+                facts = [r["practice"], r["difficulty"], f"{r['length_km']:.1f} km" if r["length_km"] else "",
+                         f"{r['ascent_m']:.0f} m up" if r["ascent_m"] is not None else "", _where(r), r["source"]]
+                st.caption(" · ".join(f for f in facts if f))
+                st.button("Read the weather along it", key=f"nearby_card_{r['provider']}_{r['trek_id']}",
+                          on_click=_load_route, args=(r,), icon=":material/hiking:")
+    elif view:
+        table = pd.DataFrame([{**r, "rank": i + 1, "where": _where(r), "duration": _duration(r["duration_h"])}
+                              for i, r in enumerate(view)])
+        key = f"nearby_table_{shown_key}_{abs(hash(tuple(r['trek_id'] for r in view)))}"
+        st.dataframe(
+            table[["rank", "name", "practice", "difficulty", "route_type", "length_km", "ascent_m", "duration", "where",
+                   "source", "page_url"]],
+            hide_index=True, on_select=lambda: _select_from_table(key, view), selection_mode="single-row", key=key,
+            placeholder="–",
             column_config={
+                "rank": st.column_config.NumberColumn("#", width="small"),
                 "name": st.column_config.TextColumn("Route", width="large"),
-                "practice": "Practice",
+                "practice": "Practice", "difficulty": "Difficulty", "route_type": "Type",
                 "length_km": st.column_config.NumberColumn("Length", format="%.1f km"),
                 "ascent_m": st.column_config.NumberColumn("Ascent", format="%d m"),
-                "distance_km": st.column_config.NumberColumn("Start", format="%.1f km away",
-                                                             help="Distance from your track to the route's start"),
+                "duration": "Duration", "where": "Where",
                 "source": "Published by",
                 "page_url": st.column_config.LinkColumn("Page", display_text="Open"),
             })
-        rows = event.selection.rows
-        if rows:
-            route = found[rows[0]]
-            st.button(f"Read the weather along “{route['name']}”", type="primary", icon=":material/hiking:",
-                      on_click=_load_geotrek, args=(route,))
-        else:
-            st.caption("Select a route in the table (box on the left of the row) to read the weather along it.")
+    if len(rows) > len(view):
+        st.button(f"Show {min(PAGE, len(rows) - len(view))} more", on_click=_show_more, args=(shown_key,),
+                  icon=":material/expand_more:")
+    if selected:
+        st.button(f"Read the weather along “{selected['name']}”", type="primary", icon=":material/hiking:",
+                  on_click=_load_route, args=(selected,))
+    elif view and not _phone():
+        st.caption("Select a route in the list (box on the left of the row) or click its start on the map.")
     if failed:
         st.caption("Not reached this time: " + ", ".join(failed) + ".")
+
+
+def _where(r: dict) -> str:
+    if r["distance_km"] is None:
+        return "in the area"
+    start = f"starts {r['distance_km']:.1f} km away"
+    return f"passes near · {start}" if r["passes_near"] and r["distance_km"] > PASS_BAND_KM else start
 
 
 DANGER_STATUS = {"Low": "good", "Moderate": "warning", "High": "serious", "Severe": "critical"}

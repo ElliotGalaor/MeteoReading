@@ -16,12 +16,15 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .download import make_session
+from .download import quick_session
 from .gps import haversine_km
 
 log = logging.getLogger(__name__)
 
 MAX_GPX_BYTES = 5_000_000
+MIN_LENGTH_KM = 0.5      # shorter routes are broken entries of the APIs (a few metres long)
+PASS_BAND_KM = 1.0       # a route whose line comes this close to the track "passes near" it
+CHUNKS = 8               # the track is cut into this many pieces to find the routes passing near it
 
 
 @dataclass(frozen=True)
@@ -61,7 +64,7 @@ INSTANCES = [
 ]
 
 # Geotrek practices (names vary between instances) -> the activities of the route tool
-CYCLING_WORDS = ("vtt", "vélo", "velo", "cyclo", "gravel", "bike")
+CYCLING_WORDS = ("vtt", "vélo", "velo", "cycl", "gravel", "bike")
 
 
 @dataclass
@@ -73,9 +76,21 @@ class Suggestion:
     length_km: float | None
     ascent_m: float | None
     duration_h: float | None
-    distance_km: float          # from the track to the route's start
-    gpx_url: str
+    distance_km: float | None   # from the track to the route's start (None if unknown)
+    gpx_url: str | None
     page_url: str | None
+    difficulty: str = ""
+    route_type: str = ""        # loop, return trip, one way, stage…
+    passes_near: bool = False   # the route's line comes within PASS_BAND_KM of the track
+    start_lat: float | None = None
+    start_lon: float | None = None
+    provider: str = "Geotrek"   # or "OpenStreetMap"
+
+    @property
+    def nearness_km(self) -> float:
+        """For sorting: how close the route comes (its line if it passes near, else its start)."""
+        start = self.distance_km if self.distance_km is not None else 99.0
+        return min(start, PASS_BAND_KM) if self.passes_near else start
 
     @property
     def activity(self) -> str:
@@ -101,35 +116,62 @@ def _get(session, url: str, params: dict | None = None) -> dict:
     return resp.json()
 
 
+def _names(session, inst: Instance, endpoint: str, field: str) -> dict[int, str]:
+    """Labels of an instance's practices, difficulties or route types (they differ between instances)."""
+    try:
+        data = _get(session, f"{inst.api}/{endpoint}/", {"language": "fr", "fields": f"id,{field}", "page_size": 100})
+    except (OSError, ValueError):
+        return {}
+    return {p["id"]: p.get(field) or "" for p in data.get("results", [])}
+
+
 def _practices(session, inst: Instance) -> dict[int, str]:
-    data = _get(session, f"{inst.api}/trek_practice/", {"language": "fr", "fields": "id,name", "page_size": 100})
-    return {p["id"]: p["name"] for p in data.get("results", [])}
+    return _names(session, inst, "trek_practice", "name")
+
+
+def chunk_boxes(lat: np.ndarray, lon: np.ndarray, band_km: float, n: int = CHUNKS) -> list[tuple]:
+    """Small boxes along the track (each piece of it widened by band_km): a route in one of them passes near."""
+    cuts = np.linspace(0, len(lat), min(n, max(len(lat) - 1, 1)) + 1).astype(int)
+    return [search_box(lat[a:b + 1], lon[a:b + 1], band_km) for a, b in zip(cuts[:-1], cuts[1:], strict=True) if b > a]
 
 
 def _treks(session, inst: Instance, box: tuple, track_lat: np.ndarray, track_lon: np.ndarray) -> list[Suggestion]:
     """Routes of one instance in the box, with the distance from the track to their start."""
     params = {"in_bbox": ",".join(f"{v:.4f}" for v in box), "language": "fr", "page_size": 500,
-              "fields": "id,name,departure_geom,length_2d,ascent,duration,practice,gpx"}
+              "fields": "id,name,departure_geom,length_2d,ascent,duration,practice,difficulty,route,gpx"}
     data = _get(session, f"{inst.api}/trek/", params)
     practices = _practices(session, inst)
+    difficulties = _names(session, inst, "trek_difficulty", "label")
+    route_types = _names(session, inst, "trek_route", "route")
+    # Routes whose line enters a small box along the track pass near it, wherever they start
+    near_ids: set[int] = set()
+    for small in chunk_boxes(track_lat, track_lon, PASS_BAND_KM):
+        try:
+            sub = _get(session, f"{inst.api}/trek/", {"in_bbox": ",".join(f"{v:.4f}" for v in small),
+                                                      "fields": "id", "page_size": 500})
+            near_ids |= {int(t["id"]) for t in sub.get("results", [])}
+        except (OSError, ValueError):
+            break
     out = []
     for t in data.get("results", []):
         start, gpx = t.get("departure_geom"), t.get("gpx")
-        if not start or not gpx or len(start) < 2:
+        length = t.get("length_2d")
+        if not start or not gpx or len(start) < 2 or (length is not None and length < MIN_LENGTH_KM * 1000):
             continue
         dist = float(np.min(haversine_km(track_lat, track_lon, start[1], start[0])))
-        length = t.get("length_2d")
         out.append(Suggestion(
             source=inst.short, trek_id=int(t["id"]), name=(t.get("name") or "").strip() or f"Route {t['id']}",
             practice=practices.get(t.get("practice"), ""), length_km=length / 1000 if length else None,
             ascent_m=t.get("ascent"), duration_h=t.get("duration"), distance_km=dist, gpx_url=gpx,
-            page_url=f"{inst.portal}/trek/{t['id']}" if inst.portal else None))
+            page_url=f"{inst.portal}/trek/{t['id']}" if inst.portal else None,
+            difficulty=difficulties.get(t.get("difficulty"), ""), route_type=route_types.get(t.get("route"), ""),
+            passes_near=int(t["id"]) in near_ids, start_lat=float(start[1]), start_lon=float(start[0])))
     return out
 
 
-def nearby_treks(lat, lon, radius_km: float = 10.0, limit: int = 10, session=None,
+def nearby_treks(lat, lon, radius_km: float = 10.0, limit: int = 200, session=None,
                  instances: list[Instance] = INSTANCES) -> tuple[list[Suggestion], list[str]]:
-    """Routes starting within radius_km of the track, nearest first.
+    """Routes starting within radius_km of the track, or whose line passes near it, nearest first.
 
     Returns (suggestions, sources that could not be reached). Only the instances whose area is near the track are
     queried, in parallel; one that does not answer is skipped."""
@@ -141,7 +183,7 @@ def nearby_treks(lat, lon, radius_km: float = 10.0, limit: int = 10, session=Non
     near = [i for i in instances if overlaps(box, i.bbox)]
     if not near:
         return [], []
-    session = session or make_session()
+    session = session or quick_session()
     found, failed = [], []
     with ThreadPoolExecutor(max_workers=min(len(near), 6)) as pool:
         futures = {pool.submit(_treks, session, inst, box, lat, lon): inst for inst in near}
@@ -151,8 +193,8 @@ def nearby_treks(lat, lon, radius_km: float = 10.0, limit: int = 10, session=Non
             except (OSError, ValueError, KeyError, TypeError) as exc:   # requests' errors are OSErrors
                 log.warning("Geotrek %s: %s", inst.name, exc)
                 failed.append(inst.name)
-    found = [s for s in found if s.distance_km <= radius_km]
-    found.sort(key=lambda s: (s.distance_km, s.name))
+    found = [s for s in found if s.distance_km <= radius_km or s.passes_near]
+    found.sort(key=lambda s: (s.nearness_km, s.distance_km, s.name))
     unique, seen = [], set()
     for s in found:   # the same route published by two instances (a park and its département)
         key = (s.name.lower(), round(s.distance_km, 1))
@@ -162,17 +204,29 @@ def nearby_treks(lat, lon, radius_km: float = 10.0, limit: int = 10, session=Non
     return unique[:limit], failed
 
 
-def fetch_gpx(url: str, session=None) -> bytes:
-    """The GPX file of a route (only from the instances above)."""
+def fetch_route_file(url: str, session=None) -> tuple[bytes, str]:
+    """The file of a route, as (content, file name), only from the instances above.
+
+    Geotrek builds a route's GPX on demand, which takes more than 20 s for the longest ones (35,000 points), while
+    the KML of the same route (same line, with altitudes) comes in a second or two: the KML is read first, the GPX
+    only if the KML cannot be had."""
     if not any(url.startswith(i.api.rsplit("/api/", 1)[0] + "/") for i in INSTANCES):
         raise ValueError("Not a Geotrek route of the known instances")
-    session = session or make_session()
-    try:
-        resp = session.get(url, timeout=20)
-    except OSError as exc:
-        raise RuntimeError("The route's website is not answering: try again in a moment.") from exc
-    if resp.status_code != 200:
-        raise RuntimeError(f"Could not download the route ({resp.status_code})")
-    if len(resp.content) > MAX_GPX_BYTES:
-        raise ValueError("This route's GPX file is too large")
-    return resp.content
+    session = session or quick_session()
+    urls = ([(url[:-4] + ".kml", "route.kml")] if url.endswith(".gpx") else []) + [(url, "route.gpx")]
+    for candidate, name in urls:
+        try:
+            resp = session.get(candidate, timeout=20)
+        except OSError:
+            continue
+        if resp.status_code != 200:
+            continue
+        if len(resp.content) > MAX_GPX_BYTES:
+            raise ValueError("This route's file is too large")
+        return resp.content, name
+    raise RuntimeError("The route's website is not answering: try again in a moment.")
+
+
+def fetch_gpx(url: str, session=None) -> bytes:
+    """The GPX (or, for very long routes, KML) content of a route; see fetch_route_file."""
+    return fetch_route_file(url, session)[0]
