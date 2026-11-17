@@ -9,8 +9,12 @@ the page past it. This script, installed once per tab, keeps touches on the plot
 
 The pinch is applied with Plotly's own wheel zoom (a zoom around the pointer, deltaY = 200 ln(range factor), at most
 20 per event). That zoom stays off for the mouse wheel, which scrolls the page: it is switched on only while the
-script sends its own wheel events. Mouse and trackpad on a computer are unchanged (drag to zoom a box). Maps keep
-their usual gestures.
+script sends its own wheel events. Mouse and trackpad on a computer are unchanged (drag to zoom a box).
+
+Maps (Plotly's MapLibre maps) get MapLibre's own "cooperative gestures" on touch screens: one finger scrolls the
+page and shows "Use two fingers to move the map", two fingers move and zoom the map. On a computer they keep their
+usual gestures (that mode would ask for Ctrl to zoom with the wheel). The drawing map (Leaflet) is set apart in the
+route page: it does not follow one finger on a phone.
 """
 from __future__ import annotations
 
@@ -104,6 +108,28 @@ SCRIPT = """
   // Safari's own pinch events: no zoom of the whole page while a chart is pinched
   for (const type of ["gesturestart", "gesturechange"]) {
     window.addEventListener(type, (e) => { if (pinch) e.preventDefault(); }, {capture: true, passive: false});
+  }
+
+  // Maps on a touch screen: one finger scrolls the page, two fingers move the map (MapLibre's cooperative gestures)
+  const touch = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  function cooperate() {
+    document.querySelectorAll(".js-plotly-plot").forEach((gd) => {
+      const fl = gd._fullLayout, ids = fl && fl._subplots && fl._subplots.map;
+      (ids || []).forEach((id) => {
+        const map = fl[id] && fl[id]._subplot && fl[id]._subplot.map;
+        const coop = map && map.cooperativeGestures;
+        if (coop && !coop.isEnabled()) coop.enable();
+      });
+    });
+  }
+  if (touch) {
+    let queued = false;
+    new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; cooperate(); });
+    }).observe(document.body, {childList: true, subtree: true});
+    cooperate();
   }
 })();
 </script>

@@ -7,11 +7,13 @@ that same image to a staging service and, after approval, to production.
 ```mermaid
 flowchart LR
     PR["Pull request"] --> CI["CI: lint, tests,<br>image with data,<br>smoke test"]
-    M["Push to main /<br>Monday data refresh"] --> CI
+    M["Push to main"] --> CI
+    D["Daily data refresh<br>(code in production)"] --> CI
     CI -->|"push the tested image"| GHCR["GitHub Container<br>Registry"]
     GHCR --> CD["CD"]
     CD -->|"1. automatic"| S["Cloud Run<br>meteoreading-staging"]
     CD -->|"2. after approval"| P["Cloud Run<br>meteoreading"]
+    CD -.->|"data refresh: automatic"| P
 ```
 
 ## What is in the image
@@ -37,8 +39,10 @@ Inside, [Caddy](https://caddyserver.com) listens on port 8080 in front of Stream
 
 [docker/start.sh](../docker/start.sh) starts both processes, and stops the container if either stops.
 
-The data is downloaded again at most once a day (the CI passes the date as `DATA_VERSION`), and **every Monday**
-a scheduled CI run rebuilds the image with the latest observations; CD then deploys it like any other image.
+The data is downloaded again at most once a day (the CI passes the date as `DATA_VERSION`), and **every day**
+(06:00 UTC) a scheduled CI run rebuilds the image with the latest observations. Météo-France updates the files of
+the last two years daily, so production is normally 2 to 3 days behind real time. See
+[Daily data refresh](#daily-data-refresh) for how that image reaches production without an approval each day.
 GitHub disables scheduled workflows in a public repository after **60 days without activity** (no commit, issue or
 pull request): the refresh then stops until the workflow is enabled again (**Actions** → **CI** → **Enable
 workflow**). The image installs the exact library versions of `constraints.txt`, so a rebuild only changes the
@@ -141,7 +145,7 @@ Without `GCP_PROJECT_ID`, the deploy jobs do nothing and their log says so (fork
 
 **The image is built once, then promoted from one environment to the next**:
 
-1. **CI** (`.github/workflows/ci.yml`), on every pull request, every push to `main` and every Monday: `ruff`
+1. **CI** (`.github/workflows/ci.yml`), on every pull request, every push to `main` and every day: `ruff`
    and `actionlint`, the tests on Python 3.12, 3.13 and 3.14, then the Docker image is built with fresh data and
    smoke-tested (health endpoint, row count of the warehouse, the dashboard rendered headless with Streamlit
    `AppTest`). Except for pull requests, that exact image is pushed to GitHub Container Registry, tagged
@@ -152,8 +156,9 @@ Without `GCP_PROJECT_ID`, the deploy jobs do nothing and their log says so (fork
 
 | GitHub environment | Cloud Run service | Deployed |
 |---|---|---|
-| `staging` | `meteoreading-staging` | automatically, after each successful CI run on `main` |
+| `staging` | `meteoreading-staging` | automatically, after each successful CI run of a push to `main` |
 | `production` | `meteoreading` | after approval, with the image staging received |
+| `production-data` | `meteoreading` | automatically: the daily data refresh of the code already in production |
 
 The deploy itself lives in a reusable composite action:
 [.github/actions/deploy-cloud-run](../.github/actions/deploy-cloud-run/action.yml). The services are public, scale
@@ -165,6 +170,45 @@ with a long timeout, because Streamlit keeps one WebSocket open per visitor.
 After staging, the run shows **Review deployments** and GitHub notifies the reviewers. Open the staging URL (in the
 summary of the staging job), then tick `production` → **Approve and deploy**. When a newer image arrives while one
 is waiting, the older one is cancelled: only the newest image waits for approval.
+
+### Daily data refresh
+
+Approving a deploy every day only to get fresher data would be a chore, and skipping the approval would let unreviewed
+code into production. So the daily run rebuilds **the code already in production**, not `main`:
+
+1. After every production deploy, CD tags the deployed image `production` in GitHub Container Registry.
+2. The scheduled CI run reads the commit of that image (its `org.opencontainers.image.revision` label), checks that
+   commit out and builds it with the day's data. Changes merged since then are not in it: they still wait for their
+   own approval. Before the first `production` tag exists, the run builds `main` and goes through the approval.
+3. CD checks that the image's commit is the one tagged `production`, then deploys it to production through the
+   `production-data` environment, which has no reviewer. Staging is left alone (it may hold code waiting for
+   approval), and the deploy runs in its own concurrency group, so it never cancels a code deploy waiting for
+   approval.
+
+GitHub creates the `production-data` environment at its first run. To restrict it like `production`, open
+**Settings** → **Environments** → `production-data` → **Deployment branches and tags** → **Selected branches** →
+`main`. The Workload Identity Federation already accepts only `main`.
+
+Costs: GitHub Actions is free for a public repository; a Cloud Run revision costs nothing while it serves no traffic;
+the Artifact Registry repository keeps 3 images whatever the number of deploys.
+
+### Official weather warnings (optional)
+
+The route page can show Météo-France's vigilance on the route. It needs a free application key from
+[portail-api.meteofrance.fr](https://portail-api.meteofrance.fr) (product "DPVigilance"), created by the owner of
+the site. Without it, the page links to vigilance.meteofrance.fr instead. To connect it:
+
+```bash
+# Cloud Shell: store the key as a secret (free tier: 6 secret versions, 10,000 accesses a month)
+printf '%s' 'THE-KEY' | gcloud secrets create meteofrance-api-key --data-file=- --replication-policy=automatic
+gcloud secrets add-iam-policy-binding meteofrance-api-key \
+    --member "serviceAccount:meteoreading-run@<PROJECT_ID>.iam.gserviceaccount.com" --role roles/secretmanager.secretAccessor
+# GitHub: tell CD to give it to the services as the METEOFRANCE_API_KEY variable
+gh variable set CLOUD_RUN_SECRETS --repo ElliotGalaor/MeteoReading --body "METEOFRANCE_API_KEY=meteofrance-api-key:latest"
+```
+
+The key never appears in the code, the image or the logs; the next deploy picks it up. Locally, set
+`METEOFRANCE_API_KEY` in the environment before `streamlit run`.
 
 ### Redeploy or roll back
 
@@ -181,7 +225,7 @@ on the [package page](https://github.com/ElliotGalaor/MeteoReading/pkgs/containe
 - **One instance**: up to 20 visitors at a time; beyond that, new visitors get an error until one leaves.
 - **Route weather** calls the free Open-Meteo and OpenStreetMap routing services from the server: fine for a
   portfolio, not for heavy traffic (their fair-use limits apply to the server's address).
-- The data is a snapshot taken at build time, refreshed every Monday.
+- The data is a snapshot taken at build time, refreshed every day (production: with the code already approved).
 
 ## Troubleshooting
 

@@ -1,0 +1,601 @@
+city,region,indicator,period,low,median,high
+Paris,North,Mean temperature,1961-1990,11.72,11.72,11.72
+Paris,North,Hot days (TX ≥ 30 °C),1961-1990,6.43,6.43,6.43
+Paris,North,Very hot days (TX ≥ 35 °C),1961-1990,0.2,0.2,0.2
+Paris,North,Tropical nights (TN ≥ 20 °C),1961-1990,2.63,2.63,2.63
+Paris,North,Frost days (TN < 0 °C),1961-1990,27.43,27.43,27.43
+Paris,North,Annual rainfall,1961-1990,641.41,641.41,641.41
+Paris,North,Mean temperature,2011-2025,13.51,13.51,13.51
+Paris,North,Hot days (TX ≥ 30 °C),2011-2025,17.6,17.6,17.6
+Paris,North,Very hot days (TX ≥ 35 °C),2011-2025,2.93,2.93,2.93
+Paris,North,Tropical nights (TN ≥ 20 °C),2011-2025,7.73,7.73,7.73
+Paris,North,Frost days (TN < 0 °C),2011-2025,14.6,14.6,14.6
+Paris,North,Annual rainfall,2011-2025,658.35,658.35,658.35
+Paris,North,Mean temperature,"+2 °C, 2030",13.81,13.81,13.81
+Paris,North,Hot days (TX ≥ 30 °C),"+2 °C, 2030",18.93,20.07,21.07
+Paris,North,Very hot days (TX ≥ 35 °C),"+2 °C, 2030",3.13,3.47,3.93
+Paris,North,Tropical nights (TN ≥ 20 °C),"+2 °C, 2030",9.0,9.67,11.07
+Paris,North,Frost days (TN < 0 °C),"+2 °C, 2030",13.6,14.33,14.4
+Paris,North,Annual rainfall,"+2 °C, 2030",645.18,653.01,678.32
+Paris,North,Mean temperature,"+2.7 °C, 2050",14.51,14.51,14.52
+Paris,North,Hot days (TX ≥ 30 °C),"+2.7 °C, 2050",24.33,26.93,30.87
+Paris,North,Very hot days (TX ≥ 35 °C),"+2.7 °C, 2050",4.33,4.87,6.4
+Paris,North,Tropical nights (TN ≥ 20 °C),"+2.7 °C, 2050",14.0,15.67,18.33
+Paris,North,Frost days (TN < 0 °C),"+2.7 °C, 2050",9.27,10.33,11.6
+Paris,North,Annual rainfall,"+2.7 °C, 2050",614.43,640.54,724.91
+Paris,North,Mean temperature,"+4 °C, 2100",15.81,15.81,15.82
+Paris,North,Hot days (TX ≥ 30 °C),"+4 °C, 2100",34.67,41.4,53.2
+Paris,North,Very hot days (TX ≥ 35 °C),"+4 °C, 2100",6.93,8.73,15.73
+Paris,North,Tropical nights (TN ≥ 20 °C),"+4 °C, 2100",28.73,32.47,45.8
+Paris,North,Frost days (TN < 0 °C),"+4 °C, 2100",4.6,6.07,7.47
+Paris,North,Annual rainfall,"+4 °C, 2100",557.34,617.38,811.44
+Marseille,South,Mean temperature,1961-1990,14.81,14.81,14.81
+Marseille,South,Hot days (TX ≥ 30 °C),1961-1990,27.67,27.67,27.67
+Marseille,South,Very hot days (TX ≥ 35 °C),1961-1990,0.63,0.63,0.63
+Marseille,South,Tropical nights (TN ≥ 20 °C),1961-1990,17.23,17.23,17.23
+Marseille,South,Frost days (TN < 0 °C),1961-1990,24.57,24.57,24.57
+Marseille,South,Annual rainfall,1961-1990,544.55,544.55,544.55
+Marseille,South,Mean temperature,2011-2025,16.47,16.47,16.47
+Marseille,South,Hot days (TX ≥ 30 °C),2011-2025,62.67,62.67,62.67
+Marseille,South,Very hot days (TX ≥ 35 °C),2011-2025,6.93,6.93,6.93
+Marseille,South,Tropical nights (TN ≥ 20 °C),2011-2025,42.0,42.0,42.0
+Marseille,South,Frost days (TN < 0 °C),2011-2025,16.13,16.13,16.13
+Marseille,South,Annual rainfall,2011-2025,514.57,514.57,514.57
+Marseille,South,Mean temperature,"+2 °C, 2030",16.77,16.77,16.77
+Marseille,South,Hot days (TX ≥ 30 °C),"+2 °C, 2030",65.53,66.2,68.27
+Marseille,South,Very hot days (TX ≥ 35 °C),"+2 °C, 2030",7.93,8.53,9.87
+Marseille,South,Tropical nights (TN ≥ 20 °C),"+2 °C, 2030",47.6,48.47,49.47
+Marseille,South,Frost days (TN < 0 °C),"+2 °C, 2030",15.07,15.13,15.6
+Marseille,South,Annual rainfall,"+2 °C, 2030",506.88,515.84,530.86
+Marseille,South,Mean temperature,"+2.7 °C, 2050",17.47,17.47,17.47
+Marseille,South,Hot days (TX ≥ 30 °C),"+2.7 °C, 2050",76.87,77.87,81.4
+Marseille,South,Very hot days (TX ≥ 35 °C),"+2.7 °C, 2050",12.8,15.53,19.93
+Marseille,South,Tropical nights (TN ≥ 20 °C),"+2.7 °C, 2050",59.67,63.87,65.0
+Marseille,South,Frost days (TN < 0 °C),"+2.7 °C, 2050",11.2,12.07,14.07
+Marseille,South,Annual rainfall,"+2.7 °C, 2050",488.94,518.79,568.87
+Marseille,South,Mean temperature,"+4 °C, 2100",18.77,18.77,18.77
+Marseille,South,Hot days (TX ≥ 30 °C),"+4 °C, 2100",95.47,96.87,100.27
+Marseille,South,Very hot days (TX ≥ 35 °C),"+4 °C, 2100",26.4,32.27,44.67
+Marseille,South,Tropical nights (TN ≥ 20 °C),"+4 °C, 2100",83.8,88.53,94.73
+Marseille,South,Frost days (TN < 0 °C),"+4 °C, 2100",5.53,7.4,11.0
+Marseille,South,Annual rainfall,"+4 °C, 2100",455.61,528.91,639.46
+Lyon,East,Mean temperature,1961-1990,11.46,11.46,11.46
+Lyon,East,Hot days (TX ≥ 30 °C),1961-1990,15.8,15.8,15.8
+Lyon,East,Very hot days (TX ≥ 35 °C),1961-1990,1.03,1.03,1.03
+Lyon,East,Tropical nights (TN ≥ 20 °C),1961-1990,2.2,2.2,2.2
+Lyon,East,Frost days (TN < 0 °C),1961-1990,56.57,56.57,56.57
+Lyon,East,Annual rainfall,1961-1990,825.38,825.38,825.38
+Lyon,East,Mean temperature,2011-2025,13.81,13.81,13.81
+Lyon,East,Hot days (TX ≥ 30 °C),2011-2025,40.67,40.67,40.67
+Lyon,East,Very hot days (TX ≥ 35 °C),2011-2025,8.07,8.07,8.07
+Lyon,East,Tropical nights (TN ≥ 20 °C),2011-2025,13.8,13.8,13.8
+Lyon,East,Frost days (TN < 0 °C),2011-2025,33.47,33.47,33.47
+Lyon,East,Annual rainfall,2011-2025,796.34,796.34,796.34
+Lyon,East,Mean temperature,"+2 °C, 2030",14.11,14.11,14.11
+Lyon,East,Hot days (TX ≥ 30 °C),"+2 °C, 2030",43.47,44.0,44.8
+Lyon,East,Very hot days (TX ≥ 35 °C),"+2 °C, 2030",9.33,9.53,10.6
+Lyon,East,Tropical nights (TN ≥ 20 °C),"+2 °C, 2030",15.8,15.8,16.67
+Lyon,East,Frost days (TN < 0 °C),"+2 °C, 2030",29.8,30.6,32.47
+Lyon,East,Annual rainfall,"+2 °C, 2030",783.57,790.86,811.44
+Lyon,East,Mean temperature,"+2.7 °C, 2050",14.81,14.81,14.81
+Lyon,East,Hot days (TX ≥ 30 °C),"+2.7 °C, 2050",49.6,51.13,57.0
+Lyon,East,Very hot days (TX ≥ 35 °C),"+2.7 °C, 2050",12.87,13.73,18.0
+Lyon,East,Tropical nights (TN ≥ 20 °C),"+2.7 °C, 2050",22.27,22.93,27.33
+Lyon,East,Frost days (TN < 0 °C),"+2.7 °C, 2050",22.33,24.87,28.6
+Lyon,East,Annual rainfall,"+2.7 °C, 2050",753.77,778.06,846.67
+Lyon,East,Mean temperature,"+4 °C, 2100",16.11,16.11,16.11
+Lyon,East,Hot days (TX ≥ 30 °C),"+4 °C, 2100",64.67,69.33,79.73
+Lyon,East,Very hot days (TX ≥ 35 °C),"+4 °C, 2100",21.0,23.67,36.8
+Lyon,East,Tropical nights (TN ≥ 20 °C),"+4 °C, 2100",39.13,41.53,53.4
+Lyon,East,Frost days (TN < 0 °C),"+4 °C, 2100",12.27,16.93,23.87
+Lyon,East,Annual rainfall,"+4 °C, 2100",698.44,754.29,912.1
+Toulouse,South,Mean temperature,1961-1990,12.97,12.97,12.97
+Toulouse,South,Hot days (TX ≥ 30 °C),1961-1990,21.33,21.33,21.33
+Toulouse,South,Very hot days (TX ≥ 35 °C),1961-1990,1.83,1.83,1.83
+Toulouse,South,Tropical nights (TN ≥ 20 °C),1961-1990,2.8,2.8,2.8
+Toulouse,South,Frost days (TN < 0 °C),1961-1990,35.77,35.77,35.77
+Toulouse,South,Annual rainfall,1961-1990,655.65,655.65,655.65
+Toulouse,South,Mean temperature,2011-2025,14.98,14.98,14.98
+Toulouse,South,Hot days (TX ≥ 30 °C),2011-2025,42.93,42.93,42.93
+Toulouse,South,Very hot days (TX ≥ 35 °C),2011-2025,8.27,8.27,8.27
+Toulouse,South,Tropical nights (TN ≥ 20 °C),2011-2025,17.67,17.67,17.67
+Toulouse,South,Frost days (TN < 0 °C),2011-2025,19.87,19.87,19.87
+Toulouse,South,Annual rainfall,2011-2025,573.02,573.02,573.02
+Toulouse,South,Mean temperature,"+2 °C, 2030",15.28,15.28,15.28
+Toulouse,South,Hot days (TX ≥ 30 °C),"+2 °C, 2030",45.67,45.73,47.13
+Toulouse,South,Very hot days (TX ≥ 35 °C),"+2 °C, 2030",9.0,9.13,9.87
+Toulouse,South,Tropical nights (TN ≥ 20 °C),"+2 °C, 2030",20.93,21.07,21.93
+Toulouse,South,Frost days (TN < 0 °C),"+2 °C, 2030",18.2,18.47,18.87
+Toulouse,South,Annual rainfall,"+2 °C, 2030",561.56,565.24,589.33
+Toulouse,South,Mean temperature,"+2.7 °C, 2050",15.98,15.98,15.98
+Toulouse,South,Hot days (TX ≥ 30 °C),"+2.7 °C, 2050",53.0,54.47,57.53
+Toulouse,South,Very hot days (TX ≥ 35 °C),"+2.7 °C, 2050",12.0,13.07,15.47
+Toulouse,South,Tropical nights (TN ≥ 20 °C),"+2.7 °C, 2050",28.73,31.93,33.2
+Toulouse,South,Frost days (TN < 0 °C),"+2.7 °C, 2050",13.47,15.13,16.27
+Toulouse,South,Annual rainfall,"+2.7 °C, 2050",534.82,547.09,627.38
+Toulouse,South,Mean temperature,"+4 °C, 2100",17.28,17.28,17.28
+Toulouse,South,Hot days (TX ≥ 30 °C),"+4 °C, 2100",70.4,71.87,78.87
+Toulouse,South,Very hot days (TX ≥ 35 °C),"+4 °C, 2100",20.07,23.0,30.67
+Toulouse,South,Tropical nights (TN ≥ 20 °C),"+4 °C, 2100",52.07,57.13,61.27
+Toulouse,South,Frost days (TN < 0 °C),"+4 °C, 2100",6.67,9.4,12.87
+Toulouse,South,Annual rainfall,"+4 °C, 2100",485.16,534.95,698.05
+Nice,South,Mean temperature,1961-1990,15.34,15.34,15.34
+Nice,South,Hot days (TX ≥ 30 °C),1961-1990,3.87,3.87,3.87
+Nice,South,Very hot days (TX ≥ 35 °C),1961-1990,0.03,0.03,0.03
+Nice,South,Tropical nights (TN ≥ 20 °C),1961-1990,28.93,28.93,28.93
+Nice,South,Frost days (TN < 0 °C),1961-1990,2.03,2.03,2.03
+Nice,South,Annual rainfall,1961-1990,767.8,767.8,767.8
+Nice,South,Mean temperature,2011-2025,17.01,17.01,17.01
+Nice,South,Hot days (TX ≥ 30 °C),2011-2025,13.67,13.67,13.67
+Nice,South,Very hot days (TX ≥ 35 °C),2011-2025,0.6,0.6,0.6
+Nice,South,Tropical nights (TN ≥ 20 °C),2011-2025,78.53,78.53,78.53
+Nice,South,Frost days (TN < 0 °C),2011-2025,0.6,0.6,0.6
+Nice,South,Annual rainfall,2011-2025,739.95,739.95,739.95
+Nice,South,Mean temperature,"+2 °C, 2030",17.31,17.31,17.31
+Nice,South,Hot days (TX ≥ 30 °C),"+2 °C, 2030",15.8,16.73,18.47
+Nice,South,Very hot days (TX ≥ 35 °C),"+2 °C, 2030",0.67,0.73,0.8
+Nice,South,Tropical nights (TN ≥ 20 °C),"+2 °C, 2030",81.33,81.53,81.87
+Nice,South,Frost days (TN < 0 °C),"+2 °C, 2030",0.53,0.53,0.6
+Nice,South,Annual rainfall,"+2 °C, 2030",730.52,748.57,770.08
+Nice,South,Mean temperature,"+2.7 °C, 2050",18.01,18.01,18.01
+Nice,South,Hot days (TX ≥ 30 °C),"+2.7 °C, 2050",23.73,27.4,34.13
+Nice,South,Very hot days (TX ≥ 35 °C),"+2.7 °C, 2050",1.0,1.4,1.73
+Nice,South,Tropical nights (TN ≥ 20 °C),"+2.7 °C, 2050",91.33,93.47,95.93
+Nice,South,Frost days (TN < 0 °C),"+2.7 °C, 2050",0.27,0.33,0.47
+Nice,South,Annual rainfall,"+2.7 °C, 2050",708.53,768.71,840.4
+Nice,South,Mean temperature,"+4 °C, 2100",19.31,19.31,19.31
+Nice,South,Hot days (TX ≥ 30 °C),"+4 °C, 2100",48.0,56.73,70.33
+Nice,South,Very hot days (TX ≥ 35 °C),"+4 °C, 2100",2.47,4.33,7.13
+Nice,South,Tropical nights (TN ≥ 20 °C),"+4 °C, 2100",110.0,115.07,125.27
+Nice,South,Frost days (TN < 0 °C),"+4 °C, 2100",0.0,0.07,0.33
+Nice,South,Annual rainfall,"+4 °C, 2100",667.69,813.29,970.98
+Nantes,West,Mean temperature,1961-1990,11.94,11.94,11.94
+Nantes,West,Hot days (TX ≥ 30 °C),1961-1990,7.23,7.23,7.23
+Nantes,West,Very hot days (TX ≥ 35 °C),1961-1990,0.67,0.67,0.67
+Nantes,West,Tropical nights (TN ≥ 20 °C),1961-1990,1.27,1.27,1.27
+Nantes,West,Frost days (TN < 0 °C),1961-1990,33.43,33.43,33.43
+Nantes,West,Annual rainfall,1961-1990,787.39,787.39,787.39
+Nantes,West,Mean temperature,2011-2025,13.34,13.34,13.34
+Nantes,West,Hot days (TX ≥ 30 °C),2011-2025,15.67,15.67,15.67
+Nantes,West,Very hot days (TX ≥ 35 °C),2011-2025,2.4,2.4,2.4
+Nantes,West,Tropical nights (TN ≥ 20 °C),2011-2025,2.27,2.27,2.27
+Nantes,West,Frost days (TN < 0 °C),2011-2025,22.33,22.33,22.33
+Nantes,West,Annual rainfall,2011-2025,816.99,816.99,816.99
+Nantes,West,Mean temperature,"+2 °C, 2030",13.64,13.64,13.64
+Nantes,West,Hot days (TX ≥ 30 °C),"+2 °C, 2030",17.13,17.67,18.13
+Nantes,West,Very hot days (TX ≥ 35 °C),"+2 °C, 2030",2.6,2.67,2.8
+Nantes,West,Tropical nights (TN ≥ 20 °C),"+2 °C, 2030",3.2,3.2,4.0
+Nantes,West,Frost days (TN < 0 °C),"+2 °C, 2030",19.93,20.33,20.6
+Nantes,West,Annual rainfall,"+2 °C, 2030",813.44,817.3,826.54
+Nantes,West,Mean temperature,"+2.7 °C, 2050",14.34,14.34,14.34
+Nantes,West,Hot days (TX ≥ 30 °C),"+2.7 °C, 2050",21.13,22.73,25.53
+Nantes,West,Very hot days (TX ≥ 35 °C),"+2.7 °C, 2050",3.6,4.2,5.0
+Nantes,West,Tropical nights (TN ≥ 20 °C),"+2.7 °C, 2050",6.07,7.2,8.73
+Nantes,West,Frost days (TN < 0 °C),"+2.7 °C, 2050",14.67,16.33,16.93
+Nantes,West,Annual rainfall,"+2.7 °C, 2050",805.18,818.04,848.82
+Nantes,West,Mean temperature,"+4 °C, 2100",15.64,15.64,15.64
+Nantes,West,Hot days (TX ≥ 30 °C),"+4 °C, 2100",30.8,34.8,43.8
+Nantes,West,Very hot days (TX ≥ 35 °C),"+4 °C, 2100",5.93,8.2,12.33
+Nantes,West,Tropical nights (TN ≥ 20 °C),"+4 °C, 2100",15.73,17.13,25.27
+Nantes,West,Frost days (TN < 0 °C),"+4 °C, 2100",7.93,10.8,13.33
+Nantes,West,Annual rainfall,"+4 °C, 2100",789.82,819.41,890.19
+Strasbourg,East,Mean temperature,1961-1990,11.13,11.13,11.13
+Strasbourg,East,Hot days (TX ≥ 30 °C),1961-1990,13.23,13.23,13.23
+Strasbourg,East,Very hot days (TX ≥ 35 °C),1961-1990,0.67,0.67,0.67
+Strasbourg,East,Tropical nights (TN ≥ 20 °C),1961-1990,1.77,1.77,1.77
+Strasbourg,East,Frost days (TN < 0 °C),1961-1990,51.87,51.87,51.87
+Strasbourg,East,Annual rainfall,1961-1990,723.07,723.07,723.07
+Strasbourg,East,Mean temperature,2011-2025,12.77,12.77,12.77
+Strasbourg,East,Hot days (TX ≥ 30 °C),2011-2025,23.4,23.4,23.4
+Strasbourg,East,Very hot days (TX ≥ 35 °C),2011-2025,3.8,3.8,3.8
+Strasbourg,East,Tropical nights (TN ≥ 20 °C),2011-2025,6.87,6.87,6.87
+Strasbourg,East,Frost days (TN < 0 °C),2011-2025,34.4,34.4,34.4
+Strasbourg,East,Annual rainfall,2011-2025,717.73,717.73,717.73
+Strasbourg,East,Mean temperature,"+2 °C, 2030",13.07,13.07,13.07
+Strasbourg,East,Hot days (TX ≥ 30 °C),"+2 °C, 2030",25.73,26.0,27.8
+Strasbourg,East,Very hot days (TX ≥ 35 °C),"+2 °C, 2030",4.4,4.4,4.73
+Strasbourg,East,Tropical nights (TN ≥ 20 °C),"+2 °C, 2030",8.93,8.93,9.53
+Strasbourg,East,Frost days (TN < 0 °C),"+2 °C, 2030",31.07,31.87,33.47
+Strasbourg,East,Annual rainfall,"+2 °C, 2030",706.46,712.56,729.28
+Strasbourg,East,Mean temperature,"+2.7 °C, 2050",13.77,13.77,13.77
+Strasbourg,East,Hot days (TX ≥ 30 °C),"+2.7 °C, 2050",32.2,34.13,39.53
+Strasbourg,East,Very hot days (TX ≥ 35 °C),"+2.7 °C, 2050",5.93,6.4,9.0
+Strasbourg,East,Tropical nights (TN ≥ 20 °C),"+2.7 °C, 2050",13.53,14.53,18.07
+Strasbourg,East,Frost days (TN < 0 °C),"+2.7 °C, 2050",24.2,26.53,28.93
+Strasbourg,East,Annual rainfall,"+2.7 °C, 2050",680.16,700.49,756.22
+Strasbourg,East,Mean temperature,"+4 °C, 2100",15.07,15.07,15.07
+Strasbourg,East,Hot days (TX ≥ 30 °C),"+4 °C, 2100",45.93,50.47,64.53
+Strasbourg,East,Very hot days (TX ≥ 35 °C),"+4 °C, 2100",10.53,11.8,21.6
+Strasbourg,East,Tropical nights (TN ≥ 20 °C),"+4 °C, 2100",27.53,29.33,41.87
+Strasbourg,East,Frost days (TN < 0 °C),"+4 °C, 2100",11.33,16.13,24.33
+Strasbourg,East,Annual rainfall,"+4 °C, 2100",631.31,678.07,806.26
+Montpellier,South,Mean temperature,1961-1990,14.23,14.23,14.23
+Montpellier,South,Hot days (TX ≥ 30 °C),1961-1990,19.37,19.37,19.37
+Montpellier,South,Very hot days (TX ≥ 35 °C),1961-1990,0.83,0.83,0.83
+Montpellier,South,Tropical nights (TN ≥ 20 °C),1961-1990,9.17,9.17,9.17
+Montpellier,South,Frost days (TN < 0 °C),1961-1990,30.27,30.27,30.27
+Montpellier,South,Annual rainfall,1961-1990,699.13,699.13,699.13
+Montpellier,South,Mean temperature,2011-2025,16.09,16.09,16.09
+Montpellier,South,Hot days (TX ≥ 30 °C),2011-2025,42.27,42.27,42.27
+Montpellier,South,Very hot days (TX ≥ 35 °C),2011-2025,4.07,4.07,4.07
+Montpellier,South,Tropical nights (TN ≥ 20 °C),2011-2025,34.13,34.13,34.13
+Montpellier,South,Frost days (TN < 0 °C),2011-2025,17.4,17.4,17.4
+Montpellier,South,Annual rainfall,2011-2025,580.67,580.67,580.67
+Montpellier,South,Mean temperature,"+2 °C, 2030",16.39,16.39,16.39
+Montpellier,South,Hot days (TX ≥ 30 °C),"+2 °C, 2030",45.07,46.4,49.13
+Montpellier,South,Very hot days (TX ≥ 35 °C),"+2 °C, 2030",4.4,4.67,5.33
+Montpellier,South,Tropical nights (TN ≥ 20 °C),"+2 °C, 2030",37.87,38.53,39.87
+Montpellier,South,Frost days (TN < 0 °C),"+2 °C, 2030",15.93,16.13,16.73
+Montpellier,South,Annual rainfall,"+2 °C, 2030",571.31,581.12,598.24
+Montpellier,South,Mean temperature,"+2.7 °C, 2050",17.09,17.09,17.09
+Montpellier,South,Hot days (TX ≥ 30 °C),"+2.7 °C, 2050",56.8,59.33,64.13
+Montpellier,South,Very hot days (TX ≥ 35 °C),"+2.7 °C, 2050",6.8,8.27,10.67
+Montpellier,South,Tropical nights (TN ≥ 20 °C),"+2.7 °C, 2050",53.87,56.33,58.4
+Montpellier,South,Frost days (TN < 0 °C),"+2.7 °C, 2050",11.87,13.0,14.93
+Montpellier,South,Annual rainfall,"+2.7 °C, 2050",549.45,582.16,639.23
+Montpellier,South,Mean temperature,"+4 °C, 2100",18.39,18.39,18.39
+Montpellier,South,Hot days (TX ≥ 30 °C),"+4 °C, 2100",79.47,82.4,89.53
+Montpellier,South,Very hot days (TX ≥ 35 °C),"+4 °C, 2100",13.8,19.0,28.67
+Montpellier,South,Tropical nights (TN ≥ 20 °C),"+4 °C, 2100",78.67,83.07,88.47
+Montpellier,South,Frost days (TN < 0 °C),"+4 °C, 2100",5.73,8.27,11.87
+Montpellier,South,Annual rainfall,"+4 °C, 2100",508.86,589.55,715.36
+Bordeaux,West,Mean temperature,1961-1990,12.77,12.77,12.77
+Bordeaux,West,Hot days (TX ≥ 30 °C),1961-1990,14.7,14.7,14.7
+Bordeaux,West,Very hot days (TX ≥ 35 °C),1961-1990,1.4,1.4,1.4
+Bordeaux,West,Tropical nights (TN ≥ 20 °C),1961-1990,1.2,1.2,1.2
+Bordeaux,West,Frost days (TN < 0 °C),1961-1990,35.83,35.83,35.83
+Bordeaux,West,Annual rainfall,1961-1990,923.48,923.48,923.48
+Bordeaux,West,Mean temperature,2011-2025,14.84,14.84,14.84
+Bordeaux,West,Hot days (TX ≥ 30 °C),2011-2025,31.27,31.27,31.27
+Bordeaux,West,Very hot days (TX ≥ 35 °C),2011-2025,6.53,6.53,6.53
+Bordeaux,West,Tropical nights (TN ≥ 20 °C),2011-2025,8.2,8.2,8.2
+Bordeaux,West,Frost days (TN < 0 °C),2011-2025,18.33,18.33,18.33
+Bordeaux,West,Annual rainfall,2011-2025,887.33,887.33,887.33
+Bordeaux,West,Mean temperature,"+2 °C, 2030",15.14,15.14,15.14
+Bordeaux,West,Hot days (TX ≥ 30 °C),"+2 °C, 2030",33.53,34.53,35.0
+Bordeaux,West,Very hot days (TX ≥ 35 °C),"+2 °C, 2030",7.0,7.4,7.53
+Bordeaux,West,Tropical nights (TN ≥ 20 °C),"+2 °C, 2030",11.2,11.27,12.73
+Bordeaux,West,Frost days (TN < 0 °C),"+2 °C, 2030",16.33,16.47,16.67
+Bordeaux,West,Annual rainfall,"+2 °C, 2030",882.56,887.81,899.07
+Bordeaux,West,Mean temperature,"+2.7 °C, 2050",15.84,15.84,15.84
+Bordeaux,West,Hot days (TX ≥ 30 °C),"+2.7 °C, 2050",41.13,43.47,46.6
+Bordeaux,West,Very hot days (TX ≥ 35 °C),"+2.7 °C, 2050",8.8,10.2,11.8
+Bordeaux,West,Tropical nights (TN ≥ 20 °C),"+2.7 °C, 2050",17.67,19.67,22.8
+Bordeaux,West,Frost days (TN < 0 °C),"+2.7 °C, 2050",12.4,13.67,14.6
+Bordeaux,West,Annual rainfall,"+2.7 °C, 2050",871.43,888.93,926.46
+Bordeaux,West,Mean temperature,"+4 °C, 2100",17.14,17.14,17.14
+Bordeaux,West,Hot days (TX ≥ 30 °C),"+4 °C, 2100",56.6,63.2,72.07
+Bordeaux,West,Very hot days (TX ≥ 35 °C),"+4 °C, 2100",14.2,18.93,24.4
+Bordeaux,West,Tropical nights (TN ≥ 20 °C),"+4 °C, 2100",35.8,39.87,49.87
+Bordeaux,West,Frost days (TN < 0 °C),"+4 °C, 2100",6.33,9.07,11.73
+Bordeaux,West,Annual rainfall,"+4 °C, 2100",850.76,891.02,977.33
+Lille,North,Mean temperature,1961-1990,9.89,9.89,9.89
+Lille,North,Hot days (TX ≥ 30 °C),1961-1990,3.27,3.27,3.27
+Lille,North,Very hot days (TX ≥ 35 °C),1961-1990,0.13,0.13,0.13
+Lille,North,Tropical nights (TN ≥ 20 °C),1961-1990,0.07,0.07,0.07
+Lille,North,Frost days (TN < 0 °C),1961-1990,53.77,53.77,53.77
+Lille,North,Annual rainfall,1961-1990,686.68,686.68,686.68
+Lille,North,Mean temperature,2011-2025,11.93,11.93,11.93
+Lille,North,Hot days (TX ≥ 30 °C),2011-2025,9.0,9.0,9.0
+Lille,North,Very hot days (TX ≥ 35 °C),2011-2025,1.2,1.2,1.2
+Lille,North,Tropical nights (TN ≥ 20 °C),2011-2025,1.47,1.47,1.47
+Lille,North,Frost days (TN < 0 °C),2011-2025,29.47,29.47,29.47
+Lille,North,Annual rainfall,2011-2025,740.37,740.37,740.37
+Lille,North,Mean temperature,"+2 °C, 2030",12.23,12.23,12.23
+Lille,North,Hot days (TX ≥ 30 °C),"+2 °C, 2030",9.33,9.8,10.27
+Lille,North,Very hot days (TX ≥ 35 °C),"+2 °C, 2030",1.33,1.4,1.67
+Lille,North,Tropical nights (TN ≥ 20 °C),"+2 °C, 2030",1.6,1.87,2.13
+Lille,North,Frost days (TN < 0 °C),"+2 °C, 2030",27.73,27.93,28.07
+Lille,North,Annual rainfall,"+2 °C, 2030",726.06,733.18,763.72
+Lille,North,Mean temperature,"+2.7 °C, 2050",12.93,12.93,12.93
+Lille,North,Hot days (TX ≥ 30 °C),"+2.7 °C, 2050",11.67,12.8,16.47
+Lille,North,Very hot days (TX ≥ 35 °C),"+2.7 °C, 2050",1.8,2.13,3.2
+Lille,North,Tropical nights (TN ≥ 20 °C),"+2.7 °C, 2050",3.33,3.93,5.27
+Lille,North,Frost days (TN < 0 °C),"+2.7 °C, 2050",21.87,23.07,23.73
+Lille,North,Annual rainfall,"+2.7 °C, 2050",692.68,716.41,818.19
+Lille,North,Mean temperature,"+4 °C, 2100",14.23,14.23,14.23
+Lille,North,Hot days (TX ≥ 30 °C),"+4 °C, 2100",18.07,22.87,34.73
+Lille,North,Very hot days (TX ≥ 35 °C),"+4 °C, 2100",3.47,4.67,8.2
+Lille,North,Tropical nights (TN ≥ 20 °C),"+4 °C, 2100",9.8,12.0,20.0
+Lille,North,Frost days (TN < 0 °C),"+4 °C, 2100",12.4,15.07,16.73
+Lille,North,Annual rainfall,"+4 °C, 2100",630.67,685.25,919.34
+Rennes,West,Mean temperature,1961-1990,11.39,11.39,11.39
+Rennes,West,Hot days (TX ≥ 30 °C),1961-1990,4.97,4.97,4.97
+Rennes,West,Very hot days (TX ≥ 35 °C),1961-1990,0.43,0.43,0.43
+Rennes,West,Tropical nights (TN ≥ 20 °C),1961-1990,0.43,0.43,0.43
+Rennes,West,Frost days (TN < 0 °C),1961-1990,37.33,37.33,37.33
+Rennes,West,Annual rainfall,1961-1990,648.75,648.75,648.75
+Rennes,West,Mean temperature,2011-2025,12.77,12.77,12.77
+Rennes,West,Hot days (TX ≥ 30 °C),2011-2025,11.07,11.07,11.07
+Rennes,West,Very hot days (TX ≥ 35 °C),2011-2025,1.47,1.47,1.47
+Rennes,West,Tropical nights (TN ≥ 20 °C),2011-2025,0.67,0.67,0.67
+Rennes,West,Frost days (TN < 0 °C),2011-2025,25.47,25.47,25.47
+Rennes,West,Annual rainfall,2011-2025,685.82,685.82,685.82
+Rennes,West,Mean temperature,"+2 °C, 2030",13.07,13.07,13.07
+Rennes,West,Hot days (TX ≥ 30 °C),"+2 °C, 2030",12.4,13.13,13.47
+Rennes,West,Very hot days (TX ≥ 35 °C),"+2 °C, 2030",1.67,1.8,1.93
+Rennes,West,Tropical nights (TN ≥ 20 °C),"+2 °C, 2030",1.0,1.0,1.2
+Rennes,West,Frost days (TN < 0 °C),"+2 °C, 2030",23.87,24.13,24.33
+Rennes,West,Annual rainfall,"+2 °C, 2030",680.72,683.99,693.39
+Rennes,West,Mean temperature,"+2.7 °C, 2050",13.77,13.77,13.77
+Rennes,West,Hot days (TX ≥ 30 °C),"+2.7 °C, 2050",15.4,17.47,20.07
+Rennes,West,Very hot days (TX ≥ 35 °C),"+2.7 °C, 2050",2.47,2.93,3.53
+Rennes,West,Tropical nights (TN ≥ 20 °C),"+2.7 °C, 2050",2.33,2.8,3.53
+Rennes,West,Frost days (TN < 0 °C),"+2.7 °C, 2050",18.0,20.2,20.53
+Rennes,West,Annual rainfall,"+2.7 °C, 2050",668.83,679.73,711.04
+Rennes,West,Mean temperature,"+4 °C, 2100",15.07,15.07,15.07
+Rennes,West,Hot days (TX ≥ 30 °C),"+4 °C, 2100",23.67,30.27,37.67
+Rennes,West,Very hot days (TX ≥ 35 °C),"+4 °C, 2100",3.87,5.73,8.53
+Rennes,West,Tropical nights (TN ≥ 20 °C),"+4 °C, 2100",7.73,8.73,14.93
+Rennes,West,Frost days (TN < 0 °C),"+4 °C, 2100",9.33,12.53,15.47
+Rennes,West,Annual rainfall,"+4 °C, 2100",646.75,671.82,743.83
+Brest,West,Mean temperature,1961-1990,10.96,10.96,10.96
+Brest,West,Hot days (TX ≥ 30 °C),1961-1990,0.93,0.93,0.93
+Brest,West,Very hot days (TX ≥ 35 °C),1961-1990,0.0,0.0,0.0
+Brest,West,Tropical nights (TN ≥ 20 °C),1961-1990,0.07,0.07,0.07
+Brest,West,Frost days (TN < 0 °C),1961-1990,15.4,15.4,15.4
+Brest,West,Annual rainfall,1961-1990,1110.46,1110.46,1110.46
+Brest,West,Mean temperature,2011-2025,12.18,12.18,12.18
+Brest,West,Hot days (TX ≥ 30 °C),2011-2025,2.13,2.13,2.13
+Brest,West,Very hot days (TX ≥ 35 °C),2011-2025,0.2,0.2,0.2
+Brest,West,Tropical nights (TN ≥ 20 °C),2011-2025,0.07,0.07,0.07
+Brest,West,Frost days (TN < 0 °C),2011-2025,10.87,10.87,10.87
+Brest,West,Annual rainfall,2011-2025,1227.4,1227.4,1227.4
+Brest,West,Mean temperature,"+2 °C, 2030",12.48,12.48,12.48
+Brest,West,Hot days (TX ≥ 30 °C),"+2 °C, 2030",2.33,2.47,2.47
+Brest,West,Very hot days (TX ≥ 35 °C),"+2 °C, 2030",0.2,0.2,0.2
+Brest,West,Tropical nights (TN ≥ 20 °C),"+2 °C, 2030",0.07,0.07,0.07
+Brest,West,Frost days (TN < 0 °C),"+2 °C, 2030",9.6,9.87,10.0
+Brest,West,Annual rainfall,"+2 °C, 2030",1226.82,1228.8,1241.62
+Brest,West,Mean temperature,"+2.7 °C, 2050",13.18,13.18,13.18
+Brest,West,Hot days (TX ≥ 30 °C),"+2.7 °C, 2050",3.33,3.73,4.4
+Brest,West,Very hot days (TX ≥ 35 °C),"+2.7 °C, 2050",0.27,0.33,0.33
+Brest,West,Tropical nights (TN ≥ 20 °C),"+2.7 °C, 2050",0.13,0.27,0.4
+Brest,West,Frost days (TN < 0 °C),"+2.7 °C, 2050",6.73,7.73,8.27
+Brest,West,Annual rainfall,"+2.7 °C, 2050",1225.48,1232.06,1274.81
+Brest,West,Mean temperature,"+4 °C, 2100",14.48,14.48,14.48
+Brest,West,Hot days (TX ≥ 30 °C),"+4 °C, 2100",5.8,7.53,10.67
+Brest,West,Very hot days (TX ≥ 35 °C),"+4 °C, 2100",0.4,0.8,1.67
+Brest,West,Tropical nights (TN ≥ 20 °C),"+4 °C, 2100",2.27,2.93,8.2
+Brest,West,Frost days (TN < 0 °C),"+4 °C, 2100",2.73,3.87,5.93
+Brest,West,Annual rainfall,"+4 °C, 2100",1222.97,1238.11,1336.44
+Clermont-Ferrand,East,Mean temperature,1961-1990,10.94,10.94,10.94
+Clermont-Ferrand,East,Hot days (TX ≥ 30 °C),1961-1990,14.4,14.4,14.4
+Clermont-Ferrand,East,Very hot days (TX ≥ 35 °C),1961-1990,1.2,1.2,1.2
+Clermont-Ferrand,East,Tropical nights (TN ≥ 20 °C),1961-1990,0.27,0.27,0.27
+Clermont-Ferrand,East,Frost days (TN < 0 °C),1961-1990,68.8,68.8,68.8
+Clermont-Ferrand,East,Annual rainfall,1961-1990,590.82,590.82,590.82
+Clermont-Ferrand,East,Mean temperature,2011-2025,12.94,12.94,12.94
+Clermont-Ferrand,East,Hot days (TX ≥ 30 °C),2011-2025,30.07,30.07,30.07
+Clermont-Ferrand,East,Very hot days (TX ≥ 35 °C),2011-2025,5.53,5.53,5.53
+Clermont-Ferrand,East,Tropical nights (TN ≥ 20 °C),2011-2025,4.33,4.33,4.33
+Clermont-Ferrand,East,Frost days (TN < 0 °C),2011-2025,47.13,47.13,47.13
+Clermont-Ferrand,East,Annual rainfall,2011-2025,550.0,550.0,550.0
+Clermont-Ferrand,East,Mean temperature,"+2 °C, 2030",13.24,13.24,13.24
+Clermont-Ferrand,East,Hot days (TX ≥ 30 °C),"+2 °C, 2030",31.93,32.2,33.73
+Clermont-Ferrand,East,Very hot days (TX ≥ 35 °C),"+2 °C, 2030",6.4,6.47,7.47
+Clermont-Ferrand,East,Tropical nights (TN ≥ 20 °C),"+2 °C, 2030",5.67,5.73,5.93
+Clermont-Ferrand,East,Frost days (TN < 0 °C),"+2 °C, 2030",42.93,43.93,45.47
+Clermont-Ferrand,East,Annual rainfall,"+2 °C, 2030",539.48,543.92,556.35
+Clermont-Ferrand,East,Mean temperature,"+2.7 °C, 2050",13.94,13.94,13.94
+Clermont-Ferrand,East,Hot days (TX ≥ 30 °C),"+2.7 °C, 2050",38.8,40.4,44.4
+Clermont-Ferrand,East,Very hot days (TX ≥ 35 °C),"+2.7 °C, 2050",9.2,9.4,13.4
+Clermont-Ferrand,East,Tropical nights (TN ≥ 20 °C),"+2.7 °C, 2050",8.73,9.07,11.4
+Clermont-Ferrand,East,Frost days (TN < 0 °C),"+2.7 °C, 2050",35.2,36.73,40.07
+Clermont-Ferrand,East,Annual rainfall,"+2.7 °C, 2050",514.94,529.73,571.16
+Clermont-Ferrand,East,Mean temperature,"+4 °C, 2100",15.24,15.24,15.24
+Clermont-Ferrand,East,Hot days (TX ≥ 30 °C),"+4 °C, 2100",52.67,56.87,68.4
+Clermont-Ferrand,East,Very hot days (TX ≥ 35 °C),"+4 °C, 2100",16.07,17.8,26.6
+Clermont-Ferrand,East,Tropical nights (TN ≥ 20 °C),"+4 °C, 2100",18.67,20.13,28.93
+Clermont-Ferrand,East,Frost days (TN < 0 °C),"+4 °C, 2100",23.0,26.6,32.47
+Clermont-Ferrand,East,Annual rainfall,"+4 °C, 2100",469.36,503.38,598.67
+Dijon,East,Mean temperature,1961-1990,10.57,10.57,10.57
+Dijon,East,Hot days (TX ≥ 30 °C),1961-1990,9.67,9.67,9.67
+Dijon,East,Very hot days (TX ≥ 35 °C),1961-1990,0.2,0.2,0.2
+Dijon,East,Tropical nights (TN ≥ 20 °C),1961-1990,0.6,0.6,0.6
+Dijon,East,Frost days (TN < 0 °C),1961-1990,64.33,64.33,64.33
+Dijon,East,Annual rainfall,1961-1990,731.82,731.82,731.82
+Dijon,East,Mean temperature,2011-2025,12.17,12.17,12.17
+Dijon,East,Hot days (TX ≥ 30 °C),2011-2025,24.93,24.93,24.93
+Dijon,East,Very hot days (TX ≥ 35 °C),2011-2025,4.0,4.0,4.0
+Dijon,East,Tropical nights (TN ≥ 20 °C),2011-2025,2.93,2.93,2.93
+Dijon,East,Frost days (TN < 0 °C),2011-2025,50.47,50.47,50.47
+Dijon,East,Annual rainfall,2011-2025,729.07,729.07,729.07
+Dijon,East,Mean temperature,"+2 °C, 2030",12.47,12.47,12.47
+Dijon,East,Hot days (TX ≥ 30 °C),"+2 °C, 2030",27.53,27.93,29.4
+Dijon,East,Very hot days (TX ≥ 35 °C),"+2 °C, 2030",4.67,4.67,5.13
+Dijon,East,Tropical nights (TN ≥ 20 °C),"+2 °C, 2030",3.53,3.53,3.87
+Dijon,East,Frost days (TN < 0 °C),"+2 °C, 2030",46.73,47.93,49.4
+Dijon,East,Annual rainfall,"+2 °C, 2030",717.91,724.72,742.95
+Dijon,East,Mean temperature,"+2.7 °C, 2050",13.17,13.17,13.17
+Dijon,East,Hot days (TX ≥ 30 °C),"+2.7 °C, 2050",35.53,36.2,42.4
+Dijon,East,Very hot days (TX ≥ 35 °C),"+2.7 °C, 2050",6.33,7.0,9.8
+Dijon,East,Tropical nights (TN ≥ 20 °C),"+2.7 °C, 2050",6.0,6.6,9.73
+Dijon,East,Frost days (TN < 0 °C),"+2.7 °C, 2050",36.67,39.33,42.6
+Dijon,East,Annual rainfall,"+2.7 °C, 2050",691.89,714.59,775.34
+Dijon,East,Mean temperature,"+4 °C, 2100",14.47,14.47,14.47
+Dijon,East,Hot days (TX ≥ 30 °C),"+4 °C, 2100",48.07,51.2,64.47
+Dijon,East,Very hot days (TX ≥ 35 °C),"+4 °C, 2100",11.6,13.87,24.07
+Dijon,East,Tropical nights (TN ≥ 20 °C),"+4 °C, 2100",16.33,18.53,28.8
+Dijon,East,Frost days (TN < 0 °C),"+4 °C, 2100",21.8,27.67,35.0
+Dijon,East,Annual rainfall,"+4 °C, 2100",643.56,695.77,835.5
+Ajaccio,South,Mean temperature,1961-1990,14.84,14.84,14.84
+Ajaccio,South,Hot days (TX ≥ 30 °C),1961-1990,12.0,12.0,12.0
+Ajaccio,South,Very hot days (TX ≥ 35 °C),1961-1990,1.07,1.07,1.07
+Ajaccio,South,Tropical nights (TN ≥ 20 °C),1961-1990,4.6,4.6,4.6
+Ajaccio,South,Frost days (TN < 0 °C),1961-1990,10.27,10.27,10.27
+Ajaccio,South,Annual rainfall,1961-1990,646.33,646.33,646.33
+Ajaccio,South,Mean temperature,2011-2025,16.66,16.66,16.66
+Ajaccio,South,Hot days (TX ≥ 30 °C),2011-2025,40.0,40.0,40.0
+Ajaccio,South,Very hot days (TX ≥ 35 °C),2011-2025,2.67,2.67,2.67
+Ajaccio,South,Tropical nights (TN ≥ 20 °C),2011-2025,22.27,22.27,22.27
+Ajaccio,South,Frost days (TN < 0 °C),2011-2025,3.2,3.2,3.2
+Ajaccio,South,Annual rainfall,2011-2025,628.4,628.4,628.4
+Ajaccio,South,Mean temperature,"+2 °C, 2030",16.96,16.96,16.96
+Ajaccio,South,Hot days (TX ≥ 30 °C),"+2 °C, 2030",44.0,44.87,47.67
+Ajaccio,South,Very hot days (TX ≥ 35 °C),"+2 °C, 2030",2.87,3.0,3.27
+Ajaccio,South,Tropical nights (TN ≥ 20 °C),"+2 °C, 2030",26.93,27.2,28.8
+Ajaccio,South,Frost days (TN < 0 °C),"+2 °C, 2030",2.53,2.53,2.6
+Ajaccio,South,Annual rainfall,"+2 °C, 2030",620.75,635.63,655.53
+Ajaccio,South,Mean temperature,"+2.7 °C, 2050",17.66,17.66,17.66
+Ajaccio,South,Hot days (TX ≥ 30 °C),"+2.7 °C, 2050",57.4,59.67,66.13
+Ajaccio,South,Very hot days (TX ≥ 35 °C),"+2.7 °C, 2050",3.87,4.53,6.47
+Ajaccio,South,Tropical nights (TN ≥ 20 °C),"+2.7 °C, 2050",39.6,42.87,45.27
+Ajaccio,South,Frost days (TN < 0 °C),"+2.7 °C, 2050",1.53,1.73,2.27
+Ajaccio,South,Annual rainfall,"+2.7 °C, 2050",602.89,652.5,718.84
+Ajaccio,South,Mean temperature,"+4 °C, 2100",18.96,18.96,18.96
+Ajaccio,South,Hot days (TX ≥ 30 °C),"+4 °C, 2100",86.27,88.0,94.53
+Ajaccio,South,Very hot days (TX ≥ 35 °C),"+4 °C, 2100",9.0,12.67,23.6
+Ajaccio,South,Tropical nights (TN ≥ 20 °C),"+4 °C, 2100",67.53,72.6,79.53
+Ajaccio,South,Frost days (TN < 0 °C),"+4 °C, 2100",0.47,0.73,1.53
+Ajaccio,South,Annual rainfall,"+4 °C, 2100",569.73,686.69,836.42
+Grenoble,East,Mean temperature,1961-1990,10.43,10.43,10.43
+Grenoble,East,Hot days (TX ≥ 30 °C),1961-1990,11.47,11.47,11.47
+Grenoble,East,Very hot days (TX ≥ 35 °C),1961-1990,0.37,0.37,0.37
+Grenoble,East,Tropical nights (TN ≥ 20 °C),1961-1990,0.37,0.37,0.37
+Grenoble,East,Frost days (TN < 0 °C),1961-1990,75.97,75.97,75.97
+Grenoble,East,Annual rainfall,1961-1990,970.6,970.6,970.6
+Grenoble,East,Mean temperature,2011-2025,11.95,11.95,11.95
+Grenoble,East,Hot days (TX ≥ 30 °C),2011-2025,27.0,27.0,27.0
+Grenoble,East,Very hot days (TX ≥ 35 °C),2011-2025,3.6,3.6,3.6
+Grenoble,East,Tropical nights (TN ≥ 20 °C),2011-2025,0.8,0.8,0.8
+Grenoble,East,Frost days (TN < 0 °C),2011-2025,63.13,63.13,63.13
+Grenoble,East,Annual rainfall,2011-2025,892.86,892.86,892.86
+Grenoble,East,Mean temperature,"+2 °C, 2030",12.25,12.25,12.25
+Grenoble,East,Hot days (TX ≥ 30 °C),"+2 °C, 2030",29.6,29.87,31.53
+Grenoble,East,Very hot days (TX ≥ 35 °C),"+2 °C, 2030",4.4,4.4,5.07
+Grenoble,East,Tropical nights (TN ≥ 20 °C),"+2 °C, 2030",1.2,1.2,1.33
+Grenoble,East,Frost days (TN < 0 °C),"+2 °C, 2030",58.33,59.87,61.6
+Grenoble,East,Annual rainfall,"+2 °C, 2030",878.98,888.52,910.83
+Grenoble,East,Mean temperature,"+2.7 °C, 2050",12.95,12.95,12.95
+Grenoble,East,Hot days (TX ≥ 30 °C),"+2.7 °C, 2050",36.13,37.47,44.67
+Grenoble,East,Very hot days (TX ≥ 35 °C),"+2.7 °C, 2050",7.0,7.27,10.13
+Grenoble,East,Tropical nights (TN ≥ 20 °C),"+2.7 °C, 2050",2.6,2.8,4.8
+Grenoble,East,Frost days (TN < 0 °C),"+2.7 °C, 2050",48.0,50.67,54.33
+Grenoble,East,Annual rainfall,"+2.7 °C, 2050",846.6,878.41,952.77
+Grenoble,East,Mean temperature,"+4 °C, 2100",14.25,14.25,14.25
+Grenoble,East,Hot days (TX ≥ 30 °C),"+4 °C, 2100",50.8,55.07,67.6
+Grenoble,East,Very hot days (TX ≥ 35 °C),"+4 °C, 2100",11.47,13.53,25.27
+Grenoble,East,Tropical nights (TN ≥ 20 °C),"+4 °C, 2100",9.33,10.2,19.27
+Grenoble,East,Frost days (TN < 0 °C),"+4 °C, 2100",29.67,36.93,44.67
+Grenoble,East,Annual rainfall,"+4 °C, 2100",786.47,859.62,1030.66
+Limoges,West,Mean temperature,1961-1990,10.48,10.48,10.48
+Limoges,West,Hot days (TX ≥ 30 °C),1961-1990,12.03,12.03,12.03
+Limoges,West,Very hot days (TX ≥ 35 °C),1961-1990,0.83,0.83,0.83
+Limoges,West,Tropical nights (TN ≥ 20 °C),1961-1990,0.03,0.03,0.03
+Limoges,West,Frost days (TN < 0 °C),1961-1990,79.6,79.6,79.6
+Limoges,West,Annual rainfall,1961-1990,1038.28,1038.28,1038.28
+Limoges,West,Mean temperature,2011-2025,12.46,12.46,12.46
+Limoges,West,Hot days (TX ≥ 30 °C),2011-2025,27.13,27.13,27.13
+Limoges,West,Very hot days (TX ≥ 35 °C),2011-2025,5.27,5.27,5.27
+Limoges,West,Tropical nights (TN ≥ 20 °C),2011-2025,0.53,0.53,0.53
+Limoges,West,Frost days (TN < 0 °C),2011-2025,55.0,55.0,55.0
+Limoges,West,Annual rainfall,2011-2025,1055.79,1055.79,1055.79
+Limoges,West,Mean temperature,"+2 °C, 2030",12.76,12.76,12.76
+Limoges,West,Hot days (TX ≥ 30 °C),"+2 °C, 2030",29.33,30.4,31.0
+Limoges,West,Very hot days (TX ≥ 35 °C),"+2 °C, 2030",5.53,6.07,6.33
+Limoges,West,Tropical nights (TN ≥ 20 °C),"+2 °C, 2030",0.73,0.73,0.87
+Limoges,West,Frost days (TN < 0 °C),"+2 °C, 2030",52.0,52.47,52.73
+Limoges,West,Annual rainfall,"+2 °C, 2030",1048.04,1054.17,1071.1
+Limoges,West,Mean temperature,"+2.7 °C, 2050",13.46,13.46,13.46
+Limoges,West,Hot days (TX ≥ 30 °C),"+2.7 °C, 2050",35.4,37.93,40.13
+Limoges,West,Very hot days (TX ≥ 35 °C),"+2.7 °C, 2050",7.6,8.6,10.53
+Limoges,West,Tropical nights (TN ≥ 20 °C),"+2.7 °C, 2050",1.4,2.0,2.67
+Limoges,West,Frost days (TN < 0 °C),"+2.7 °C, 2050",42.2,45.0,46.13
+Limoges,West,Annual rainfall,"+2.7 °C, 2050",1029.97,1050.4,1106.84
+Limoges,West,Mean temperature,"+4 °C, 2100",14.76,14.76,14.76
+Limoges,West,Hot days (TX ≥ 30 °C),"+4 °C, 2100",49.27,54.07,62.2
+Limoges,West,Very hot days (TX ≥ 35 °C),"+4 °C, 2100",11.8,16.13,21.67
+Limoges,West,Tropical nights (TN ≥ 20 °C),"+4 °C, 2100",6.53,8.27,15.33
+Limoges,West,Frost days (TN < 0 °C),"+4 °C, 2100",26.67,32.93,33.6
+Limoges,West,Annual rainfall,"+4 °C, 2100",996.42,1043.39,1173.22
+Perpignan,South,Mean temperature,1961-1990,15.28,15.28,15.28
+Perpignan,South,Hot days (TX ≥ 30 °C),1961-1990,24.27,24.27,24.27
+Perpignan,South,Very hot days (TX ≥ 35 °C),1961-1990,1.43,1.43,1.43
+Perpignan,South,Tropical nights (TN ≥ 20 °C),1961-1990,20.73,20.73,20.73
+Perpignan,South,Frost days (TN < 0 °C),1961-1990,12.8,12.8,12.8
+Perpignan,South,Annual rainfall,1961-1990,571.74,571.74,571.74
+Perpignan,South,Mean temperature,2011-2025,16.82,16.82,16.82
+Perpignan,South,Hot days (TX ≥ 30 °C),2011-2025,48.6,48.6,48.6
+Perpignan,South,Very hot days (TX ≥ 35 °C),2011-2025,6.73,6.73,6.73
+Perpignan,South,Tropical nights (TN ≥ 20 °C),2011-2025,46.27,46.27,46.27
+Perpignan,South,Frost days (TN < 0 °C),2011-2025,4.8,4.8,4.8
+Perpignan,South,Annual rainfall,2011-2025,534.99,534.99,534.99
+Perpignan,South,Mean temperature,"+2 °C, 2030",17.12,17.12,17.12
+Perpignan,South,Hot days (TX ≥ 30 °C),"+2 °C, 2030",52.67,53.33,56.0
+Perpignan,South,Very hot days (TX ≥ 35 °C),"+2 °C, 2030",7.33,7.47,8.13
+Perpignan,South,Tropical nights (TN ≥ 20 °C),"+2 °C, 2030",51.53,52.27,53.13
+Perpignan,South,Frost days (TN < 0 °C),"+2 °C, 2030",4.4,4.4,4.67
+Perpignan,South,Annual rainfall,"+2 °C, 2030",525.73,537.79,550.34
+Perpignan,South,Mean temperature,"+2.7 °C, 2050",17.82,17.82,17.82
+Perpignan,South,Hot days (TX ≥ 30 °C),"+2.7 °C, 2050",64.13,66.07,70.27
+Perpignan,South,Very hot days (TX ≥ 35 °C),"+2.7 °C, 2050",10.67,11.6,13.93
+Perpignan,South,Tropical nights (TN ≥ 20 °C),"+2.7 °C, 2050",64.8,68.33,70.33
+Perpignan,South,Frost days (TN < 0 °C),"+2.7 °C, 2050",2.8,3.2,4.0
+Perpignan,South,Annual rainfall,"+2.7 °C, 2050",504.14,544.32,586.15
+Perpignan,South,Mean temperature,"+4 °C, 2100",19.12,19.12,19.12
+Perpignan,South,Hot days (TX ≥ 30 °C),"+4 °C, 2100",87.67,88.27,94.4
+Perpignan,South,Very hot days (TX ≥ 35 °C),"+4 °C, 2100",18.73,22.8,32.4
+Perpignan,South,Tropical nights (TN ≥ 20 °C),"+4 °C, 2100",89.73,93.47,98.93
+Perpignan,South,Frost days (TN < 0 °C),"+4 °C, 2100",1.4,1.87,2.8
+Perpignan,South,Annual rainfall,"+4 °C, 2100",464.05,565.74,652.66
+Reims,North,Mean temperature,1961-1990,9.74,9.74,9.74
+Reims,North,Hot days (TX ≥ 30 °C),1961-1990,5.1,5.1,5.1
+Reims,North,Very hot days (TX ≥ 35 °C),1961-1990,0.27,0.27,0.27
+Reims,North,Tropical nights (TN ≥ 20 °C),1961-1990,0.07,0.07,0.07
+Reims,North,Frost days (TN < 0 °C),1961-1990,70.47,70.47,70.47
+Reims,North,Annual rainfall,1961-1990,604.17,604.17,604.17
+Reims,North,Mean temperature,2011-2025,11.46,11.46,11.46
+Reims,North,Hot days (TX ≥ 30 °C),2011-2025,14.93,14.93,14.93
+Reims,North,Very hot days (TX ≥ 35 °C),2011-2025,2.0,2.0,2.0
+Reims,North,Tropical nights (TN ≥ 20 °C),2011-2025,0.6,0.6,0.6
+Reims,North,Frost days (TN < 0 °C),2011-2025,55.73,55.73,55.73
+Reims,North,Annual rainfall,2011-2025,587.87,587.87,587.87
+Reims,North,Mean temperature,"+2 °C, 2030",11.76,11.76,11.76
+Reims,North,Hot days (TX ≥ 30 °C),"+2 °C, 2030",16.0,16.67,17.67
+Reims,North,Very hot days (TX ≥ 35 °C),"+2 °C, 2030",2.2,2.53,2.73
+Reims,North,Tropical nights (TN ≥ 20 °C),"+2 °C, 2030",0.67,0.87,1.2
+Reims,North,Frost days (TN < 0 °C),"+2 °C, 2030",51.47,52.07,52.47
+Reims,North,Annual rainfall,"+2 °C, 2030",575.67,583.61,605.5
+Reims,North,Mean temperature,"+2.7 °C, 2050",12.46,12.46,12.46
+Reims,North,Hot days (TX ≥ 30 °C),"+2.7 °C, 2050",19.8,21.8,26.67
+Reims,North,Very hot days (TX ≥ 35 °C),"+2.7 °C, 2050",3.27,3.47,4.8
+Reims,North,Tropical nights (TN ≥ 20 °C),"+2.7 °C, 2050",1.47,2.0,2.53
+Reims,North,Frost days (TN < 0 °C),"+2.7 °C, 2050",41.4,43.07,46.73
+Reims,North,Annual rainfall,"+2.7 °C, 2050",547.22,573.69,646.65
+Reims,North,Mean temperature,"+4 °C, 2100",13.76,13.76,13.76
+Reims,North,Hot days (TX ≥ 30 °C),"+4 °C, 2100",29.2,35.67,47.13
+Reims,North,Very hot days (TX ≥ 35 °C),"+4 °C, 2100",5.07,6.87,13.4
+Reims,North,Tropical nights (TN ≥ 20 °C),"+4 °C, 2100",5.67,7.0,12.07
+Reims,North,Frost days (TN < 0 °C),"+4 °C, 2100",27.67,30.73,35.47
+Reims,North,Annual rainfall,"+4 °C, 2100",494.39,555.25,723.06
+Biarritz,West,Mean temperature,1961-1990,13.96,13.96,13.96
+Biarritz,West,Hot days (TX ≥ 30 °C),1961-1990,6.17,6.17,6.17
+Biarritz,West,Very hot days (TX ≥ 35 °C),1961-1990,0.93,0.93,0.93
+Biarritz,West,Tropical nights (TN ≥ 20 °C),1961-1990,4.63,4.63,4.63
+Biarritz,West,Frost days (TN < 0 °C),1961-1990,12.67,12.67,12.67
+Biarritz,West,Annual rainfall,1961-1990,1526.39,1526.39,1526.39
+Biarritz,West,Mean temperature,2011-2025,15.72,15.72,15.72
+Biarritz,West,Hot days (TX ≥ 30 °C),2011-2025,12.27,12.27,12.27
+Biarritz,West,Very hot days (TX ≥ 35 °C),2011-2025,2.33,2.33,2.33
+Biarritz,West,Tropical nights (TN ≥ 20 °C),2011-2025,16.6,16.6,16.6
+Biarritz,West,Frost days (TN < 0 °C),2011-2025,4.8,4.8,4.8
+Biarritz,West,Annual rainfall,2011-2025,1544.53,1544.53,1544.53
+Biarritz,West,Mean temperature,"+2 °C, 2030",16.02,16.02,16.02
+Biarritz,West,Hot days (TX ≥ 30 °C),"+2 °C, 2030",13.27,13.53,13.67
+Biarritz,West,Very hot days (TX ≥ 35 °C),"+2 °C, 2030",2.67,2.93,2.93
+Biarritz,West,Tropical nights (TN ≥ 20 °C),"+2 °C, 2030",19.87,19.93,21.6
+Biarritz,West,Frost days (TN < 0 °C),"+2 °C, 2030",4.47,4.67,4.67
+Biarritz,West,Annual rainfall,"+2 °C, 2030",1537.24,1545.63,1563.69
+Biarritz,West,Mean temperature,"+2.7 °C, 2050",16.72,16.72,16.72
+Biarritz,West,Hot days (TX ≥ 30 °C),"+2.7 °C, 2050",16.4,17.2,18.6
+Biarritz,West,Very hot days (TX ≥ 35 °C),"+2.7 °C, 2050",3.6,3.73,3.93
+Biarritz,West,Tropical nights (TN ≥ 20 °C),"+2.7 °C, 2050",30.2,32.47,36.47
+Biarritz,West,Frost days (TN < 0 °C),"+2.7 °C, 2050",3.13,3.67,4.2
+Biarritz,West,Annual rainfall,"+2.7 °C, 2050",1520.23,1548.18,1608.4
+Biarritz,West,Mean temperature,"+4 °C, 2100",18.02,18.02,18.03
+Biarritz,West,Hot days (TX ≥ 30 °C),"+4 °C, 2100",24.6,30.87,43.27
+Biarritz,West,Very hot days (TX ≥ 35 °C),"+4 °C, 2100",5.07,6.2,7.73
+Biarritz,West,Tropical nights (TN ≥ 20 °C),"+4 °C, 2100",56.8,61.33,69.73
+Biarritz,West,Frost days (TN < 0 °C),"+4 °C, 2100",1.27,2.07,3.33
+Biarritz,West,Annual rainfall,"+4 °C, 2100",1488.64,1552.92,1691.43

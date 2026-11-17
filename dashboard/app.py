@@ -16,13 +16,20 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from plotly.subplots import make_subplots
 
+from date_page import page_date
+from future_page import page_future
 from gestures import chart_gestures
 from idle import pause_when_idle
+from meteo.climatology import day_of_year, record_envelope
 from meteo.stats import SEASONS, trend
 from pivot_page import page_pivot
 from projection_page import page_projection
+from recent_panel import last_measurement, lately_panel
 from route_page import page_route
+from seasons_panel import seasons_panel
+from share import from_link, publish, restore
 from ui import (
     CFG,
     COOL,
@@ -59,6 +66,7 @@ from ui import (
     theme,
     warehouse_ready,
 )
+from wind_panel import wind_panel
 
 st.set_page_config(page_title="Météo Analytics", page_icon="🌡️", layout="wide")
 
@@ -79,6 +87,7 @@ INDICATORS = {  # label -> (column, unit, available by season)
     "Lowest temperature of the year": ("tn_min", "°C", False),
 }
 COUNT_INDICATORS = {k: v for k, v in INDICATORS.items() if v[1] == "days"}
+INDICATOR_OF_CODE = {v[0]: k for k, v in INDICATORS.items()}   # links carry the short code ("tropical_nights")
 SEASON_LABELS = ["Whole year", "Winter", "Spring", "Summer", "Autumn"]
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
@@ -88,10 +97,12 @@ def page_overview():
     r = results()
     w, ex, pl = r["warming"], r["extremes"], r.get("pipeline", {})
     tr = w["france_trend_1951"]
+    last = last_measurement()
     page_header(
         f"Climate of 20 French cities, {START}-{END}", tab="Overview", lead=
         f"{num(pl.get('n_rows', 0), 0)} daily Météo-France records from {num(pl.get('n_stations', 0), 0)} stations. "
-        f"All values are anomalies vs the {REF[0]}-{REF[1]} normal unless stated otherwise.",
+        f"All values are anomalies vs the {REF[0]}-{REF[1]} normal unless stated otherwise."
+        + (f" Latest measurement: {last:%d %B %Y}." if last is not None else ""),
     )
 
     hot = ex["france_old_vs_recent"]["hot_days"]
@@ -152,6 +163,9 @@ def page_overview():
                                    zoom=float(zoom)))
         chart(fig, 440, "Warming rate by city", "Hover over a dot for details", margin=dict(l=0, r=0, b=60))
 
+    st.subheader("Lately")
+    lately_panel(CITIES, "Mean of the 20 cities")
+
     st.subheader("Key takeaways")
     pr, h = r["precipitation"], r["heterogeneity"]
     findings = [
@@ -193,15 +207,34 @@ def _city_series(col: str, season: str) -> pd.DataFrame:
 
 def page_city():
     page_header("Explore a city", "Compare up to three cities on the indicator of your choice.")
+    restore("city_sel", "cities", ["Paris", "Marseille"], multi=True,
+            valid=lambda v: 0 < len(v) <= 3 and set(v) <= set(CITIES))
+    restore("city_ind", "indicator", list(INDICATORS)[0], parse=INDICATOR_OF_CODE.__getitem__)
+    restore("city_season", "season", "Whole year", parse=str.capitalize, valid=lambda v: v in SEASON_LABELS)
+    restore("city_mode", "display", "Values", parse=str.capitalize, valid=lambda v: v in ("Values", "Anomaly"))
+    first, last = from_link("from"), from_link("to")
+    if first or last:
+        try:
+            lo, hi = sorted((int(first or START), int(last or END)))
+            if START <= lo < hi <= END:
+                st.session_state["city_period"] = (lo, hi)
+        except ValueError:
+            pass
+    st.session_state.setdefault("city_period", (START, END))
     f = st.columns([3, 2, 1.2, 1.5])
-    sel = f[0].multiselect("Cities", CITIES, default=["Paris", "Marseille"], max_selections=3,
+    sel = f[0].multiselect("Cities", CITIES, max_selections=3, key="city_sel",
                            help="Three cities at most, so that each colour stays clearly distinct.")
-    ind = f[1].selectbox("Indicator", list(INDICATORS))
+    ind = f[1].selectbox("Indicator", list(INDICATORS), key="city_ind")
     col, unit, seasonal_ok = INDICATORS[ind]
+    if not seasonal_ok:
+        st.session_state["city_season"] = "Whole year"
     season = f[2].selectbox("Season", SEASON_LABELS if seasonal_ok else ["Whole year"], disabled=not seasonal_ok,
-                            help="Winter = December of the previous year, January and February.")
-    mode = f[3].segmented_control("Display", ["Values", "Anomaly"], default="Values", required=True)
-    period = st.slider("Period", START, END, (START, END))
+                            key="city_season", help="Winter = December of the previous year, January and February.")
+    mode = f[3].segmented_control("Display", ["Values", "Anomaly"], required=True, key="city_mode") or "Values"
+    period = st.slider("Period", START, END, key="city_period")
+    publish({"cities": sel, "indicator": col, "season": None if season == "Whole year" else season.lower(),
+             "display": None if mode == "Values" else mode.lower(),
+             "from": None if period[0] == START else period[0], "to": None if period[1] == END else period[1]})
     if period[1] - period[0] < 1:
         st.info("Pick a period of at least two years.")
         return
@@ -274,6 +307,13 @@ def page_city():
     name = {"tmean": "Mean temperature", "tx": "Maximum temperature", "tn": "Minimum temperature", "rr": "Rainfall"}[mcol]
     chart(fig, 400, f"{name}, month by month", f"{OLD[0]}-{OLD[1]} normal (light line) and {REF[0]}-{REF[1]} (dark line)")
 
+    seasons_panel(sel)
+
+    st.subheader("Lately")
+    who = sel[0] if len(sel) == 1 else st.selectbox("City", sel, key="lately_city",
+                                                    help="The last weeks of one of the cities picked above.")
+    lately_panel([who], who)
+
     with st.expander("Weather stations used"):
         rs = table("ref_station")
         rs = rs[rs["city"].isin(sel)].copy()
@@ -294,38 +334,52 @@ def page_city():
 
 # =============================================================================
 def page_year():
-    page_header("A year in detail", "Every day of the year compared with the city's normal.")
+    page_header("A year in detail", "Every day of the year compared with the city's normal and its records.")
     d_all = table("city_daily")
     last_year = int(d_all.dropna(subset=["tx"])["date"].dt.year.max())
-    f = st.columns([2, 1.4, 2.4])
-    city = f[0].selectbox("City", CITIES, index=CITIES.index("Paris"))
     years = list(range(last_year, START - 1, -1))
-    year = f[1].selectbox("Year", years, index=years.index(2022) if 2022 in years else 0,
+    variables = ["Maximum", "Minimum", "Mean", "Rainfall"]
+    restore("year_city", "city", "Paris", valid=lambda v: v in CITIES)
+    restore("year_year", "year", 2022 if 2022 in years else years[0], parse=int, valid=lambda v: v in years)
+    restore("year_variable", "variable", "Maximum", parse=str.capitalize, valid=lambda v: v in variables)
+    f = st.columns([2, 1.4, 3])
+    city = f[0].selectbox("City", CITIES, key="year_city")
+    year = f[1].selectbox("Year", years, key="year_year",
                           format_func=lambda y: f"{y} (in progress)" if y > END else str(y))
-    var_label = f[2].segmented_control("Variable", ["Maximum", "Minimum", "Mean"], default="Maximum", required=True)
-    var_label = var_label or "Maximum"
+    var_label = f[2].segmented_control("Variable", variables, required=True, key="year_variable") or "Maximum"
+    publish({"city": city, "year": year, "variable": var_label.lower()})
+    d = d_all[d_all["city"] == city]
+    if var_label == "Rainfall":
+        _year_rain(city, year, d)
+        source_note()
+        return
     col = {"Maximum": "tx", "Minimum": "tn", "Mean": "tmean"}[var_label]
 
-    d = d_all[d_all["city"] == city]
     clim = doy_clim(city, col)
     yr = d[d["date"].dt.year == year][["date", col]].dropna().copy()
     yr = yr[~((yr["date"].dt.month == 2) & (yr["date"].dt.day == 29))]
-    yr["doy"] = yr["date"].dt.day_of_year - ((yr["date"].dt.is_leap_year) & (yr["date"].dt.month > 2)).astype(int)
+    yr["doy"] = day_of_year(yr["date"]).astype(int)
     yr = yr.merge(clim, on="doy")
     yr["anom"] = yr[col] - yr["mean"]
-    # Normal days are numbered on a 365-day year: in a leap year, from 1 March they fall one day later
-    leap = pd.Timestamp(year=year, month=1, day=1).is_leap_year
-    ref_dates = pd.Timestamp(year=year, month=1, day=1) + pd.to_timedelta(
-        clim["doy"] - 1 + (leap & (clim["doy"] >= 60)), unit="D")
+    ref_dates = _doy_dates(year, clim["doy"])
+
+    # Records "at the time": the highest and lowest value of each calendar day in the years before this one
+    env = record_envelope(d, col, year)
+    env = env[~((env["month"] == 2) & (env["day"] == 29))].copy()
+    env["date"] = pd.to_datetime(dict(year=year, month=env["month"], day=env["day"]))
+    env = env.sort_values("date")
+    yr = yr.assign(month=yr["date"].dt.month, day=yr["date"].dt.day).merge(env.drop(columns="date"),
+                                                                              on=["month", "day"], how="left")
+    rec_hi, rec_lo = yr[yr[col] >= yr["high"]], yr[yr[col] <= yr["low"]]
 
     k = st.columns(4)
     k[0].metric("Anomaly vs normal", f"{signed(yr['anom'].mean(), 1)} °C", border=True,
                 help="Average gap over the year between each day's value and that day's normal.")
     k[1].metric("Days above normal", f"{(yr['anom'] > 0).sum()}", border=True,
                 help=f"Out of {len(yr)} days with data.")
-    above = (yr[col] > yr["p90"]).sum()
-    k[2].metric("Days > 90th percentile", f"{above}", border=True,
-                help="Above the 90th percentile of the normal: about 10% of days (≈ 36 a year) in a stable climate.")
+    k[2].metric("Daily records", f"{len(rec_hi)} high · {len(rec_lo)} low", border=True,
+                help=f"Days whose {var_label.lower()} temperature equalled or beat the highest (or lowest) value of "
+                     f"that calendar day in every year from {START} to {year - 1}.")
     # The day that stands out for the variable: hottest day, coldest night, warmest day on average
     kpi, i_k = {"Maximum": ("Hottest day", yr[col].idxmax()), "Minimum": ("Coldest night", yr[col].idxmin()),
                 "Mean": ("Warmest day", yr[col].idxmax())}[var_label]
@@ -333,6 +387,13 @@ def page_year():
                 help=f"{var_label} temperature, on {yr.loc[i_k, 'date'].strftime('%d %B %Y')}")
 
     fig = go.Figure()
+    if not env.empty:
+        fig.add_scatter(x=env["date"], y=env["high"], mode="lines", line=dict(color=WARM, width=1, dash="dot"),
+                        name=f"Record high before {year}", customdata=env["high_year"],
+                        hovertemplate="%{x|%d %b}: record %{y:.1f} °C in %{customdata}<extra></extra>")
+        fig.add_scatter(x=env["date"], y=env["low"], mode="lines", line=dict(color=COOL, width=1, dash="dot"),
+                        name=f"Record low before {year}", customdata=env["low_year"],
+                        hovertemplate="%{x|%d %b}: record %{y:.1f} °C in %{customdata}<extra></extra>")
     fig.add_scatter(x=ref_dates, y=clim["p90"], mode="lines", line=dict(width=0), hoverinfo="skip", showlegend=False)
     fig.add_scatter(x=ref_dates, y=clim["p10"], mode="lines", line=dict(width=0), fill="tonexty",
                     fillcolor="rgba(195,194,183,0.35)", name=f"80% of days in {REF[0]}-{REF[1]}", hoverinfo="skip")
@@ -347,10 +408,21 @@ def page_year():
                     marker=dict(color=WARM, size=8, line=dict(color=SURFACE, width=1.5)), hoverinfo="skip")
     fig.add_scatter(x=cold["date"], y=cold[col], mode="markers", name="Below the 10th percentile",
                     marker=dict(color=COOL, size=8, line=dict(color=SURFACE, width=1.5)), hoverinfo="skip")
+    for recs, colour, what, prev, prev_year in ((rec_hi, WARM, "record high", "high", "high_year"),
+                                               (rec_lo, COOL, "record low", "low", "low_year")):
+        if recs.empty:
+            continue
+        tie = np.where(recs[col] == recs[prev], "equals", "beats")
+        fig.add_scatter(x=recs["date"], y=recs[col], mode="markers", name=f"{what.capitalize()} of the day",
+                        marker=dict(symbol="star", color=colour, size=13, line=dict(color=SURFACE, width=1.5)),
+                        customdata=np.stack([recs[prev], recs[prev_year].astype(int), tie], axis=1),
+                        hovertemplate=f"<b>%{{x|%d %b}}: %{{y:.1f}} °C</b>, {what}<br>%{{customdata[2]}} the previous "
+                                      "record: %{customdata[0]:.1f} °C in %{customdata[1]}<extra></extra>")
     month_starts = [pd.Timestamp(year=year, month=m, day=1) for m in range(1, 13)]
     fig.update_layout(yaxis_title="°C", xaxis=dict(tickvals=month_starts, ticktext=MONTHS), hovermode="closest")
-    chart(fig, 480, f"{var_label} temperature in {city} in {year}",
-          f"Compared with the {REF[0]}-{REF[1]} normal, smoothed over ±15 days")
+    chart(fig, 520, f"{var_label} temperature in {city} in {year}",
+          f"Compared with the {REF[0]}-{REF[1]} normal (smoothed over ±15 days) and with the records of each "
+          f"calendar day since {START} · stars: records set in {year}")
 
     yr["month"] = yr["date"].dt.month
     mon = yr.groupby("month")["anom"].mean()
@@ -360,6 +432,90 @@ def page_year():
     fig.update_layout(yaxis_title="°C", showlegend=False)
     chart(fig, 320, "Anomaly vs normal, month by month")
     source_note()
+
+
+def _doy_dates(year: int, doys) -> pd.Series:
+    """Dates of the calendar days 1-365 in `year`: in a leap year, from 1 March they fall one day later."""
+    leap = pd.Timestamp(year=year, month=1, day=1).is_leap_year
+    doys = pd.Series(np.asarray(doys, dtype=int))
+    return pd.Timestamp(year=year, month=1, day=1) + pd.to_timedelta(doys - 1 + (leap & (doys >= 60)), unit="D")
+
+
+def _daily_rain(d: pd.DataFrame, year: int) -> tuple[np.ndarray, np.ndarray]:
+    """Rainfall of each calendar day 1-365 of `year` (29 February added to the 28th) and which days were measured."""
+    x = d[d["date"].dt.year == year][["date", "rr"]]
+    doy = day_of_year(x["date"]).fillna(59).astype(int).to_numpy() - 1
+    rain, measured = np.zeros(365), np.zeros(365, dtype=bool)
+    np.add.at(rain, doy, x["rr"].fillna(0).to_numpy())
+    measured[doy[x["rr"].notna().to_numpy()]] = True
+    return rain, measured
+
+
+@st.cache_data(show_spinner=False)
+def rain_clim(city: str) -> pd.DataFrame:
+    """Normal cumulative rainfall of each calendar day: mean, 10th and 90th percentiles over the complete years of
+    the reference period."""
+    d = table("city_daily")
+    d = d[d["city"] == city]
+    y = table("city_yearly")
+    valid = y[(y["city"] == city) & y["valid_rain"] & y["year"].between(*REF)]["year"]
+    cum = np.array([np.cumsum(_daily_rain(d, int(v))[0]) for v in valid])
+    if not len(cum):
+        return pd.DataFrame(columns=["doy", "mean", "p10", "p90"])
+    return pd.DataFrame({"doy": np.arange(1, 366), "mean": cum.mean(axis=0), "p10": np.percentile(cum, 10, axis=0),
+                         "p90": np.percentile(cum, 90, axis=0)})
+
+
+def _year_rain(city: str, year: int, d: pd.DataFrame) -> None:
+    """Rainfall view of the year page: cumulative rainfall against the normal, daily rainfall below."""
+    rain, measured = _daily_rain(d, year)
+    clim = rain_clim(city)
+    if not measured.any() or clim.empty:
+        st.info("No rainfall data for this city and year.")
+        return
+    last = int(np.flatnonzero(measured).max())          # last calendar day measured (0-based)
+    cum = np.cumsum(rain)[: last + 1]
+    dates = _doy_dates(year, np.arange(1, last + 2))
+    total, normal_to_date = float(cum[-1]), float(clim["mean"].iloc[last])
+    wet = rain[: last + 1] >= TH["rain_day"]
+    rainy = int(wet.sum())
+    dry_runs = np.diff(np.flatnonzero(np.concatenate([[True], wet, [True]]))) - 1
+    so_far = last < 364
+    k = st.columns(4)
+    k[0].metric("Rainfall" + (" so far" if so_far else ""), f"{num(total, 0)} mm", border=True,
+                delta=f"{signed((total / normal_to_date - 1) * 100, 0)}% vs normal" if normal_to_date else None,
+                delta_color="off",
+                help=f"Normal for the same days: {num(normal_to_date, 0)} mm ({REF[0]}-{REF[1]}). "
+                     f"{int(measured[: last + 1].sum())} of {last + 1} days measured.")
+    k[1].metric(f"Rainy days (≥ {TH['rain_day']} mm)", f"{rainy}", border=True)
+    i_wet = int(np.argmax(rain[: last + 1]))
+    k[2].metric("Wettest day", f"{num(rain[i_wet], 1)} mm", border=True, help=f"On {dates.iloc[i_wet]:%d %B %Y}.")
+    k[3].metric("Longest dry spell", f"{int(dry_runs.max()) if len(dry_runs) else 0} days", border=True,
+                help=f"Consecutive days with less than {TH['rain_day']} mm.")
+
+    ref_dates = _doy_dates(year, clim["doy"])
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.08, row_heights=[0.68, 0.32])
+    fig.add_scatter(x=ref_dates, y=clim["p90"], mode="lines", line=dict(width=0), hoverinfo="skip",
+                    showlegend=False, row=1, col=1)
+    fig.add_scatter(x=ref_dates, y=clim["p10"], mode="lines", line=dict(width=0), fill="tonexty",
+                    fillcolor="rgba(195,194,183,0.35)", name=f"80% of years in {REF[0]}-{REF[1]}", hoverinfo="skip",
+                    row=1, col=1)
+    fig.add_scatter(x=ref_dates, y=clim["mean"], mode="lines", line=dict(color=MUTED, width=1.6),
+                    name="Normal", hovertemplate="%{x|%d %b}: normal %{y:.0f} mm<extra></extra>", row=1, col=1)
+    fig.add_scatter(x=dates, y=cum, mode="lines", line=dict(color=SERIES[0], width=2.4), name=str(year),
+                    customdata=clim["mean"].iloc[: last + 1].to_numpy(),
+                    hovertemplate="<b>%{x|%d %b}</b>: %{y:.0f} mm since 1 January<br>normal %{customdata:.0f} mm"
+                                  "<extra></extra>", row=1, col=1)
+    fig.add_bar(x=dates, y=rain[: last + 1], marker_color=SERIES[0], name="Daily rainfall", showlegend=False,
+                hovertemplate="%{x|%d %b}: %{y:.1f} mm<extra></extra>", row=2, col=1)
+    month_starts = [pd.Timestamp(year=year, month=m, day=1) for m in range(1, 13)]
+    fig.update_xaxes(tickvals=month_starts, ticktext=MONTHS,
+                     range=[month_starts[0] - pd.Timedelta(days=3), pd.Timestamp(year=year, month=12, day=31)])
+    fig.update_yaxes(title_text="mm since 1 Jan", rangemode="tozero", row=1, col=1)
+    fig.update_yaxes(title_text="mm / day", rangemode="tozero", row=2, col=1)
+    fig.update_layout(hovermode="closest", bargap=0.1)
+    chart(fig, 560, f"Rainfall in {city} in {year}" + (" so far" if so_far else ""),
+          f"Cumulative rainfall since 1 January against the {REF[0]}-{REF[1]} normal · daily rainfall below")
 
 
 @st.cache_data(show_spinner=False)
@@ -372,8 +528,11 @@ def doy_clim(city: str, col: str) -> pd.DataFrame:
 def page_extremes():
     page_header("Extremes and records", "How the frequency of extreme days has changed, city by city.")
     r = results()
-    ind = st.selectbox("Indicator", list(COUNT_INDICATORS))
+    restore("ext_ind", "indicator", list(COUNT_INDICATORS)[0], parse=INDICATOR_OF_CODE.__getitem__,
+            valid=lambda v: v in COUNT_INDICATORS)
+    ind = st.selectbox("Indicator", list(COUNT_INDICATORS), key="ext_ind")
     col = COUNT_INDICATORS[ind][0]
+    publish({"indicator": col})
     scale = RAIN if col in ("frost_days", "heavy_rain_days") else HEAT
 
     rain_ind = col in ("heavy_rain_days", "longest_dry_spell")
@@ -459,7 +618,9 @@ def page_extremes():
                          "n_days": st.column_config.NumberColumn("Length", format="%d days"),
                          "tx_peak": st.column_config.NumberColumn("Peak", format="%.1f °C"),
                          "tx_mean": st.column_config.NumberColumn("Mean TX", format="%.1f °C")})
-        st.caption(f"{num(len(hw), 0)} episodes match the filters, longest first (scroll for more).")
+        st.caption(f"{num(len(hw), 0)} episodes match the filters, longest first (scroll for more). Heatwaves, "
+                   "cold waves and dry spells ranked by intensity: Explore a date.")
+    wind_panel()
     source_note()
 
 
@@ -599,7 +760,9 @@ if warehouse_ready():
             st.Page(page_overview, title="Overview", icon=":material/thermostat:", default=True),
             st.Page(page_city, title="Explore a city", icon=":material/location_city:", url_path="city"),
             st.Page(page_year, title="A year in detail", icon=":material/calendar_month:", url_path="year"),
+            st.Page(page_date, title="Explore a date", icon=":material/event:", url_path="date"),
             st.Page(page_extremes, title="Extremes and records", icon=":material/local_fire_department:", url_path="extremes"),
+            st.Page(page_future, title="Climate ahead", icon=":material/trending_up:", url_path="ahead"),
             st.Page(page_quality, title="Data and quality", icon=":material/fact_check:", url_path="quality"),
             st.Page(page_pivot, title="Pivot table", icon=":material/pivot_table_chart:", url_path="pivot"),
         ],

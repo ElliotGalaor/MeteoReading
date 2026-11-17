@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from meteo.projection import YEARS, Projection, project, skill
+from share import publish, restore
 from ui import (
     CFG,
     INK2,
@@ -220,13 +221,15 @@ def page_projection():
                 f".pj-range {{ color: {p_['ink2']}; font-size: 0.82rem; margin-bottom: 0.6rem; }}</style>",
                 unsafe_allow_html=True)
 
-    city = st.selectbox("City", CITIES, index=CITIES.index("Paris"))
+    restore("proj_city", "city", "Paris", valid=lambda v: v in CITIES)
+    city = st.selectbox("City", CITIES, key="proj_city")
+    publish({"city": city})
     today = pd.Timestamp.today().normalize()
     p = _projection(city, today + pd.Timedelta(days=DAYS - 1))
     gap = (today - p.anchor).days
     past = f", including the {gap - 1} already past" if gap > 2 else (", including yesterday" if gap == 2 else "")
     st.caption(f"Last measurement: {p.anchor.strftime('%A %d %B %Y').replace(' 0', ' ')}. Météo-France publishes its "
-               f"data a few days late and this site reloads it every Monday: every day after it is projected{past}.")
+               f"data a few days late and this site reloads it every day: every day after it is projected{past}.")
     if gap > 30:
         st.info("The last measurement is over a month old: the projection is then the normal of each day.")
 

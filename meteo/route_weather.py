@@ -8,6 +8,13 @@ interpolate it at the time the traveller is there:
 If the forecast API returns empty values for the trip's hours, the archive is used instead when it covers them.
 
 The wind is projected on the direction of travel to get head/tail/cross wind.
+
+Forecasts also bring, when they exist for the trip:
+- air quality and pollen (Open-Meteo Air Quality API, CAMS Europe), about 4 days ahead;
+- rain in 15-minute steps for a trip that starts within the next 2 hours (Open-Meteo `minutely_15`: Météo-France
+  AROME and DWD ICON-D2 over France, interpolated from hourly values elsewhere).
+The hourly values fetched cover the trip and the next day: the same forecast can be read again at the times of another
+plan (another departure, a wind-aware pace) without calling the API again (`reread`).
 """
 from __future__ import annotations
 
@@ -22,6 +29,15 @@ from .gps import Track, sample_points, segment_km
 
 FORECAST_API = "https://api.open-meteo.com/v1/forecast"
 ARCHIVE_API = "https://archive-api.open-meteo.com/v1/archive"
+AIR_API = "https://air-quality-api.open-meteo.com/v1/air-quality"
+AIR_HOURLY = ["european_aqi", "pm2_5", "pm10", "ozone", "nitrogen_dioxide"]
+POLLEN = {"alder_pollen": "Alder", "birch_pollen": "Birch", "grass_pollen": "Grass", "mugwort_pollen": "Mugwort",
+          "olive_pollen": "Olive", "ragweed_pollen": "Ragweed"}   # grains/m³
+AIR_FORECAST_DAYS = 4        # CAMS Europe forecasts about 4 days ahead: beyond, nothing is shown rather than a guess
+AIR_POINTS = 12              # air quality varies slowly along a route: read at a dozen points, interpolated between
+MINUTELY_LEAD_H = 2          # a trip starting within this many hours gets rain in 15-minute steps
+MINUTELY_STEPS = 48          # 12 hours of 15-minute values
+SWEEP_EXTRA_DAYS = 2         # forecast hours fetched beyond the trip: the departure sweep reads the next day too
 # The forecast API accepts dates up to 92 days back, but only returns values for about the last 65 days
 # (nulls before): stay well inside, and fall back to the archive if values are missing anyway.
 FORECAST_PAST_DAYS = 60
@@ -60,6 +76,12 @@ class RouteReading:
     timezone: str
     insights: list[str] = field(default_factory=list)
     stats: dict = field(default_factory=dict)
+    # What was fetched, to read the same forecast at other times (reread)
+    samples: pd.DataFrame | None = None
+    hourly: list[pd.DataFrame] = field(default_factory=list)
+    elevations: list = field(default_factory=list)
+    minutely: list[pd.DataFrame] | None = None
+    air: tuple[list[pd.DataFrame], np.ndarray] | None = None   # frames at some of the samples, and their rows
 
 
 # --- Source selection -----------------------------------------------------------------
@@ -80,6 +102,33 @@ def api_weight(n_points: int, n_days: int) -> float:
 
 
 # --- Fetching ----------------------------------------------------------------------------
+def get_locations(session, api: str, params: dict) -> list[dict]:
+    """One Open-Meteo request; the list of locations it answers (one per coordinate)."""
+    try:
+        resp = session.get(api, params=params, timeout=60)
+    except OSError as exc:   # requests' errors (connection, timeout, retries exhausted) are OSErrors
+        raise RuntimeError("The weather service is not answering: try again in a moment.") from exc
+    if resp.status_code != 200:
+        try:
+            reason = resp.json().get("reason", resp.text[:200])
+        except ValueError:
+            reason = resp.text[:200]
+        raise RuntimeError(f"Open-Meteo error ({resp.status_code}): {reason}")
+    payload = resp.json()
+    return payload if isinstance(payload, list) else [payload]
+
+
+def _coords(chunk: pd.DataFrame) -> dict:
+    return {"latitude": ",".join(f"{v:.5f}" for v in chunk["lat"]),
+            "longitude": ",".join(f"{v:.5f}" for v in chunk["lon"])}
+
+
+def _frame(block: dict, columns) -> pd.DataFrame:
+    df = pd.DataFrame({k: block.get(k) for k in columns if k in block})
+    df.insert(0, "time", pd.to_datetime(block["time"], unit="s", utc=True))
+    return df
+
+
 def fetch_hourly(points: pd.DataFrame, start: date, end: date, source: str, session=None,
                  batch: int = 50) -> tuple[list[pd.DataFrame], list[float], str]:
     """Hourly weather for each point. Returns (one DataFrame per point, model elevations, timezone)."""
@@ -87,33 +136,40 @@ def fetch_hourly(points: pd.DataFrame, start: date, end: date, source: str, sess
     api = FORECAST_API if source == "forecast" else ARCHIVE_API
     frames, elevations, tz = [], [], "UTC"
     for i in range(0, len(points), batch):
-        chunk = points.iloc[i:i + batch]
-        params = {
-            "latitude": ",".join(f"{v:.5f}" for v in chunk["lat"]),
-            "longitude": ",".join(f"{v:.5f}" for v in chunk["lon"]),
-            "hourly": ",".join(HOURLY),
-            "start_date": start.isoformat(), "end_date": end.isoformat(),
-            "timezone": "auto", "timeformat": "unixtime", "wind_speed_unit": "kmh",
-        }
-        try:
-            resp = session.get(api, params=params, timeout=60)
-        except OSError as exc:   # requests' errors (connection, timeout, retries exhausted) are OSErrors
-            raise RuntimeError("The weather service is not answering: try again in a moment.") from exc
-        if resp.status_code != 200:
-            try:
-                reason = resp.json().get("reason", resp.text[:200])
-            except ValueError:
-                reason = resp.text[:200]
-            raise RuntimeError(f"Open-Meteo error ({resp.status_code}): {reason}")
-        payload = resp.json()
-        for loc in payload if isinstance(payload, list) else [payload]:
-            h = loc["hourly"]
-            df = pd.DataFrame({k: h.get(k) for k in HOURLY if k in h})
-            df.insert(0, "time", pd.to_datetime(h["time"], unit="s", utc=True))
-            frames.append(df)
+        params = {**_coords(points.iloc[i:i + batch]), "hourly": ",".join(HOURLY),
+                  "start_date": start.isoformat(), "end_date": end.isoformat(),
+                  "timezone": "auto", "timeformat": "unixtime", "wind_speed_unit": "kmh"}
+        for loc in get_locations(session, api, params):
+            frames.append(_frame(loc["hourly"], HOURLY))
             elevations.append(loc.get("elevation"))
             tz = loc.get("timezone", tz)
     return frames, elevations, tz
+
+
+def subset(n: int, at_most: int) -> np.ndarray:
+    """Rows of `at_most` points spread along n (start and end included)."""
+    return np.unique(np.linspace(0, n - 1, min(n, at_most)).round().astype(int))
+
+
+def fetch_air(points: pd.DataFrame, start: date, end: date, session=None) -> tuple[list[pd.DataFrame], np.ndarray]:
+    """Hourly air quality and pollen at a dozen of the points. Returns (frames, rows of the points)."""
+    session = session or make_session()
+    idx = subset(len(points), AIR_POINTS)
+    params = {**_coords(points.iloc[idx]), "hourly": ",".join(AIR_HOURLY + list(POLLEN)),
+              "start_date": start.isoformat(), "end_date": end.isoformat(), "timezone": "auto",
+              "timeformat": "unixtime"}
+    return [_frame(loc["hourly"], AIR_HOURLY + list(POLLEN)) for loc in get_locations(session, AIR_API, params)], idx
+
+
+def fetch_minutely(points: pd.DataFrame, session=None, batch: int = 50) -> list[pd.DataFrame]:
+    """Rain in 15-minute steps (mm per 15 minutes) for the next 12 hours at each point."""
+    session = session or make_session()
+    frames = []
+    for i in range(0, len(points), batch):
+        params = {**_coords(points.iloc[i:i + batch]), "minutely_15": "precipitation",
+                  "forecast_minutely_15": MINUTELY_STEPS, "timezone": "auto", "timeformat": "unixtime"}
+        frames += [_frame(loc["minutely_15"], ["precipitation"]) for loc in get_locations(session, FORECAST_API, params)]
+    return frames
 
 
 # --- Interpolation at passage time ---------------------------------------------------------
@@ -207,6 +263,49 @@ def build_reading_table(samples: pd.DataFrame, hourly: list[pd.DataFrame], eleva
     edges = np.concatenate([[t[0]], (t[:-1] + t[1:]) / 2, [t[-1]]])
     df["hours_here"] = np.diff(edges)
     return df
+
+
+def add_minutely(df: pd.DataFrame, minutely: list[pd.DataFrame] | None) -> pd.DataFrame:
+    """Rain from the 15-minute values where they frame the passage time (mm per 15 minutes -> mm/h)."""
+    df["precip_15min"] = False
+    if not minutely:
+        return df
+    for i, (frame, t) in enumerate(zip(minutely, df["time"], strict=True)):
+        x = epoch_seconds(frame["time"])
+        v = interp_valid(float(epoch_seconds([t])[0]), x, pd.to_numeric(frame["precipitation"], errors="coerce")
+                         .to_numpy(dtype=float), max_gap=1800)
+        if pd.notna(v):
+            df.loc[i, "precipitation"] = 4 * v
+            df.loc[i, "precip_15min"] = True
+    return df
+
+
+def add_air(df: pd.DataFrame, air: tuple[list[pd.DataFrame], np.ndarray] | None) -> pd.DataFrame:
+    """Air quality and pollen at passage time: read at some points, interpolated along the route between them."""
+    columns = AIR_HOURLY + list(POLLEN)
+    if not air:
+        for c in columns:
+            df[c] = np.nan
+        return df
+    frames, idx = air
+    dist = df["dist_km"].to_numpy(dtype=float)
+    for c in columns:
+        vals = []
+        for frame, i in zip(frames, idx, strict=True):
+            t = float(epoch_seconds([df["time"].iloc[i]])[0])
+            y = pd.to_numeric(frame[c], errors="coerce").to_numpy(dtype=float) if c in frame else np.array([np.nan])
+            vals.append(interp_valid(t, epoch_seconds(frame["time"]), y) if c in frame else np.nan)
+        vals = np.array(vals, dtype=float)
+        ok = ~np.isnan(vals)
+        df[c] = np.interp(dist, dist[idx][ok], vals[ok]) if ok.sum() >= 2 else (
+            np.full(len(df), vals[ok][0]) if ok.sum() == 1 else np.nan)
+    return df
+
+
+def assemble(samples: pd.DataFrame, hourly: list[pd.DataFrame], elevations: list,
+             minutely: list[pd.DataFrame] | None = None, air=None) -> pd.DataFrame:
+    """The reading table: hourly weather at passage time, then the 15-minute rain and the air quality if fetched."""
+    return add_air(add_minutely(build_reading_table(samples, hourly, elevations), minutely), air)
 
 
 # --- Summary and insights ------------------------------------------------------------------
@@ -316,10 +415,16 @@ def track_timezone(lat: float, lon: float, session=None) -> str | None:
 
 
 # --- Entry point ----------------------------------------------------------------------------------
-def read_route(track: Track, max_points: int = 40, session=None, today: date | None = None) -> RouteReading:
-    """Weather reading along a track whose points all have a time (real or estimated)."""
+def read_route(track: Track, max_points: int = 40, session=None, today: date | None = None,
+               now: pd.Timestamp | None = None) -> RouteReading:
+    """Weather reading along a track whose points all have a time (real or estimated).
+
+    `now` (default: the current time, unless `today` is given) decides whether the trip starts soon enough for rain
+    in 15-minute steps."""
     if not track.has_time:
         raise ValueError("The track has no times: provide a start time and a speed first")
+    if now is None and today is None:
+        now = pd.Timestamp.now(tz="UTC")
     samples = sample_points(track, max_points=max_points)
     start, end = samples["time"].min().date(), samples["time"].max().date()
     # one day of margin on each side for time zones and interpolation at day boundaries
@@ -328,7 +433,7 @@ def read_route(track: Track, max_points: int = 40, session=None, today: date | N
     q_start, q_end = start - timedelta(days=1), end + timedelta(days=1)
     if source == "forecast":
         f_start = max(q_start, today - timedelta(days=FORECAST_PAST_DAYS))
-        f_end = min(q_end, today + timedelta(days=FORECAST_FUTURE_DAYS))
+        f_end = min(end + timedelta(days=SWEEP_EXTRA_DAYS), today + timedelta(days=FORECAST_FUTURE_DAYS))
         hourly, elevations, tz = fetch_hourly(samples, f_start, f_end, source, session=session)
         if missing_hours(samples, hourly) and end <= today - timedelta(days=ARCHIVE_DELAY_DAYS):
             source = "archive"   # the forecast API has no values for these days, the archive does
@@ -338,9 +443,41 @@ def read_route(track: Track, max_points: int = 40, session=None, today: date | N
         raise ValueError("The weather service has no data for the times of this trip. Weather is available for the "
                          f"next {FORECAST_FUTURE_DAYS + 1} days and for the past; the most recent days may not be "
                          "complete yet.")
-    df = build_reading_table(samples, hourly, elevations)
+    minutely = air = None
+    if source == "forecast":
+        first = pd.Timestamp(samples["time"].min())
+        if now is not None and now - pd.Timedelta(minutes=30) <= first <= now + pd.Timedelta(hours=MINUTELY_LEAD_H):
+            try:
+                minutely = fetch_minutely(samples, session=session)
+            except (RuntimeError, KeyError, ValueError):
+                minutely = None   # the hourly rain is used
+        if end <= today + timedelta(days=AIR_FORECAST_DAYS) and end >= today:
+            try:
+                air = fetch_air(samples, max(start, today), min(end + timedelta(days=SWEEP_EXTRA_DAYS),
+                                                                 today + timedelta(days=AIR_FORECAST_DAYS)), session)
+            except (RuntimeError, KeyError, ValueError):
+                air = None        # no air quality line rather than no reading
+    df = assemble(samples, hourly, elevations, minutely, air)
     stats, insights = summarize(df, tz)
-    return RouteReading(track=track, points=df, source=source, timezone=tz, insights=insights, stats=stats)
+    return RouteReading(track=track, points=df, source=source, timezone=tz, insights=insights, stats=stats,
+                        samples=samples, hourly=hourly, elevations=elevations, minutely=minutely, air=air)
+
+
+def reread(reading: RouteReading, track: Track) -> RouteReading | None:
+    """The same forecast read at the times of another plan of the same track (another departure, another pace),
+    with no new request. None when the hours fetched do not cover the new times."""
+    if reading.samples is None or not track.has_time:
+        return None
+    samples = reading.samples.copy()
+    times = pd.to_datetime(track.points["time"], utc=True).to_numpy()
+    samples["time"] = pd.to_datetime(times[samples["track_idx"].to_numpy()], utc=True)
+    if missing_hours(samples, reading.hourly):
+        return None
+    df = assemble(samples, reading.hourly, reading.elevations, reading.minutely, reading.air)
+    stats, insights = summarize(df, reading.timezone)
+    return RouteReading(track=track, points=df, source=reading.source, timezone=reading.timezone, insights=insights,
+                        stats=stats, samples=samples, hourly=reading.hourly, elevations=reading.elevations,
+                        minutely=reading.minutely, air=reading.air)
 
 
 def nearby_station_obs(con, points: pd.DataFrame, tz: str, radius_km: float = 5.0) -> pd.DataFrame:

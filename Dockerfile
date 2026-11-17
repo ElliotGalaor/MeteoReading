@@ -20,8 +20,9 @@ COPY config.yaml .
 COPY meteo ./meteo
 COPY sql ./sql
 COPY templates ./templates
-# The ERA5 comparison is versioned: rebuilding it would call the Open-Meteo API on every build
-COPY reports/tables/era5_validation.csv ./reports/tables/
+# The ERA5 comparison and the climate model patterns are versioned: rebuilding them would call the Open-Meteo API
+# on every build
+COPY reports/tables/era5_validation.csv reports/tables/climate_patterns.csv ./reports/tables/
 # A new DATA_VERSION (CI passes the date) downloads fresh data; the same value reuses the cached layer
 ARG DATA_VERSION=dev
 RUN echo "Data version: ${DATA_VERSION}" \

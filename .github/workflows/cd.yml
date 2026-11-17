@@ -3,8 +3,11 @@ name: CD
 # Deploys an image the CI workflow already built, tested and pushed: no rebuild, no tests.
 # The same image (pinned by digest) goes to the staging Cloud Run service first, automatically, then to
 # the production service once the reviewer of the production environment approves. See docs/DEPLOY.md.
-# - Automatic: after every successful CI run on main (pushes and the weekly data refresh).
+# - Automatic: after every successful CI run on main (pushes and the daily data refresh).
 # - By hand (Actions > CD > Run workflow): any image tag, to redeploy or roll back.
+# - Daily data refresh: CI rebuilt the code already in production (GHCR tag "production") with newer data. That
+#   image goes straight to production (environment production-data, no reviewer): only the data changed, and the
+#   code was approved when it first went to production. Any other image waits for the reviewer.
 run-name: Deploy ${{ inputs.tag || github.event.workflow_run.display_title }}
 
 on:
@@ -39,6 +42,7 @@ jobs:
     outputs:
       ref: ${{ steps.resolve.outputs.ref }}
       commit: ${{ steps.resolve.outputs.commit }}
+      data-refresh: ${{ steps.resolve.outputs.data-refresh }}
     steps:
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -52,6 +56,7 @@ jobs:
         env:
           INPUT_TAG: ${{ inputs.tag }}
           CI_RUN_ID: ${{ github.event.workflow_run.id }}
+          CI_EVENT: ${{ github.event.workflow_run.event }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
             tag="$INPUT_TAG"
@@ -75,16 +80,27 @@ jobs:
                      --format '{{ index .Image.Config.Labels "org.opencontainers.image.revision" }}' 2>/dev/null || true)
           if [[ "$revision" =~ ^[0-9a-f]{7,40}$ ]]; then commit="${revision:0:7}"; else commit=unknown; fi
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          # A data refresh of the code in production: built by the scheduled CI run from the commit of the image
+          # tagged production, which this check confirms
+          refresh=false
+          if [ "$GITHUB_EVENT_NAME" = workflow_run ] && [ "$CI_EVENT" = schedule ] && [ "$commit" != unknown ]; then
+            prod=$(docker buildx imagetools inspect "$repo:production"                    --format '{{ index .Image.Config.Labels "org.opencontainers.image.revision" }}' 2>/dev/null || true)
+            if [ "${prod:0:7}" = "$commit" ]; then refresh=true; fi
+          fi
+          echo "data-refresh=$refresh" >> "$GITHUB_OUTPUT"
           {
             echo "### Image to deploy"
             echo "- tag: \`$tag\`"
             echo "- digest: \`$digest\`"
             echo "- commit: \`$commit\`"
+            if [ "$refresh" = true ]; then echo "- data refresh of the code in production: no approval needed"; fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   staging:
     name: Deploy to staging
     needs: image
+    # Staging keeps the code waiting for approval: a data refresh of the production code does not replace it
+    if: needs.image.outputs.data-refresh != 'true'
     runs-on: ubuntu-latest
     environment:
       name: staging
@@ -121,10 +137,12 @@ jobs:
           deploy-service-account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
           runtime-service-account: ${{ vars.GCP_RUNTIME_SERVICE_ACCOUNT }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          secrets: ${{ vars.CLOUD_RUN_SECRETS }}
 
   production:
     name: Deploy to production
     needs: [image, staging]
+    if: needs.image.outputs.data-refresh != 'true'
     runs-on: ubuntu-latest
     # Protected environment: the job waits for the approval of a required reviewer
     environment:
@@ -132,7 +150,7 @@ jobs:
       url: ${{ steps.deploy.outputs.url }}
     permissions:
       contents: read
-      packages: read
+      packages: write   # tags the deployed image "production"
       id-token: write
     concurrency:
       group: deploy-production
@@ -162,3 +180,62 @@ jobs:
           deploy-service-account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
           runtime-service-account: ${{ vars.GCP_RUNTIME_SERVICE_ACCOUNT }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          secrets: ${{ vars.CLOUD_RUN_SECRETS }}
+
+      # The daily data refresh rebuilds this commit (ci.yml)
+      - name: Tag the image as the one in production
+        if: vars.GCP_PROJECT_ID != ''
+        env:
+          REF: ${{ needs.image.outputs.ref }}
+        run: docker buildx imagetools create --tag "${IMAGE,,}:production" "$REF"
+
+  production-data:
+    name: Data refresh in production
+    needs: image
+    if: needs.image.outputs.data-refresh == 'true'
+    runs-on: ubuntu-latest
+    # No reviewer: the code is the one already approved for production, only the data is newer. The environment is
+    # created by the first run; docs/DEPLOY.md says how to restrict it to main.
+    environment:
+      name: production-data
+      url: ${{ steps.deploy.outputs.url }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    concurrency:
+      # Its own group: it never cancels a code deploy waiting for approval
+      group: deploy-production-data
+      cancel-in-progress: false
+    steps:
+      - name: Google Cloud configuration
+        if: vars.GCP_PROJECT_ID == ''
+        run: |
+          echo "::notice::GCP_PROJECT_ID variable not set (docs/DEPLOY.md): Cloud Run was not deployed"
+
+      - uses: actions/checkout@v4
+        if: vars.GCP_PROJECT_ID != ''
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        if: vars.GCP_PROJECT_ID != ''
+        uses: ./.github/actions/deploy-cloud-run
+        with:
+          image-ref: ${{ needs.image.outputs.ref }}
+          commit: ${{ needs.image.outputs.commit }}
+          service: ${{ vars.CLOUD_RUN_SERVICE || 'meteoreading' }}
+          project-id: ${{ vars.GCP_PROJECT_ID }}
+          region: ${{ vars.GCP_REGION || 'europe-west1' }}
+          artifact-repository: ${{ vars.GCP_ARTIFACT_REPOSITORY || 'meteoreading' }}
+          workload-identity-provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          deploy-service-account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          runtime-service-account: ${{ vars.GCP_RUNTIME_SERVICE_ACCOUNT }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          secrets: ${{ vars.CLOUD_RUN_SECRETS }}
+
+      # The daily data refresh rebuilds this commit (ci.yml)
+      - name: Tag the image as the one in production
+        if: vars.GCP_PROJECT_ID != ''
+        env:
+          REF: ${{ needs.image.outputs.ref }}
+        run: docker buildx imagetools create --tag "${IMAGE,,}:production" "$REF"
