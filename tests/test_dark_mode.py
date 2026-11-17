@@ -53,6 +53,15 @@ def test_status_and_unknown_colours_are_kept(ui, monkeypatch):
     assert d.data[0].marker.color == palette.STATUS["critical"] and d.data[1].line.color == "#123456"
 
 
+def test_transparent_fills_take_the_dark_step(ui, monkeypatch):
+    monkeypatch.setattr(ui, "is_dark", lambda: True)
+    fig = go.Figure(go.Scatter(x=[1], y=[1], fill="tonexty", fillcolor=ui.rgba(palette.SERIES[1], 0.16)))
+    fig.add_scatter(x=[1], y=[1], fillcolor="rgba(18,52,86,0.5)")
+    d = ui.themed(fig)
+    assert d.data[0].fillcolor == ui.rgba(palette.DARK_SERIES[1], 0.16)
+    assert d.data[1].fillcolor == "rgba(18,52,86,0.5)"     # not a palette colour: kept
+
+
 def test_css_follows_the_theme(ui):
     assert palette.DARK_SURFACE in ui.css(ui.DARK) and palette.SURFACE not in ui.css(ui.DARK)
     assert palette.SURFACE in ui.css(ui.LIGHT)

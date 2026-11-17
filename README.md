@@ -47,7 +47,7 @@ a single self-contained file, to download (GitHub shows its source) and open in 
 | **Exploratory machine learning**: PCA + k-means, choice of k by silhouette | [meteo/analysis.py](meteo/analysis.py) |
 | **Cross-validation** against an independent source (ERA5 reanalysis) | [meteo/era5.py](meteo/era5.py) |
 | **Data visualisation**: colour-blind-safe palette, one idea per chart | [reports/figures/](reports/figures/) |
-| **Dashboard**: 7 interactive pages, including a pivot table built from a whitelisted catalog (no SQL from the client, bound parameters, totals with `GROUPING SETS`); light or dark following the device's setting, with a dark palette checked for contrast and colour blindness | [dashboard/](dashboard/), [meteo/pivot.py](meteo/pivot.py), [meteo/palette.py](meteo/palette.py) |
+| **Dashboard**: 8 interactive pages, including a pivot table built from a whitelisted catalog (no SQL from the client, bound parameters, totals with `GROUPING SETS`) and a projection of the coming days from past data alone, checked out of sample; light or dark following the device's setting, with a dark palette checked for contrast and colour blindness; on a touch screen one finger scrolls past the charts and two fingers pinch to zoom them | [dashboard/](dashboard/), [meteo/pivot.py](meteo/pivot.py), [meteo/projection.py](meteo/projection.py), [meteo/palette.py](meteo/palette.py) |
 | **Geospatial data**: GPX/KML/GeoJSON parsing (safe XML), routing on OpenStreetMap, resampling, elevation, bearings, time interpolation, head/tail wind, nearby routes from public APIs | [meteo/gps.py](meteo/gps.py), [meteo/routing.py](meteo/routing.py), [meteo/route_weather.py](meteo/route_weather.py), [meteo/geotrek.py](meteo/geotrek.py) |
 | **Explainable scoring**: danger and comfort indices from documented, per-activity thresholds (piecewise linear, combined as independent risks, time-weighted), rule-based advice | [meteo/route_scores.py](meteo/route_scores.py) |
 | **Software quality**: externalised configuration, automated tests, `ruff` lint, pipeline reproducible in one command | [tests/](tests/), [config.yaml](config.yaml) |
@@ -136,6 +136,7 @@ docker run -p 8080:8080 ghcr.io/elliotgalaor/meteoreading:latest
 | **Extremes and records** | city × decade heatmap, then vs now, records, filterable heat episodes |
 | **Data and quality** | pipeline diagram, quality summary, station network, series splicing, ERA5 validation, limitations |
 | **Pivot table** | cross any dimension (city, year, decade, season, month, département, altitude…) with any measure and aggregation, on 6 datasets up to the 25 million daily records; filters, totals, colour scale, CSV export, and the generated query shown |
+| **Prediction** | a 7-day bulletin projected from past measurements only, clearly labelled as a projection and not a forecast: the normal of each day (seasonal cycle plus warming trend), the gap of the last measured day fading at the pace seen in the past, an 80% range, chances of rain, frost and heat, and an out-of-sample check of how many days ahead it beats the normal |
 | **Route weather** | weather along a route drawn on the map, uploaded or picked from the samples: map, profile, point-by-point reading, nearby station observations |
 
 ## Pivot table, without client-side SQL
@@ -290,6 +291,7 @@ MeteoReading/
 │   ├── gps.py             # GPS tracks: parsing, distances, sampling, timing
 │   ├── routing.py         # track from map clicks: routing, resampling, elevation
 │   ├── pivot.py           # pivot tables: catalog, query assembly, totals
+│   ├── projection.py      # projection of the coming days from past data (not a forecast)
 │   ├── route_weather.py   # weather reading along a track
 │   ├── geotrek.py         # routes nearby, from the Geotrek APIs of parks and départements
 │   ├── osm_routes.py      # routes nearby from OpenStreetMap (Waymarked Trails), and their line
