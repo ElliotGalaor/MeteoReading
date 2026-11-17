@@ -22,7 +22,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["meteo", "ui", "route_page", "pivot_page", "projection_page", "idle"]
+known-first-party = ["meteo", "ui", "route_page", "pivot_page", "projection_page", "idle", "gestures"]
 
 [tool.ruff.lint.per-file-ignores]
 # the project root is added to sys.path before the imports (see the comment in the file)

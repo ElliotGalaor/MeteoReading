@@ -17,6 +17,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from gestures import chart_gestures
 from idle import pause_when_idle
 from meteo.stats import SEASONS, trend
 from pivot_page import page_pivot
@@ -614,4 +615,5 @@ with st.sidebar:
     st.caption(f"Climate of 20 French cities, {START}-{END}, from Météo-France open data, "
                "and weather along any GPS track.")
 pause_when_idle()
+chart_gestures()
 nav.run()
