@@ -43,6 +43,7 @@ from ui import (
     city_colors,
     doy_climatology,
     era5,
+    is_dark,
     is_phone,
     num,
     page_header,
@@ -53,6 +54,7 @@ from ui import (
     signed_color,
     source_note,
     table,
+    theme,
     warehouse_ready,
 )
 
@@ -384,9 +386,19 @@ def page_extremes():
     pv = pv.loc[pv.iloc[:, -1].sort_values().index]
     fig = go.Figure(go.Heatmap(
         z=pv.values, x=pv.columns, y=pv.index, colorscale=scale, xgap=2, ygap=2,
-        text=np.vectorize(lambda v: "" if np.isnan(v) else num(v, 0))(pv.values), texttemplate="%{text}",
-        textfont=dict(size=11), colorbar=dict(title=dict(text=unit_short, side="top"), thickness=12),
+        colorbar=dict(title=dict(text=unit_short, side="top"), thickness=12),
         hovertemplate="<b>%{y}</b>, %{x}: %{z:.1f} " + unit_long + "<extra></extra>"))
+    # Values written in each cell, in a colour that stands out from it: the cells darken with the value in light
+    # mode and brighten in dark mode, so the text switches between dark and light at mid-scale
+    vals = pv.to_numpy(dtype=float)
+    lo, hi = np.nanmin(vals), np.nanmax(vals)
+    frac = (vals - lo) / (hi - lo) if hi > lo else np.zeros_like(vals)
+    light_text = (frac < 0.55) if is_dark() else (frac >= 0.55)
+    xs, ys = np.meshgrid(list(pv.columns), list(pv.index))
+    shown = ~np.isnan(vals)
+    fig.add_scatter(x=xs[shown], y=ys[shown], mode="text", text=[num(v, 0) for v in vals[shown]], hoverinfo="skip",
+                    textfont=dict(size=11, color=np.where(light_text[shown], "#f8f7f4", "#141413").tolist()),
+                    showlegend=False)
     fig.update_layout(xaxis=dict(side="top", showline=False, type="category", showgrid=False),
                       yaxis=dict(showline=False, type="category", showgrid=False))
     chart(fig, 640, ind, margin=dict(l=120, t=40),
@@ -456,18 +468,19 @@ def page_quality():
     r = results()
     pl = r.get("pipeline", {})
     build_s = sum(v for k, v in pl.items() if k.startswith("duration_"))
+    p = theme()
     st.graphviz_chart(f"""
     digraph {{
       rankdir={"TB" if is_phone() else "LR"}; bgcolor="transparent"; nodesep=0.35; ranksep=0.45;
-      node [shape=box style="rounded,filled" fillcolor="#ffffff" color="{GRID}" fontname="Segoe UI" fontsize=11 fontcolor="{INK}" margin="0.18,0.1"];
-      edge [color="{MUTED}" arrowsize=0.7];
+      node [shape=box style="rounded,filled" fillcolor="{p['surface']}" color="{p['grid']}" fontname="Segoe UI" fontsize=11 fontcolor="{p['ink']}" margin="0.18,0.1"];
+      edge [color="{p['muted']}" arrowsize=0.7];
       api  [label="data.gouv.fr API\\nfile discovery"];
       raw  [label="{pl.get('n_files', 0)} CSV.gz files\\n{num(pl.get('raw_bytes', 0) / 1e6, 0)} MB · bronze"];
       stg  [label="DuckDB staging\\n{num(pl.get('n_rows', 0) / 1e6, 1)} M typed rows"];
       dq   [label="Quality control\\ncodes, bounds, consistency"];
       st   [label="Reference stations\\n+ series splicing"];
       gold [label="Gold tables\\nday · month · year"];
-      out  [label="Analyses · report\\ndashboard · SQL" fillcolor="{SERIES[0]}" fontcolor="#ffffff" color="{SERIES[0]}"];
+      out  [label="Analyses · report\\ndashboard · SQL" fillcolor="{p['series']}" fontcolor="#ffffff" color="{p['series']}"];
       api -> raw -> stg -> dq -> st -> gold -> out;
     }}""", width="stretch")
     st.caption(f"Full pipeline: parallel download (~30 s), warehouse build in {num(build_s, 1)} s, "

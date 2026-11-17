@@ -1,12 +1,21 @@
-# Dashboard theme: same colours as the report charts
+# Dashboard themes: the same colours as the charts (meteo/palette.py). No `base`: Streamlit follows the device's
+# light or dark mode (and the choice made in its menu), and the pages restyle their charts to match (dashboard/ui.py)
 [theme]
-base = "light"
+font = "sans-serif"
+
+[theme.light]
 primaryColor = "#2a78d6"
 backgroundColor = "#fcfcfb"
 secondaryBackgroundColor = "#f3f2ee"
 textColor = "#0b0b0b"
 borderColor = "#e1e0d9"
-font = "sans-serif"
+
+[theme.dark]
+primaryColor = "#3987e5"
+backgroundColor = "#1a1a19"
+secondaryBackgroundColor = "#262624"
+textColor = "#f0efec"
+borderColor = "#3a3936"
 
 [server]
 headless = true
