@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -223,6 +224,19 @@ _DARK_COLOURS = {c.lower(): d for c, d in {
     NEUTRAL: DARK_NEUTRAL, "#ffffff": "#262624", **dict(zip(SERIES, DARK_SERIES, strict=True)), WARM: DARK_WARM,
     COOL: DARK_COOL, "rgba(195,194,183,0.35)": "rgba(143,141,135,0.28)",
 }.items()}
+
+
+def _rgb(hex_colour: str) -> tuple[int, int, int]:
+    return tuple(int(hex_colour[i:i + 2], 16) for i in (1, 3, 5))
+
+
+def rgba(hex_colour: str, alpha: float) -> str:
+    """A palette colour made transparent (for fills): in dark mode it takes its dark step, same transparency."""
+    return "rgba({},{},{},{})".format(*_rgb(hex_colour), alpha)
+
+
+_DARK_RGB = {_rgb(c): _rgb(d) for c, d in _DARK_COLOURS.items() if c.startswith("#") and d.startswith("#")}
+_RGBA = re.compile(r"rgba\((\d+),(\d+),(\d+),([\d.]+)\)")
 _DARK_SCALES = [(HEAT_STOPS, DARK_HEAT_STOPS), (RAIN_STOPS, DARK_RAIN_STOPS), (DIVERGING_STOPS, DARK_DIVERGING_STOPS)]
 _DARK_MAPS = {"carto-positron": "carto-darkmatter", "light": "dark"}
 
@@ -248,7 +262,12 @@ def _to_dark(obj, key: str = ""):
     if isinstance(obj, str):
         if key == "style" and obj in _DARK_MAPS:
             return _DARK_MAPS[obj]
-        return _DARK_COLOURS.get(obj.lower().replace(" ", ""), obj)
+        colour = obj.lower().replace(" ", "")
+        if colour in _DARK_COLOURS:
+            return _DARK_COLOURS[colour]
+        if (m := _RGBA.fullmatch(colour)) and (rgb := _DARK_RGB.get(tuple(int(x) for x in m.groups()[:3]))):
+            return "rgba({},{},{},{})".format(*rgb, m[4])
+        return obj
     return obj
 
 

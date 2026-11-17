@@ -20,6 +20,7 @@ import streamlit as st
 from idle import pause_when_idle
 from meteo.stats import SEASONS, trend
 from pivot_page import page_pivot
+from projection_page import page_projection
 from route_page import page_route
 from ui import (
     CFG,
@@ -601,7 +602,8 @@ if warehouse_ready():
             st.Page(page_quality, title="Data and quality", icon=":material/fact_check:", url_path="quality"),
             st.Page(page_pivot, title="Pivot table", icon=":material/pivot_table_chart:", url_path="pivot"),
         ],
-        "Tools": [route],
+        "Tools": [st.Page(page_projection, title="Prediction", icon=":material/online_prediction:",
+                          url_path="prediction"), route],
     })
 else:
     # Without the warehouse, only the route tool (which uses the weather API) is available
