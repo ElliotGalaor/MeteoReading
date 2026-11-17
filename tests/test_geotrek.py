@@ -34,11 +34,24 @@ class FakeSession:
             raise ConnectionError("no answer")
         if url.endswith("/trek_practice/"):
             return Resp({"results": [{"id": 1, "name": "À pied"}, {"id": 2, "name": "VTT"}]})
+        if url.endswith("/trek_difficulty/"):
+            return Resp({"results": [{"id": 2, "label": "Facile"}, {"id": 4, "label": "Difficile"}]})
+        if url.endswith("/trek_route/"):
+            return Resp({"results": [{"id": 1, "route": "Boucle"}, {"id": 6, "route": "Séjour itinérant"}]})
+        if url.endswith("/trek/") and params.get("fields") == "id":
+            # the small boxes along the track: what passes near it (14 starts far away but crosses the track)
+            return Resp({"results": [{"id": 10}, {"id": 11}, {"id": 14}]})
         if url.endswith("/trek/"):
             assert params["in_bbox"].count(",") == 3
             return Resp({"results": [
+                {"id": 14, "name": "Grande traversée", "departure_geom": [6.90, 45.40], "length_2d": 120000,
+                 "ascent": 5000, "duration": 96.0, "practice": 1, "difficulty": 4, "route": 6,
+                 "gpx": "https://alps.example/api/fr/treks/14/gt.gpx"},
+                {"id": 15, "name": "Erreur de saisie", "departure_geom": [6.50, 45.0], "length_2d": 120, "practice": 1,
+                 "gpx": "https://alps.example/api/fr/treks/15/x.gpx"},
                 {"id": 10, "name": "Lac d'en haut", "departure_geom": [6.51, 45.0], "length_2d": 8200, "ascent": 450,
-                 "duration": 3.0, "practice": 1, "gpx": "https://alps.example/api/fr/treks/10/lac.gpx"},
+                 "duration": 3.0, "practice": 1, "difficulty": 2, "route": 1,
+                 "gpx": "https://alps.example/api/fr/treks/10/lac.gpx"},
                 {"id": 11, "name": "Col en VTT", "departure_geom": [6.55, 45.02], "length_2d": 25000, "ascent": 900,
                  "duration": 2.5, "practice": 2, "gpx": "https://alps.example/api/fr/treks/11/col.gpx"},
                 {"id": 12, "name": "Loin d'ici", "departure_geom": [6.95, 45.45], "length_2d": 5000, "ascent": 100,
@@ -58,8 +71,12 @@ def test_nearby_treks_nearest_first_within_the_radius():
     session = FakeSession()
     found, failed = nearby_treks([45.0, 45.0], [6.50, 6.52], radius_km=10, session=session,
                                  instances=[ALPS, SEA, DOWN])
-    assert [s.trek_id for s in found] == [10, 11]                  # 12 starts too far, 13 has no GPX
-    assert found[0].distance_km < found[1].distance_km < 10
+    # 12 starts too far and does not pass near, 13 has no GPX, 15 is a few metres long; 14 starts far but crosses
+    # the track: listed with the routes passing near (11, 14), after the one starting on it (10)
+    assert [s.trek_id for s in found] == [10, 11, 14]
+    assert found[0].distance_km < found[1].distance_km < 10 < found[2].distance_km and found[2].passes_near
+    assert (found[0].difficulty, found[0].route_type) == ("Facile", "Boucle")
+    assert (found[2].difficulty, found[2].route_type, found[2].duration_h) == ("Difficile", "Séjour itinérant", 96.0)
     assert found[0].practice == "À pied" and found[0].activity == "Walking"
     assert found[1].practice == "VTT" and found[1].activity == "Cycling"
     assert found[0].page_url == "https://rando.alps.example/trek/10" and found[0].length_km == pytest.approx(8.2)
@@ -70,7 +87,7 @@ def test_nearby_treks_nearest_first_within_the_radius():
 def test_a_route_published_twice_is_listed_once():
     twin = Instance("Département des Alpes", "Dép. Alpes", "https://alps.example/api/v2", None, ALPS.bbox)
     found, _ = nearby_treks([45.0], [6.50], radius_km=10, session=FakeSession(), instances=[ALPS, twin])
-    assert [s.trek_id for s in found] == [10, 11]
+    assert [s.trek_id for s in found] == [10, 11, 14]
 
 
 def test_no_instance_near_the_track():

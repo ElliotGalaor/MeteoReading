@@ -170,9 +170,12 @@ Three ways to get a track:
 
 Then the tool:
 
-1. **reads the track** safely (`defusedxml`), drops repeated points, computes distances, ascent and the direction of travel;
+1. **reads the track** safely (`defusedxml`), from a file, a drawing or a **link** (a Geotrek route page, an
+   OpenStreetMap relation or GPS trace, a GPS file on data.gouv.fr: only these sites are fetched,
+   [meteo/links.py](meteo/links.py)); drops repeated points, computes distances, ascent and the direction of travel;
 2. **times each point**: the recorded timestamps for a past activity, or an estimate for a planned trip
-   (departure time + speed, with extra time for climbs when walking or cycling);
+   (departure time + speed, with extra time for climbs when walking or cycling); a long route can be **split into
+   days**, each going on from where the previous one stopped, at the departure time;
 3. **samples up to 40 points** at least 1 km apart and fetches the hourly weather for all of them in one batch:
    the **Open-Meteo forecast API** for the last 2 months and the next 16 days (best models for the area, e.g.
    Météo-France AROME/ARPEGE over France), the **ERA5 archive** for older trips;
@@ -192,11 +195,16 @@ Then the tool:
      around km 238 (20:58): dipped headlights or fog lights, and slow down"), with a pointer to the official
      Météo-France warnings when a hazard is at least moderate.
      The thresholds are in [meteo/route_scores.py](meteo/route_scores.py) and tested.
-7. **suggests routes nearby**: hiking, cycling and trail routes starting near the track, from the public Geotrek
-   APIs of 11 parks and départements (Écrins, Vanoise, Vercors, Cévennes, the regional parks of Provence-Alpes-Côte
-   d'Azur, Loire-Atlantique, Doubs, Jura…, about 5,000 routes). Pick one and the reading switches to it.
+7. **suggests routes nearby**, within any radius from 2 to 50 km: hiking, cycling and trail routes from the public
+   Geotrek APIs of 11 parks and départements (Écrins, Vanoise, Vercors, Cévennes, the regional parks of
+   Provence-Alpes-Côte d'Azur, Loire-Atlantique, Doubs, Jura…, about 5,000 routes), and local waymarked routes from
+   OpenStreetMap everywhere else. They are listed with their practice, difficulty, type (loop, return, stage…),
+   length, ascent and duration, filtered by practice (by default, the ones that match the activity), sorted, and
+   numbered on a map; click a start on the map or a row, and the reading switches to that route.
    Geotrek has no national API, so [meteo/geotrek.py](meteo/geotrek.py) queries only the instances near the track,
-   in parallel, with a bounding box, and ranks the routes by the distance from the track to their start.
+   in parallel, with a bounding box, plus small boxes along the track to find the routes whose line passes near it
+   wherever they start. The OpenStreetMap routes come from Waymarked Trails, and their line from the OpenStreetMap
+   API when asked ([meteo/osm_routes.py](meteo/osm_routes.py)).
 
 ![Weather along the Mont Ventoux climb](reports/figures/route_weather_example.png)
 
@@ -232,8 +240,9 @@ data.gouv.fr (API)          Open-Meteo (ERA5 API)
 - **Route weather**: Open-Meteo forecast, archive, elevation and geocoding APIs; map tiles and routing from
   [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (routing servers hosted by FOSSGIS, for light use).
 - **Routes nearby**: the [Geotrek](https://geotrek.fr) sites of the parks and départements listed in
-  [meteo/geotrek.py](meteo/geotrek.py); the routes remain theirs, each one is shown with its source and a link to its
-  page.
+  [meteo/geotrek.py](meteo/geotrek.py) (the routes remain theirs, each one is shown with its source and a link to its
+  page), and [Waymarked Trails](https://waymarkedtrails.org) / [OpenStreetMap](https://www.openstreetmap.org/copyright)
+  route relations (ODbL).
 
 To analyse the whole of France (overseas territories included), set `extra_departments: all` in [config.yaml](config.yaml): about 1.3 GB and more than 100 million rows, without changing the code.
 
@@ -283,6 +292,8 @@ MeteoReading/
 │   ├── pivot.py           # pivot tables: catalog, query assembly, totals
 │   ├── route_weather.py   # weather reading along a track
 │   ├── geotrek.py         # routes nearby, from the Geotrek APIs of parks and départements
+│   ├── osm_routes.py      # routes nearby from OpenStreetMap (Waymarked Trails), and their line
+│   ├── links.py           # a track from a link (Geotrek, OpenStreetMap, open-data files)
 │   ├── route_scores.py    # danger and comfort scores, advice
 │   ├── viz.py, palette.py # static charts
 │   └── report.py, fmt.py  # HTML report

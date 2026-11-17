@@ -489,18 +489,31 @@ def sample_points(track: Track, max_points: int = 40, min_step_km: float = 1.0) 
     return s
 
 
-def passage_times(track: Track, start: pd.Timestamp, speed_kmh: float,
-                  climb_min_per_100m: float = 0.0) -> pd.Series:
-    """Estimated time at each point of a planned trip."""
+def moving_hours(track: Track, speed_kmh: float, climb_min_per_100m: float = 0.0) -> np.ndarray:
+    """Hours on the move to reach each point (flat speed, plus time for climbs)."""
     if speed_kmh <= 0:
         raise ValueError("Speed must be positive")
     df = track.points
     hours = df["dist_km"].to_numpy() / speed_kmh
     if climb_min_per_100m and track.has_elevation:
         hours = hours + cumulative_ascent(df["ele"]) / 100 * climb_min_per_100m / 60
+    return hours
+
+
+def passage_times(track: Track, start: pd.Timestamp, speed_kmh: float, climb_min_per_100m: float = 0.0,
+                  hours_per_day: float | None = None) -> pd.Series:
+    """Estimated time at each point of a planned trip.
+
+    With hours_per_day, the trip is split into days: after that many hours on the move, it goes on the next day at
+    the same departure time (the stages of a multi-day route)."""
+    hours = moving_hours(track, speed_kmh, climb_min_per_100m)
     start = pd.Timestamp(start)
     start = start.tz_convert("UTC") if start.tzinfo else start.tz_localize("UTC")
-    return pd.Series(start + pd.to_timedelta(hours, unit="h"), index=df.index)
+    if hours_per_day and hours_per_day > 0:
+        day = np.floor(hours / hours_per_day - 1e-9).clip(min=0)
+        offset = pd.to_timedelta(day, unit="D") + pd.to_timedelta(hours - day * hours_per_day, unit="h")
+        return pd.Series(start + offset, index=track.points.index)
+    return pd.Series(start + pd.to_timedelta(hours, unit="h"), index=track.points.index)
 
 
 def with_times(track: Track, times: pd.Series) -> Track:
