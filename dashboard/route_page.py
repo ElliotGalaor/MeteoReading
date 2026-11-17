@@ -58,8 +58,10 @@ from ui import (
     WARM,
     _connect,
     chart,
+    is_dark,
     num,
     page_header,
+    themed,
 )
 
 SAMPLES_DIR = ROOT / "samples"
@@ -510,7 +512,7 @@ def _nearby_map(track: Track, view: list[dict], selected: dict | None, key: str)
     fig.update_layout(map=dict(style="carto-positron", zoom=zoom,
                                center=dict(lat=float(np.mean([min(lat), max(lat)])), lon=float(np.mean([min(lon), max(lon)])))),
                       showlegend=False, margin=dict(l=0, r=0, t=0, b=0), height=380)
-    st.plotly_chart(fig, theme=None, key=key, on_select=lambda: _select_from_map(key, view), selection_mode="points",
+    st.plotly_chart(themed(fig), theme=None, key=key, on_select=lambda: _select_from_map(key, view), selection_mode="points",
                     config={"displaylogo": False, "displayModeBar": False})
 
 
@@ -726,7 +728,8 @@ def _draw_track() -> tuple[pd.DataFrame, str] | None:
             c1.caption(f"Centred on {hits[0]['label']}")
         elif hits is not None:
             c1.caption("Place not found: try the name of a town, village or mountain.")
-    m = folium.Map(location=center, zoom_start=zoom, tiles="OpenStreetMap", control_scale=True)
+    m = folium.Map(location=center, zoom_start=zoom, control_scale=True,
+                   tiles="CartoDB dark_matter" if is_dark() else "OpenStreetMap")
     Draw(draw_options={"polyline": {"shapeOptions": {"color": SERIES[0], "weight": 4}, "metric": True},
                        "polygon": False, "rectangle": False, "circle": False, "circlemarker": False, "marker": False},
          edit_options={"edit": True, "remove": True}).add_to(m)

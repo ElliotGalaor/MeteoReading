@@ -21,6 +21,19 @@ from meteo.fmt import num, pvalue, signed  # noqa: E402,F401
 from meteo.palette import (  # noqa: E402,F401
     AXIS,
     COOL,
+    DARK_AXIS,
+    DARK_COOL,
+    DARK_DIVERGING_STOPS,
+    DARK_GRID,
+    DARK_HEAT_STOPS,
+    DARK_INK,
+    DARK_INK2,
+    DARK_MUTED,
+    DARK_NEUTRAL,
+    DARK_RAIN_STOPS,
+    DARK_SERIES,
+    DARK_SURFACE,
+    DARK_WARM,
     DIVERGING_STOPS,
     GRID,
     HEAT_STOPS,
@@ -138,7 +151,8 @@ def chart(fig: go.Figure, height: int = 420, title: str | None = None, subtitle:
     has_legend = any(t.showlegend is not False for t in fig.data) and len(fig.data) > 1
     fig.update_layout(height=height, margin={"t": 40 if has_legend else 12, **(margin or {})})
     # Without hover, Plotly keeps its toolbar visible on touch screens, over legends and labels
-    st.plotly_chart(fig, theme=None, config=PLOTLY_CONFIG | ({"displayModeBar": False} if is_phone() else {}))
+    st.plotly_chart(themed(fig), theme=None,
+                    config=PLOTLY_CONFIG | ({"displayModeBar": False} if is_phone() else {}))
 
 
 def signed_color(values) -> list[str]:
@@ -146,44 +160,110 @@ def signed_color(values) -> list[str]:
 
 
 # --- Page style --------------------------------------------------------------------
-CSS = f"""
+LIGHT = {"surface": SURFACE, "ink": INK, "ink2": INK2, "muted": MUTED, "grid": GRID, "series": SERIES[0],
+         "card_border": "rgba(11,11,11,0.10)", "meter": "#ecebe6"}
+DARK = {"surface": DARK_SURFACE, "ink": DARK_INK, "ink2": DARK_INK2, "muted": DARK_MUTED, "grid": DARK_GRID,
+        "series": DARK_SERIES[0], "card_border": "rgba(240,239,236,0.14)", "meter": "#2f2e2b"}
+
+
+def is_dark() -> bool:
+    """Whether the page is shown in dark mode: Streamlit follows the device's setting (or the one picked in its
+    menu), and tells the script through st.context.theme."""
+    try:
+        return st.context.theme.type == "dark"
+    except Exception:
+        return False
+
+
+def theme() -> dict:
+    return DARK if is_dark() else LIGHT
+
+
+def css(p: dict) -> str:
+    return f"""
 <style>
   .block-container {{ padding-top: 2.2rem; max-width: 1280px; }}
-  h1, h2, h3 {{ color: {INK}; letter-spacing: -0.01em; }}
-  [data-testid="stMetricValue"] {{ font-size: 1.9rem; color: {INK}; }}
-  [data-testid="stMetricLabel"] p {{ color: {INK2}; font-size: 0.9rem; }}
-  .kpi-note {{ color: {INK2}; font-size: 0.82rem; margin-top: -0.6rem; }}
-  .lead {{ color: {INK2}; font-size: 1.05rem; margin-top: -0.6rem; margin-bottom: 1.2rem; }}
-  .finding {{ border-left: 3px solid {SERIES[0]}; padding: 0.35rem 0 0.35rem 0.8rem; margin: 0.45rem 0;
-              color: {INK}; }}
-  .finding b {{ color: {INK}; }}
-  .source {{ color: {MUTED}; font-size: 0.78rem; }}
+  h1, h2, h3 {{ color: {p['ink']}; letter-spacing: -0.01em; }}
+  [data-testid="stMetricValue"] {{ font-size: 1.9rem; color: {p['ink']}; }}
+  [data-testid="stMetricLabel"] p {{ color: {p['ink2']}; font-size: 0.9rem; }}
+  .kpi-note {{ color: {p['ink2']}; font-size: 0.82rem; margin-top: -0.6rem; }}
+  .lead {{ color: {p['ink2']}; font-size: 1.05rem; margin-top: -0.6rem; margin-bottom: 1.2rem; }}
+  .finding {{ border-left: 3px solid {p['series']}; padding: 0.35rem 0 0.35rem 0.8rem; margin: 0.45rem 0;
+              color: {p['ink']}; }}
+  .finding b {{ color: {p['ink']}; }}
+  .source {{ color: {p['muted']}; font-size: 0.78rem; }}
   .stTextArea textarea {{ font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 0.88rem; }}
-  .chart-title {{ color: {INK}; font-weight: 600; font-size: 1.08rem; margin-top: 0.8rem; line-height: 1.35; }}
-  .chart-sub {{ color: {INK2}; font-size: 0.88rem; margin-top: 0.1rem; line-height: 1.4; }}
-  .score-card {{ border: 1px solid rgba(11,11,11,0.10); border-radius: 8px; padding: 0.85rem 1rem 0.75rem;
-                 background: {SURFACE}; height: 100%; }}
-  .score-label {{ color: {INK2}; font-size: 0.9rem; }}
-  .score-value {{ color: {INK}; font-size: 2.1rem; font-weight: 600; line-height: 1.15; }}
-  .score-value small {{ color: {MUTED}; font-size: 0.95rem; font-weight: 400; }}
-  .chip {{ display: inline-flex; align-items: center; gap: 0.4rem; color: {INK}; font-size: 0.95rem;
+  .chart-title {{ color: {p['ink']}; font-weight: 600; font-size: 1.08rem; margin-top: 0.8rem; line-height: 1.35; }}
+  .chart-sub {{ color: {p['ink2']}; font-size: 0.88rem; margin-top: 0.1rem; line-height: 1.4; }}
+  .score-card {{ border: 1px solid {p['card_border']}; border-radius: 8px; padding: 0.85rem 1rem 0.75rem;
+                 background: {p['surface']}; height: 100%; }}
+  .score-label {{ color: {p['ink2']}; font-size: 0.9rem; }}
+  .score-value {{ color: {p['ink']}; font-size: 2.1rem; font-weight: 600; line-height: 1.15; }}
+  .score-value small {{ color: {p['muted']}; font-size: 0.95rem; font-weight: 400; }}
+  .chip {{ display: inline-flex; align-items: center; gap: 0.4rem; color: {p['ink']}; font-size: 0.95rem;
            font-weight: 500; margin-left: 0.6rem; vertical-align: 0.35rem; }}
   .chip i {{ width: 10px; height: 10px; border-radius: 50%; display: inline-block; }}
-  .meter {{ height: 8px; border-radius: 4px; background: #ecebe6; margin: 0.55rem 0 0.55rem; }}
+  .meter {{ height: 8px; border-radius: 4px; background: {p['meter']}; margin: 0.55rem 0 0.55rem; }}
   .meter div {{ height: 100%; border-radius: 4px; }}
-  .score-why {{ color: {INK2}; font-size: 0.86rem; line-height: 1.45; }}
-  .advice {{ border-left: 3px solid {MUTED}; padding: 0.3rem 0 0.3rem 0.8rem; margin: 0.4rem 0; color: {INK}; }}
+  .score-why {{ color: {p['ink2']}; font-size: 0.86rem; line-height: 1.45; }}
+  .advice {{ border-left: 3px solid {p['muted']}; padding: 0.3rem 0 0.3rem 0.8rem; margin: 0.4rem 0; color: {p['ink']}; }}
   .advice.danger {{ border-left-color: {STATUS['critical']}; }}
-  .advice.comfort {{ border-left-color: {SERIES[0]}; }}
-  .advice span {{ color: {INK2}; }}
+  .advice.comfort {{ border-left-color: {p['series']}; }}
+  .advice span {{ color: {p['ink2']}; }}
 </style>
 """
+
+
+CSS = css(LIGHT)
+
+
+# Light-mode colours of the figures -> their dark-mode steps (the figures are built with the light palette)
+_DARK_COLOURS = {c.lower(): d for c, d in {
+    SURFACE: DARK_SURFACE, INK: DARK_INK, INK2: DARK_INK2, MUTED: DARK_MUTED, GRID: DARK_GRID, AXIS: DARK_AXIS,
+    NEUTRAL: DARK_NEUTRAL, "#ffffff": "#262624", **dict(zip(SERIES, DARK_SERIES, strict=True)), WARM: DARK_WARM,
+    COOL: DARK_COOL, "rgba(195,194,183,0.35)": "rgba(143,141,135,0.28)",
+}.items()}
+_DARK_SCALES = [(HEAT_STOPS, DARK_HEAT_STOPS), (RAIN_STOPS, DARK_RAIN_STOPS), (DIVERGING_STOPS, DARK_DIVERGING_STOPS)]
+_DARK_MAPS = {"carto-positron": "carto-darkmatter", "light": "dark"}
+
+
+def _scale(value):
+    """A Plotly colour scale ([[0, c0], …, [1, cn]]) of the light palette -> its dark version, else None."""
+    if (isinstance(value, (list, tuple)) and len(value) >= 2
+            and all(isinstance(v, (list, tuple)) and len(v) == 2 and isinstance(v[1], str) for v in value)):
+        colours = [v[1].lower() for v in value]
+        for light, dark in _DARK_SCALES:
+            if colours == [c.lower() for c in light]:
+                return [[v[0], d] for v, d in zip(value, dark, strict=True)]
+    return None
+
+
+def _to_dark(obj, key: str = ""):
+    if isinstance(obj, dict):
+        return {k: _to_dark(v, k) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        if key == "colorscale" and (scale := _scale(obj)) is not None:
+            return scale
+        return [_to_dark(v, key) for v in obj]
+    if isinstance(obj, str):
+        if key == "style" and obj in _DARK_MAPS:
+            return _DARK_MAPS[obj]
+        return _DARK_COLOURS.get(obj.lower().replace(" ", ""), obj)
+    return obj
+
+
+def themed(fig: go.Figure) -> go.Figure:
+    """The figure in the page's theme: as built (light palette), or with the dark steps of every UI colour, series,
+    colour scale and map style when the page is in dark mode."""
+    if not is_dark():
+        return fig
+    return go.Figure(_to_dark(fig.to_dict()))
 
 
 def page_header(title: str, lead: str, tab: str | None = None) -> None:
     """Title and lead of a page; the browser tab is named after the page (`tab`, or the title)."""
     st.set_page_config(page_title=f"{tab or title} · Météo Analytics")
-    st.markdown(CSS, unsafe_allow_html=True)
+    st.markdown(css(theme()), unsafe_allow_html=True)
     st.title(title)
     st.markdown(f"<div class='lead'>{lead}</div>", unsafe_allow_html=True)
 

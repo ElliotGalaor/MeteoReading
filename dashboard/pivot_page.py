@@ -6,7 +6,19 @@ import streamlit as st
 from matplotlib.colors import LinearSegmentedColormap
 
 from meteo.pivot import TOTAL, Measure, PivotResult, PivotSpec, datasets, filter_values, run_pivot, year_range
-from ui import HEAT_STOPS, RAIN_STOPS, SURFACE, TH, _connect, num, page_header
+from ui import (
+    DARK_HEAT_STOPS,
+    DARK_RAIN_STOPS,
+    DARK_SURFACE,
+    HEAT_STOPS,
+    RAIN_STOPS,
+    SURFACE,
+    TH,
+    _connect,
+    is_dark,
+    num,
+    page_header,
+)
 
 CATALOG = datasets(TH)
 NONE = "(none)"
@@ -22,6 +34,9 @@ EXAMPLES = {
 # as opaque black, the darkest colour of both scales
 COLOURS = {"heat": LinearSegmentedColormap.from_list("heat", HEAT_STOPS).with_extremes(bad=SURFACE),
            "blue": LinearSegmentedColormap.from_list("blue", RAIN_STOPS).with_extremes(bad=SURFACE)}
+# Dark mode: low values recede into the dark surface, strong ones are bright
+DARK_COLOURS = {"heat": LinearSegmentedColormap.from_list("heat_dark", DARK_HEAT_STOPS).with_extremes(bad=DARK_SURFACE),
+                "blue": LinearSegmentedColormap.from_list("blue_dark", DARK_RAIN_STOPS).with_extremes(bad=DARK_SURFACE)}
 # Light text only on cells dark enough for it: at this luminance both text colours reach about 4.3:1
 TEXT_THRESHOLD = 0.17
 
@@ -93,7 +108,8 @@ def _style(result: PivotResult, measure: Measure, colour: bool):
     body_rows = t.index[t[result.row_labels[0]] != TOTAL]
     styler = t.style.format(f"{{:,.{result.decimals}f}}", subset=values, na_rep="–")
     if colour and body_cols and len(body_rows):
-        styler = styler.background_gradient(cmap=COLOURS[measure.scale], axis=None, text_color_threshold=TEXT_THRESHOLD,
+        cmaps = DARK_COLOURS if is_dark() else COLOURS
+        styler = styler.background_gradient(cmap=cmaps[measure.scale], axis=None, text_color_threshold=TEXT_THRESHOLD,
                                             subset=pd.IndexSlice[body_rows, body_cols])
     return styler
 
