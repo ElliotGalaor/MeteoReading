@@ -15,7 +15,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from .climatology import MONTH_NAMES, day_of_year, doy_climatology, ordinal
+from .climatology import day_of_year, doy_climatology
+from .i18n import fmt_date, ordinal, t
 
 HEAT_PERCENTILES = (99.5, 97.5, 95.0)   # Spic, Sdeb, Sint
 COLD_PERCENTILES = (0.5, 2.5, 5.0)
@@ -94,12 +95,12 @@ def dry_spells(spells: pd.DataFrame, yearly: pd.DataFrame, ref: tuple[int, int],
 
 
 # --- One day in context ---------------------------------------------------------------------------------
-VARIABLES = {   # column -> (label, unit, scale to the unit shown, word for a high rank, word for a low rank)
-    "tx": ("Maximum temperature", "°C", 1.0, "hottest", "coolest"),
-    "tn": ("Minimum temperature", "°C", 1.0, "warmest", "coldest"),
-    "rr": ("Rainfall", "mm", 1.0, "wettest", "driest"),
-    "ffm": ("Mean wind", "km/h", 3.6, "windiest", "calmest"),
-    "fxi": ("Strongest gust", "km/h", 3.6, "windiest", "calmest"),
+VARIABLES = {   # column -> (unit, scale to the unit shown, word for a high rank, word for a low rank)
+    "tx": ("°C", 1.0, "hottest", "coolest"),         # named t("episodes.var_tx"), the words t("episodes.word_…")
+    "tn": ("°C", 1.0, "warmest", "coldest"),
+    "rr": ("mm", 1.0, "wettest", "driest"),
+    "ffm": ("km/h", 3.6, "windiest", "calmest"),
+    "fxi": ("km/h", 3.6, "windiest", "calmest"),
 }
 
 
@@ -118,12 +119,12 @@ def day_in_context(daily: pd.DataFrame, day) -> dict:
     dates = pd.to_datetime(same["date"])
     row = same[(dates == day).to_numpy()]
     out = {}
-    for col, (label, unit, scale, high, low) in VARIABLES.items():
+    for col, (unit, scale, high, low) in VARIABLES.items():
         values = same[col].astype(float) * scale
         years = dates.dt.year
         ok = values.notna().to_numpy()
         v = float(row[col].iloc[0]) * scale if len(row) and pd.notna(row[col].iloc[0]) else None
-        info = {"label": label, "unit": unit, "value": v, "n": int(ok.sum())}
+        info = {"label": t(f"episodes.var_{col}"), "unit": unit, "value": v, "n": int(ok.sum())}
         if ok.any():
             i_max = int(np.argmax(np.where(ok, values, -np.inf)))
             info.update(record=float(values.iloc[i_max]), record_year=int(years.iloc[i_max]))
@@ -144,13 +145,15 @@ def day_in_context(daily: pd.DataFrame, day) -> dict:
 
 
 def rank_text(info: dict, day) -> str:
-    """'3rd hottest 15 August of 75 years'."""
+    """'3rd hottest 15 August of 75 years' ('3e 15 août le plus chaud sur 75 ans')."""
     day = pd.Timestamp(day)
     if info.get("value") is None:
-        return "not measured"
+        return t("episodes.not_measured")
     if info.get("word") == "dry":
-        return "a dry day"
-    return f"{ordinal(info['rank'])} {info['word']} {day.day} {MONTH_NAMES[day.month - 1]} of {info['n']} years"
+        return t("episodes.dry_day")
+    key = "episodes.rank_first" if info["rank"] == 1 else "episodes.rank"
+    return t(key, rank=ordinal(info["rank"]), word=t(f"episodes.word_{info['word']}"),
+             day=fmt_date(day, "day_month_long"), n=info["n"])
 
 
 def days_around(daily: pd.DataFrame, day, ref: tuple[int, int], half: int = 10) -> pd.DataFrame:

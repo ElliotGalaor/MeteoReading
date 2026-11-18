@@ -15,7 +15,7 @@ from meteo.seasons import (
     shift_days,
     week_label,
 )
-from ui import OLD, RECENT, SERIES, TH, chart, num, table
+from ui import OLD, RECENT, SERIES, TH, chart, num, pct, t, table
 
 PERIODS = {f"{OLD[0]}-{OLD[1]}": OLD, f"{RECENT[0]}-{RECENT[1]}": RECENT}
 PERIODS_LABELS = list(PERIODS)
@@ -36,35 +36,38 @@ def _seasons(city: str) -> dict:
 
 def _season_line(name: str, threshold: str, then, now) -> str:
     old, new = PERIODS_LABELS
+    head = f"<b>{name}</b> ({threshold})"
     if then is None and now is None:
-        return f"<b>{name}</b> ({threshold}): none, in either period."
+        return t("seasons.none_either", head=head)
     if now is None:
-        return f"<b>{name}</b> ({threshold}): {then.label} in {old}, none any more in {new}."
+        return t("seasons.gone", head=head, then=then.label, old=old, new=new)
     if then is None:
-        return f"<b>{name}</b> ({threshold}): none in {old}, {now.label} in {new} ({now.days} days)."
-    text = f"<b>{name}</b> ({threshold}): {now.label} in {new} ({now.days} days), {then.label} in {old} ({then.days} days)"
+        return t("seasons.new", head=head, old=old, now=now.label, new=new, days=now.days)
+    text = t("seasons.both", head=head, now=now.label, new=new, days_now=now.days, then=then.label, old=old,
+             days_then=then.days)
     shift = shift_days(then, now)
     if shift:
         earlier, later = shift
         parts = []
         if earlier:
-            parts.append(f"starts {abs(earlier)} days {'earlier' if earlier > 0 else 'later'}")
+            parts.append(t("seasons.starts_earlier" if earlier > 0 else "seasons.starts_later", n=abs(earlier)))
         if later:
-            parts.append(f"ends {abs(later)} days {'later' if later > 0 else 'earlier'}")
+            parts.append(t("seasons.ends_later" if later > 0 else "seasons.ends_earlier", n=abs(later)))
         if parts:
-            text += ": it " + " and ".join(parts)
+            text += t("seasons.shift", parts=t("fmt.and").join(parts))
     return text + "."
 
 
 def seasons_panel(cities: list[str]) -> None:
-    st.subheader("Best weeks for outdoor activities")
+    st.subheader(t("seasons.title"))
     c1, c2 = st.columns([1.2, 2])
-    activity = c1.segmented_control("Activity", ACTIVITIES, default="Walking", required=True, key="weeks_activity")
+    activity = c1.segmented_control(t("seasons.activity"), ACTIVITIES, default="Walking", required=True,
+                                    key="weeks_activity", format_func=lambda a: t(f"activity.{a}"))
     activity = activity or "Walking"
-    city = cities[0] if len(cities) == 1 else c2.selectbox("City", cities, key="weeks_city")
+    city = cities[0] if len(cities) == 1 else c2.selectbox(t("common.city"), cities, key="weeks_city")
     weeks, use_wind = _weeks(city, activity)
     if weeks.empty:
-        st.info("Not enough data for this city.")
+        st.info(t("seasons.no_data"))
         return
     old, new = PERIODS_LABELS
     fig = go.Figure()
@@ -72,48 +75,37 @@ def seasons_panel(cities: list[str]) -> None:
         w = weeks[weeks["period"] == label].sort_values("week")
         fig.add_scatter(x=[week_label(v) for v in w["week"]], y=w["share"] * 100, mode="lines", name=label,
                         line=dict(color=colour, width=width, shape="spline", smoothing=0.6),
-                        customdata=w["n_days"], hovertemplate=f"week of %{{x}}: %{{y:.0f}}% of days comfortable "
-                                                              f"({label})<extra></extra>")
-    fig.update_layout(hovermode="x unified", yaxis=dict(title="% of days", rangemode="tozero"),
+                        customdata=w["n_days"], hovertemplate=t("seasons.hover", period=label))
+    fig.update_layout(hovermode="x unified", yaxis=dict(title=t("seasons.axis"), rangemode="tozero"),
                       xaxis=dict(type="category", nticks=13))
     low, high = PROFILES[activity].comfort_range
-    rules = (f"daytime temperature {low}-{high} °C, under {TH['rain_day']} mm of rain"
-             + (f", mean wind under {WIND_COMFORT_KMH} km/h" if use_wind else ""))
-    chart(fig, 380, f"Comfortable days for {activity.lower()} in {city}, week by week",
-          f"Share of days with {rules} · {old} vs {new}")
+    rules = (t("seasons.rules", low=low, high=high, rain=num(TH["rain_day"], 0))
+             + (t("seasons.rules_wind", wind=WIND_COMFORT_KMH) if use_wind else ""))
+    chart(fig, 380, t("seasons.chart_title", activity=t(f"seasons.for_{activity}"), city=city),
+          t("seasons.chart_sub", rules=rules, old=old, new=new))
 
     pv = weeks.pivot(index="week", columns="period", values="share").dropna()
     if not pv.empty:
         best = pv[new].idxmax()
         diff = (pv[new] - pv[old]) * 100
         gain, loss = diff.idxmax(), diff.idxmin()
-        line = (f"Best week now: <b>{week_label(best)}</b>, {num(pv.loc[best, new] * 100, 0)}% of days comfortable "
-                f"({num(pv.loc[best, old] * 100, 0)}% in {old}).")
+        line = t("seasons.best", week=week_label(best), now=pct(pv.loc[best, new]), then=pct(pv.loc[best, old]),
+                 old=old)
         if diff[loss] <= -5:
-            line += (f" Biggest loss: week of {week_label(loss)}, {num(pv.loc[loss, old] * 100, 0)}% → "
-                     f"{num(pv.loc[loss, new] * 100, 0)}%.")
+            line += t("seasons.loss", week=week_label(loss), then=pct(pv.loc[loss, old]), now=pct(pv.loc[loss, new]))
         if diff[gain] >= 5:
-            line += (f" Biggest gain: week of {week_label(gain)}, {num(pv.loc[gain, old] * 100, 0)}% → "
-                     f"{num(pv.loc[gain, new] * 100, 0)}%.")
+            line += t("seasons.gain", week=week_label(gain), then=pct(pv.loc[gain, old]), now=pct(pv.loc[gain, new]))
         st.markdown(f"<div class='finding'>{line}</div>", unsafe_allow_html=True)
 
     s = _seasons(city)
-    st.markdown("<div class='chart-title'>Seasons, then and now</div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='finding'>{_season_line('Warm season', f'normal maximum ≥ {num(SUMMER_TX, 0)} °C', s[(old, True)], s[(new, True)])}</div>",
-                unsafe_allow_html=True)
-    st.markdown(f"<div class='finding'>{_season_line('Cold season', f'normal maximum ≤ {num(WINTER_TX, 0)} °C', s[(old, False)], s[(new, False)])}</div>",
-                unsafe_allow_html=True)
-    with st.expander("How are comfortable days and seasons defined?"):
+    st.markdown(f"<div class='chart-title'>{t('seasons.seasons_title')}</div>", unsafe_allow_html=True)
+    warm = _season_line(t("seasons.warm"), t("seasons.warm_rule", tx=num(SUMMER_TX, 0)), s[(old, True)], s[(new, True)])
+    cold = _season_line(t("seasons.cold"), t("seasons.cold_rule", tx=num(WINTER_TX, 0)), s[(old, False)],
+                        s[(new, False)])
+    st.markdown(f"<div class='finding'>{warm}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='finding'>{cold}</div>", unsafe_allow_html=True)
+    with st.expander(t("seasons.how_title")):
         walk, bike = PROFILES["Walking"].comfort_range, PROFILES["Cycling"].comfort_range
-        st.markdown(f"""
-- **Daytime temperature** = 0.75 × maximum + 0.25 × minimum, about the mean of 10:00 to 18:00. It must lie in the
-  activity's comfortable range: **{walk[0]}-{walk[1]} °C for walking, {bike[0]}-{bike[1]} °C for cycling**, the
-  ranges where the route comfort score (`meteo/route_scores.py`) takes off no points for temperature.
-- **Dry**: less than {TH['rain_day']} mm of rain that day.
-- **Wind**: mean wind under {WIND_COMFORT_KMH} km/h, where the walking comfort score starts to take points off. A daily
-  mean has no direction, so cycling uses the same limit rather than the headwind. Left out when a period has wind
-  values on fewer than 80% of its days{'' if use_wind else ' (the case here)'}.
-- Sunshine and humidity are not in every station's files: they are not used.
-- **Seasons**: the days whose normal maximum, smoothed over ±15 days, is at least {num(SUMMER_TX, 0)} °C (warm) or at
-  most {num(WINTER_TX, 0)} °C (cold).
-""")
+        st.markdown(t("seasons.how", walk_low=walk[0], walk_high=walk[1], bike_low=bike[0], bike_high=bike[1],
+                      rain=num(TH["rain_day"], 0), wind=WIND_COMFORT_KMH,
+                      here="" if use_wind else t("seasons.how_here"), warm=num(SUMMER_TX, 0), cold=num(WINTER_TX, 0)))

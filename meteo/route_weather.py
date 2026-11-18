@@ -25,7 +25,10 @@ import numpy as np
 import pandas as pd
 
 from .download import make_session
+from .fmt import num, pct, percent, signed
 from .gps import Track, sample_points, segment_km
+from .i18n import month_name, weekday_name, words
+from .i18n import t as tr
 
 FORECAST_API = "https://api.open-meteo.com/v1/forecast"
 ARCHIVE_API = "https://archive-api.open-meteo.com/v1/archive"
@@ -52,7 +55,7 @@ ICE_RAIN_MM = 0.1            # mm/h of rain or drizzle at 1 °C or below: risk o
 MAX_GAP_S = 3 * 3600         # interpolate across at most 3 hours without a value
 CORE = ["temperature_2m", "precipitation", "wind_speed_10m", "weather_code"]   # needed for every reading
 
-# WMO weather codes -> (label, icon)
+# WMO weather codes -> (English name, icon); the name shown comes from the catalogs: condition(code)
 WEATHER_CODES = {
     0: ("Clear sky", "☀️"), 1: ("Mainly clear", "🌤️"), 2: ("Partly cloudy", "⛅"), 3: ("Overcast", "☁️"),
     45: ("Fog", "🌫️"), 48: ("Freezing fog", "🌫️"),
@@ -65,7 +68,7 @@ WEATHER_CODES = {
     85: ("Snow showers", "🌨️"), 86: ("Heavy snow showers", "❄️"),
     95: ("Thunderstorm", "⛈️"), 96: ("Thunderstorm with hail", "⛈️"), 99: ("Severe thunderstorm with hail", "⛈️"),
 }
-COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]   # the catalogs have them in each language
 
 
 @dataclass
@@ -92,8 +95,8 @@ def choose_source(start: date, end: date, today: date | None = None) -> str:
     if end <= today - timedelta(days=ARCHIVE_DELAY_DAYS):
         return "archive"
     if end > today + timedelta(days=FORECAST_FUTURE_DAYS):
-        raise ValueError(f"Forecasts only cover the next {FORECAST_FUTURE_DAYS + 1} days: pick an earlier date.")
-    raise ValueError("This trip straddles the forecast and archive periods: pick a single period.")
+        raise ValueError(tr("rw.err_forecast_range", days=FORECAST_FUTURE_DAYS + 1))
+    raise ValueError(tr("rw.err_straddle"))
 
 
 def api_weight(n_points: int, n_days: int) -> float:
@@ -107,13 +110,13 @@ def get_locations(session, api: str, params: dict) -> list[dict]:
     try:
         resp = session.get(api, params=params, timeout=60)
     except OSError as exc:   # requests' errors (connection, timeout, retries exhausted) are OSErrors
-        raise RuntimeError("The weather service is not answering: try again in a moment.") from exc
+        raise RuntimeError(tr("rw.err_down")) from exc
     if resp.status_code != 200:
         try:
             reason = resp.json().get("reason", resp.text[:200])
         except ValueError:
             reason = resp.text[:200]
-        raise RuntimeError(f"Open-Meteo error ({resp.status_code}): {reason}")
+        raise RuntimeError(tr("rw.err_api", status=resp.status_code, reason=reason))
     payload = resp.json()
     return payload if isinstance(payload, list) else [payload]
 
@@ -246,7 +249,22 @@ def wind_components(speed, wind_from_deg, bearing_deg):
 
 
 def compass(deg: float) -> str:
-    return COMPASS[int(((deg % 360) + 22.5) // 45) % 8]
+    """Where the wind comes from: N, NE… (N, NE, E, SE, S, SO, O, NO in French)."""
+    return words("rw.compass")[int(((deg % 360) + 22.5) // 45) % 8]
+
+
+def condition(code) -> str:
+    """Name of a WMO weather code in the current language."""
+    if code is None or pd.isna(code) or int(code) not in WEATHER_CODES:
+        return tr("rw.wmo_unknown")
+    return tr(f"rw.wmo_{int(code)}")
+
+
+def localize(df: pd.DataFrame) -> pd.DataFrame:
+    """The words of a reading (weather, wind direction) in the current language: a reading kept in the cache may
+    have been made in the other one."""
+    return df.assign(condition=[condition(c) for c in df["weather_code"]],
+                     wind_from=[compass(d) if pd.notna(d) else "" for d in df["wind_direction_10m"]])
 
 
 def build_reading_table(samples: pd.DataFrame, hourly: list[pd.DataFrame], elevations: list) -> pd.DataFrame:
@@ -255,7 +273,7 @@ def build_reading_table(samples: pd.DataFrame, hourly: list[pd.DataFrame], eleva
     df["model_ele"] = elevations
     df["ele_profile"] = df["ele"].where(df["ele"].notna(), df["model_ele"])
     df["headwind"], df["crosswind"] = wind_components(df["wind_speed_10m"], df["wind_direction_10m"], df["bearing"])
-    df["condition"] = [WEATHER_CODES.get(c, ("Unknown", "❔"))[0] if c is not None else "Unknown" for c in df["weather_code"]]
+    df["condition"] = [condition(c) for c in df["weather_code"]]
     df["icon"] = [WEATHER_CODES.get(c, ("Unknown", "❔"))[1] if c is not None else "❔" for c in df["weather_code"]]
     df["wind_from"] = [compass(d) if pd.notna(d) else "" for d in df["wind_direction_10m"]]
     # Time spent around each point (half of each neighbouring leg), to turn mm/h into mm encountered
@@ -316,6 +334,13 @@ def clock_format(local: pd.Series) -> str:
     return fmt + " %Z" if len({t.utcoffset() for t in local}) > 1 else fmt
 
 
+def clock_text(ts, fmt: str) -> str:
+    """A time written with a clock_format: the day of the week in the current language (lun. 14:30)."""
+    ts = pd.Timestamp(ts)
+    fmt = fmt.replace("%a", weekday_name(ts, short=True)).replace("%b", month_name(ts.month, short=True))
+    return ts.strftime(fmt.replace("%d", str(ts.day)))
+
+
 def whole(x) -> str:
     """A whole number for display, without the "-0" that rounding -0.4 gives."""
     return f"{int(round(float(x)))}"
@@ -359,46 +384,46 @@ def summarize(df: pd.DataFrame, tz: str) -> tuple[dict, list[str]]:
     runs = _runs(rainy)
     if not runs:
         prob = stats["max_rain_prob"]
-        insights.append("Dry all the way" + (f" (rain probability at most {prob:.0f}%)." if prob is not None else "."))
+        insights.append(tr("rw.dry_prob", prob=percent(prob)) if prob is not None else tr("rw.dry"))
     else:
         for a, b in runs[:3]:
             km_a, km_b = df["dist_km"].iloc[a], df["dist_km"].iloc[b]
-            span = f"km {km_a:.0f}" if a == b else f"km {km_a:.0f} to {km_b:.0f}"
-            insights.append(f"Rain likely from {span}, around {local.iloc[a].strftime(clock)} "
-                            f"(up to {rain.iloc[a:b + 1].max():.1f} mm/h).")
-        amount = "only a trace of rain (under 0.1 mm)" if stats["rain_mm"] < 0.1 else f"about {stats['rain_mm']:.1f} mm of rain"
-        insights.append(f"In total, {amount} on {stats['rain_share']:.0%} of the route.")
+            span = tr("rw.span_one", km=num(km_a, 0)) if a == b else tr("rw.span", a=num(km_a, 0), b=num(km_b, 0))
+            insights.append(tr("rw.rain", span=span, time=clock_text(local.iloc[a], clock),
+                              mm=num(rain.iloc[a:b + 1].max(), 1)))
+        amount = (tr("rw.amount_trace", trace=num(0.1, 1)) if stats["rain_mm"] < 0.1
+                  else tr("rw.amount", mm=num(stats["rain_mm"], 1)))
+        insights.append(tr("rw.total", amount=amount, share=pct(stats["rain_share"])))
 
     i_min = int(df["temperature_2m"].idxmin())
-    t_line = f"Temperature from {whole(stats['temp_min'])} °C to {whole(stats['temp_max'])} °C"
+    t_line = tr("rw.temp", low=whole(stats["temp_min"]), high=whole(stats["temp_max"]))
     if stats["temp_max"] - stats["temp_min"] >= 3:
-        t_line += f" (coldest at km {df['dist_km'].iloc[i_min]:.0f}"
         ele = df["ele_profile"].iloc[i_min]
-        t_line += f", {ele:.0f} m)." if pd.notna(ele) else ")."
+        km = num(df["dist_km"].iloc[i_min], 0)
+        t_line += tr("rw.coldest_ele", km=km, ele=num(ele, 0)) if pd.notna(ele) else tr("rw.coldest", km=km)
     else:
         t_line += "."
     if stats["feels_min"] < stats["temp_min"] - 2:
-        t_line += f" Feels like {whole(stats['feels_min'])} °C with the wind."
+        t_line += tr("rw.feels", value=whole(stats["feels_min"]))
     insights.append(t_line)
 
     if stats["headwind_share"] >= 0.25 or stats["tailwind_share"] >= 0.25:
         parts = []
         if stats["headwind_share"] >= 0.1:
-            parts.append(f"headwind on {stats['headwind_share']:.0%} of the route")
+            parts.append(tr("rw.wind_head", share=pct(stats["headwind_share"])))
         if stats["tailwind_share"] >= 0.1:
-            parts.append(f"tailwind on {stats['tailwind_share']:.0%}")
-        insights.append("Wind: " + ", ".join(parts) + f" (mean along the route: {stats['mean_headwind']:+.0f} km/h, "
-                        "positive = headwind).")
+            parts.append(tr("rw.wind_tail", share=pct(stats["tailwind_share"])))
+        insights.append(tr("rw.wind", parts=", ".join(parts), mean=signed(stats["mean_headwind"], 0)))
     else:
-        insights.append("Little wind along the direction of travel.")
+        insights.append(tr("rw.calm"))
     if stats["gust_max"] >= 50:
         i_g = int(df["wind_gusts_10m"].idxmax())
-        insights.append(f"Strong gusts up to {stats['gust_max']:.0f} km/h near km {df['dist_km'].iloc[i_g]:.0f}.")
+        insights.append(tr("rw.gusts", kmh=num(stats["gust_max"], 0), km=num(df["dist_km"].iloc[i_g], 0)))
     codes = set(df["weather_code"].dropna().astype(int))
     if codes & {95, 96, 99}:
-        insights.append("⚠️ Thunderstorms possible on the route.")
+        insights.append(tr("rw.storm"))
     if codes & {56, 57, 66, 67, 71, 73, 75, 77, 85, 86} or ((df["temperature_2m"] <= 1) & (rain >= ICE_RAIN_MM)).any():
-        insights.append("⚠️ Risk of snow or ice.")
+        insights.append(tr("rw.snow_ice"))
     return stats, insights
 
 
@@ -422,7 +447,7 @@ def read_route(track: Track, max_points: int = 40, session=None, today: date | N
     `now` (default: the current time, unless `today` is given) decides whether the trip starts soon enough for rain
     in 15-minute steps."""
     if not track.has_time:
-        raise ValueError("The track has no times: provide a start time and a speed first")
+        raise ValueError(tr("rw.err_no_times"))
     if now is None and today is None:
         now = pd.Timestamp.now(tz="UTC")
     samples = sample_points(track, max_points=max_points)
@@ -440,9 +465,7 @@ def read_route(track: Track, max_points: int = 40, session=None, today: date | N
     if source == "archive":
         hourly, elevations, tz = fetch_hourly(samples, q_start, q_end, source, session=session)
     if missing_hours(samples, hourly):
-        raise ValueError("The weather service has no data for the times of this trip. Weather is available for the "
-                         f"next {FORECAST_FUTURE_DAYS + 1} days and for the past; the most recent days may not be "
-                         "complete yet.")
+        raise ValueError(tr("rw.err_no_data", days=FORECAST_FUTURE_DAYS + 1))
     minutely = air = None
     if source == "forecast":
         first = pd.Timestamp(samples["time"].min())

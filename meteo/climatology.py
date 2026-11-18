@@ -9,6 +9,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from .i18n import month_name, ordinal  # noqa: F401  (ordinal: "1st" / "1er", for the pages)
+
 MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
                "November", "December"]
 
@@ -153,14 +155,10 @@ def month_so_far(series: pd.DataFrame, ref: tuple[int, int], start_year: int, mi
     means = g["mean"]
     normal = means[(means.index >= ref[0]) & (means.index <= ref[1])].mean()
     value = float(means[last.year])
-    return {"year": int(last.year), "month": int(last.month), "month_name": MONTH_NAMES[last.month - 1],
+    return {"year": int(last.year), "month": int(last.month), "month_name": month_name(last.month),
             "last_day": int(last.day), "last_date": last, "value": value, "normal": float(normal),
             "anomaly": value - float(normal), "rank_warm": int((means > value).sum() + 1),
             "rank_cold": int((means < value).sum() + 1), "n_years": int(len(means)),
             "first_year": int(means.index.min())}
 
 
-def ordinal(n: int) -> str:
-    """1 -> '1st', 2 -> '2nd', 11 -> '11th', 23 -> '23rd'."""
-    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-    return f"{n}{suffix}"

@@ -40,7 +40,7 @@ VARIABLES = ["temperature_2m_max", "temperature_2m_min", "precipitation_sum"]
 REGIONS = {"North": (49.5, 3.0), "West": (47.5, -1.5), "East": (46.5, 5.5), "South": (43.5, 4.5)}
 WINDOWS = (("1995-01-01", "2006-12-31"), ("2039-01-01", "2050-12-31"))
 LEVEL_NOW = 1.7                 # °C above pre-industrial in mainland France around 2020 (Météo-France)
-LEVELS = {"+2 °C, 2030": 2.0, "+2.7 °C, 2050": 2.7, "+4 °C, 2100": 4.0}   # TRACC
+LEVELS = {"2030": 2.0, "2050": 2.7, "2100": 4.0}   # TRACC: °C above pre-industrial reached in that year
 SEASON_OF_MONTH = {12: "DJF", 1: "DJF", 2: "DJF", 3: "MAM", 4: "MAM", 5: "MAM", 6: "JJA", 7: "JJA", 8: "JJA",
                    9: "SON", 10: "SON", 11: "SON"}
 HOURLY_BUDGET = 4500          # weighted calls per hour, under the free 5,000
@@ -128,21 +128,22 @@ def nearest_region(lat: float, lon: float) -> str:
 
 
 def indicators(daily: pd.DataFrame, th: dict) -> dict[str, float]:
-    """Yearly means of the indicators over the days given (complete years only are passed in)."""
+    """Yearly means of the indicators over the days given (complete years only are passed in), by code (the
+    dashboard names them in each language: t("ind.hot_days"), …)."""
     years = pd.to_datetime(daily["date"]).dt.year
     n_years = years.nunique()
     tx, tn, rr = daily["tx"], daily["tn"], daily["rr"]
     return {
-        "Mean temperature": float(((tx + tn) / 2).mean()),
-        f"Hot days (TX ≥ {th['hot_day']} °C)": float((tx >= th["hot_day"]).sum() / n_years),
-        f"Very hot days (TX ≥ {th['very_hot_day']} °C)": float((tx >= th["very_hot_day"]).sum() / n_years),
-        f"Tropical nights (TN ≥ {th['tropical_night']} °C)": float((tn >= th["tropical_night"]).sum() / n_years),
-        f"Frost days (TN < {th['frost_day']} °C)": float((tn < th["frost_day"]).sum() / n_years),
-        "Annual rainfall": float(rr.sum() / n_years),
+        "tmean": float(((tx + tn) / 2).mean()),
+        "hot_days": float((tx >= th["hot_day"]).sum() / n_years),
+        "very_hot_days": float((tx >= th["very_hot_day"]).sum() / n_years),
+        "tropical_nights": float((tn >= th["tropical_night"]).sum() / n_years),
+        "frost_days": float((tn < th["frost_day"]).sum() / n_years),
+        "rr": float(rr.sum() / n_years),
     }
 
 
-UNITS = {"Mean temperature": "°C", "Annual rainfall": "mm"}   # the others are days per year
+UNITS = {"tmean": "°C", "rr": "mm"}   # the others are days per year
 
 
 def shifted(daily: pd.DataFrame, patterns: pd.DataFrame, delta: float) -> pd.DataFrame:
@@ -159,7 +160,7 @@ def shifted(daily: pd.DataFrame, patterns: pd.DataFrame, delta: float) -> pd.Dat
 def project_city(daily: pd.DataFrame, valid_years: list[int], patterns: pd.DataFrame, th: dict,
                  old: tuple[int, int], recent: tuple[int, int]) -> pd.DataFrame:
     """Indicators of one city: observed in `old` and `recent`, then at each TRACC level (min, median and max of the
-    models). Columns: indicator, period, low, median, high."""
+    models). Columns: indicator (code), period ("1961-1990", "2011-2025", then the TRACC year), low, median, high."""
     years = pd.to_datetime(daily["date"]).dt.year
     base = daily[years.isin(valid_years).to_numpy()]
     b_years = pd.to_datetime(base["date"]).dt.year

@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from meteo.wind import MIN_COVERAGE, MIN_YEARS, STORM_KMH, gust_records, storm_trends, storm_years
-from ui import END, HEAT, START, chart, is_dark, num, pvalue, signed, table
+from ui import END, HEAT, START, chart, date_text, is_dark, listing, num, number, pct, pvalue, signed, styled, t, table
 
 
 @st.cache_data(show_spinner=False)
@@ -20,11 +20,11 @@ def _records():
 
 
 def wind_panel() -> None:
-    st.subheader("Storms and gusts")
+    st.subheader(t("wind.title"))
     y = _years()
     valid = y[y["valid"] & y["year"].between(START, END)].copy()
     if valid.empty:
-        st.info("No gust measurements.")
+        st.info(t("wind.none"))
         return
     valid["decade"] = valid["year"] // 10 * 10
     # A decade is shown when at least 8 of its years have gusts measured on most days
@@ -33,8 +33,8 @@ def wind_panel() -> None:
     pv.columns = [f"{max(c, START)}-{str(min(c + 9, END))[2:]}" for c in pv.columns]
     pv = pv.loc[pv.mean(axis=1).sort_values().index]
     fig = go.Figure(go.Heatmap(z=pv.values, x=pv.columns, y=pv.index, colorscale=HEAT, xgap=2, ygap=2,
-                               colorbar=dict(title=dict(text="days/yr", side="top"), thickness=12),
-                               hovertemplate="<b>%{y}</b>, %{x}: %{z:.1f} storm days per year<extra></extra>"))
+                               colorbar=dict(title=dict(text=t("extremes.unit_short"), side="top"), thickness=12),
+                               meta={"row": t("common.city")}, hovertemplate=t("wind.heat_hover")))
     vals = pv.to_numpy(dtype=float)
     lo, hi = np.nanmin(vals), np.nanmax(vals)
     frac = (vals - lo) / (hi - lo) if hi > lo else np.zeros_like(vals)
@@ -47,34 +47,31 @@ def wind_panel() -> None:
     fig.update_layout(xaxis=dict(side="top", showline=False, type="category", showgrid=False),
                       yaxis=dict(showline=False, type="category", showgrid=False))
     missing = sorted(set(table("ref_station")["city"]) - set(pv.index))
-    chart(fig, 620, f"Storm days: strongest gust ≥ {num(STORM_KMH, 0)} km/h",
-          "Average number of days per year, by decade · a blank cell: gusts missing on too many days"
-          + (f" · no gust series: {', '.join(missing)}" if missing else ""), margin=dict(l=120, t=40))
+    chart(fig, 620, t("wind.heat_title", kmh=num(STORM_KMH, 0)),
+          t("wind.heat_sub") + (t("wind.heat_missing", cities=listing(missing)) if missing else ""),
+          margin=dict(l=120, t=40))
 
     tr = storm_trends(y[y["year"].between(START, END)])
     left, right = st.columns([1.15, 1], gap="large")
     with left:
-        st.markdown("**Are storms more frequent?** Trend of storm days per city")
+        st.markdown(t("wind.trend_title"))
         tr = tr.sort_values("mean_days", ascending=False)
-        tr["trend"] = [f"{signed(s, 2)} days/yr per decade" if np.isfinite(s) else "too few years" for s in tr["slope"]]
-        tr["test"] = [f"{pvalue(p)} · {'significant' if sig else 'not significant'}" if np.isfinite(p) else ""
-                      for p, sig in zip(tr["mk_p_value"], tr["significant"], strict=True)]
-        st.dataframe(tr[["city", "mean_days", "trend", "test", "first_year", "n_years"]], hide_index=True, height=400,
-                     column_config={"city": "City",
-                                    "mean_days": st.column_config.NumberColumn("Storm days/yr", format="%.1f"),
-                                    "trend": "Trend", "test": st.column_config.TextColumn(
-                                        "Mann-Kendall", help="Significant = regression and Mann-Kendall both p < 0.05"),
-                                    "first_year": st.column_config.NumberColumn("From", format="%d"),
-                                    "n_years": st.column_config.NumberColumn("Years", format="%d")})
+        tr["trend"] = [t("wind.trend_value", slope=signed(s, 2)) if np.isfinite(s) else t("common.too_few_years")
+                       for s in tr["slope"]]
+        tr["test"] = [f"{pvalue(p)} · {t('common.significant') if sig else t('common.not_significant')}"
+                      if np.isfinite(p) else "" for p, sig in zip(tr["mk_p_value"], tr["significant"], strict=True)]
+        view = tr[["city", "mean_days", "trend", "test", "first_year", "n_years"]]
+        st.dataframe(styled(view, {"mean_days": number(1)}), hide_index=True, height=400,
+                     column_config={"city": t("common.city"), "mean_days": t("wind.col_days"),
+                                    "trend": t("wind.col_trend"), "test": st.column_config.TextColumn(
+                                        "Mann-Kendall", help=t("wind.col_test_help")),
+                                    "first_year": st.column_config.NumberColumn(t("wind.col_from"), format="%d"),
+                                    "n_years": st.column_config.NumberColumn(t("wind.col_years"), format="%d")})
         n_up = int(((tr["slope"] > 0) & tr["significant"]).sum())
         n_down = int(((tr["slope"] < 0) & tr["significant"]).sum())
-        st.caption(f"Significant rise in {n_up} cities, significant fall in {n_down}. Years count when gusts were "
-                   f"measured on at least {num(MIN_COVERAGE * 100, 0)}% of their days; a trend needs {MIN_YEARS} "
-                   "such years. Anemometers and their sites changed over the decades: a trend can come from a "
-                   "change of instrument as much as from the climate.")
+        st.caption(t("wind.trend_caption", up=n_up, down=n_down, coverage=pct(MIN_COVERAGE), years=MIN_YEARS))
     with right:
-        st.markdown("**Strongest gust ever recorded**, by city")
+        st.markdown(t("wind.records_title"))
         rec = _records()
-        st.dataframe(rec, hide_index=True, height=400, column_config={
-            "city": "City", "date": st.column_config.DateColumn("Date", format="D MMM YYYY"),
-            "gust_kmh": st.column_config.NumberColumn("Gust", format="%d km/h")})
+        st.dataframe(styled(rec, {"date": date_text(), "gust_kmh": number(0, "km/h")}), hide_index=True, height=400,
+                     column_config={"city": t("common.city"), "date": t("common.date"), "gust_kmh": t("wind.col_gust")})

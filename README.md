@@ -47,7 +47,7 @@ a single self-contained file, to download (GitHub shows its source) and open in 
 | **Exploratory machine learning**: PCA + k-means, choice of k by silhouette | [meteo/analysis.py](meteo/analysis.py) |
 | **Cross-validation** against an independent source (ERA5 reanalysis) | [meteo/era5.py](meteo/era5.py) |
 | **Data visualisation**: colour-blind-safe palette, one idea per chart | [reports/figures/](reports/figures/) |
-| **Dashboard**: 10 interactive pages, including a pivot table built from a whitelisted catalog (no SQL from the client, bound parameters, totals with `GROUPING SETS`) and a projection of the coming days from past data alone, checked out of sample; light or dark following the device's setting, with a dark palette checked for contrast and colour blindness; on a touch screen one finger scrolls past the charts and maps, two fingers zoom or move them; every page's choices are kept in its address, so a link opens the same view | [dashboard/](dashboard/), [meteo/pivot.py](meteo/pivot.py), [meteo/projection.py](meteo/projection.py), [meteo/palette.py](meteo/palette.py) |
+| **Dashboard**: 10 interactive pages, including a pivot table built from a whitelisted catalog (no SQL from the client, bound parameters, totals with `GROUPING SETS`) and a projection of the coming days from past data alone, checked out of sample; light or dark following the device's setting, with a dark palette checked for contrast and colour blindness; on a touch screen one finger scrolls past the charts and maps, two fingers zoom or move them; every page's choices are kept in its address, so a link opens the same view; **in English or French** (the browser's language by default, numbers and dates included: 12,5 °C, 17 nov. 2026), with the text in one catalog per language; **the data behind every chart downloads as CSV** (source and licence in the file), and phones can save a chart as an image | [dashboard/](dashboard/), [meteo/pivot.py](meteo/pivot.py), [meteo/projection.py](meteo/projection.py), [meteo/palette.py](meteo/palette.py), [meteo/i18n.py](meteo/i18n.py), [meteo/locales/](meteo/locales/) |
 | **Geospatial data**: GPX/KML/GeoJSON parsing (safe XML), routing on OpenStreetMap, resampling, elevation, bearings, time interpolation, head/tail wind, nearby routes from public APIs | [meteo/gps.py](meteo/gps.py), [meteo/routing.py](meteo/routing.py), [meteo/route_weather.py](meteo/route_weather.py), [meteo/geotrek.py](meteo/geotrek.py) |
 | **Explainable scoring**: danger and comfort indices from documented, per-activity thresholds (piecewise linear, combined as independent risks, time-weighted), rule-based advice | [meteo/route_scores.py](meteo/route_scores.py) |
 | **Software quality**: externalised configuration, automated tests, `ruff` lint, pipeline reproducible in one command | [tests/](tests/), [config.yaml](config.yaml) |
@@ -128,6 +128,14 @@ docker run -p 8080:8080 ghcr.io/elliotgalaor/meteoreading:latest
 ```
 
 ## The dashboard
+
+Every page reads in English or French: the sidebar switches language without losing the page or its choices, and
+a link with `?lang=fr` opens the French version. The text lives in [meteo/locales/en.toml](meteo/locales/en.toml) and
+[meteo/locales/fr.toml](meteo/locales/fr.toml) under the same keys (a test checks the keys and their placeholders);
+[meteo/i18n.py](meteo/i18n.py) formats numbers and dates in each language (decimal comma, "1er mai", French spacing
+before colons). Under each chart, **Download data (CSV)** gives the values drawn, named with their units, with the
+title, source, licence and the page's link at the top of the file (semicolons and decimal commas in French, as
+French spreadsheets expect); on a phone, **Save image** replaces Plotly's hidden toolbar.
 
 | Page | Content |
 |---|---|
@@ -312,6 +320,7 @@ MeteoReading/
 │   ├── links.py           # a track from a link (Geotrek, OpenStreetMap, open-data files)
 │   ├── route_scores.py    # danger and comfort scores, advice
 │   ├── viz.py, palette.py # static charts
+│   ├── i18n.py, locales/  # the dashboard's two languages: en.toml and fr.toml, numbers and dates
 │   └── report.py, fmt.py  # HTML report
 ├── sql/                   # transformations (01 → 04) and example queries
 ├── dashboard/             # Streamlit app

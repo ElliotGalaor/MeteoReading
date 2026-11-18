@@ -12,6 +12,7 @@ import numpy as np
 
 from .download import make_session
 from .gps import Track, build_track, resample_path
+from .i18n import t
 
 OSRM_SERVERS = {
     "Walking": "https://routing.openstreetmap.de/routed-foot",
@@ -36,7 +37,7 @@ def waypoints_from_drawings(drawings: list[dict] | None) -> list[tuple[float, fl
 def parse_osrm(payload: dict) -> tuple[list[tuple[float, float]], float, float]:
     """OSRM /route response -> ((lat, lon) path, distance in km, duration in hours)."""
     if payload.get("code") != "Ok" or not payload.get("routes"):
-        raise RuntimeError(f"No route found ({payload.get('message') or payload.get('code')})")
+        raise RuntimeError(t("err.no_route", reason=payload.get("message") or payload.get("code")))
     route = payload["routes"][0]
     path = [(lat, lon) for lon, lat in route["geometry"]["coordinates"]]
     return path, route["distance"] / 1000, route["duration"] / 3600
@@ -45,13 +46,13 @@ def parse_osrm(payload: dict) -> tuple[list[tuple[float, float]], float, float]:
 def route_path(waypoints: list[tuple[float, float]], activity: str, session=None) -> list[tuple[float, float]]:
     """Path following roads/paths through the waypoints, for a walking, cycling or driving profile."""
     if len(waypoints) > MAX_WAYPOINTS:
-        raise ValueError(f"Too many waypoints ({len(waypoints)}, maximum {MAX_WAYPOINTS})")
+        raise ValueError(t("err.waypoints", n=len(waypoints), max=MAX_WAYPOINTS))
     session = session or make_session()
     coords = ";".join(f"{lon:.6f},{lat:.6f}" for lat, lon in waypoints)
     resp = session.get(f"{OSRM_SERVERS[activity]}/route/v1/driving/{coords}",
                        params={"overview": "full", "geometries": "geojson"}, timeout=30)
     if resp.status_code != 200:
-        raise RuntimeError(f"Routing service error ({resp.status_code})")
+        raise RuntimeError(t("err.routing", status=resp.status_code))
     path, _, _ = parse_osrm(resp.json())
     return path
 
@@ -65,7 +66,7 @@ def fetch_elevation(lat, lon, session=None, batch: int = 100) -> list[float]:
             "latitude": ",".join(f"{v:.5f}" for v in lat[i:i + batch]),
             "longitude": ",".join(f"{v:.5f}" for v in lon[i:i + batch])})
         if resp.status_code != 200:
-            raise RuntimeError(f"Elevation service error ({resp.status_code})")
+            raise RuntimeError(t("err.elevation", status=resp.status_code))
         out += resp.json()["elevation"]
     return out
 
@@ -90,7 +91,7 @@ def track_from_waypoints(waypoints: list[tuple[float, float]], activity: str = "
     If the routing service fails, the waypoints are joined by straight lines instead.
     """
     if len(waypoints) < 2:
-        raise ValueError("Click at least two points on the map")
+        raise ValueError(t("err.two_clicks"))
     session = session or make_session()
     routed = False
     path = waypoints

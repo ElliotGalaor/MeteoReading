@@ -17,8 +17,10 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
-MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-SEASONS = ["Winter", "Spring", "Summer", "Autumn"]
+from .fmt import num
+from .i18n import month_name, t
+
+SEASONS = ["Winter", "Spring", "Summer", "Autumn"]   # codes, named t("season.Winter")…
 TEMP_AGGS = ("Mean", "Median", "Min", "Max", "Std dev", "Count")
 AMOUNT_AGGS = ("Mean", "Median", "Min", "Max", "Sum", "Std dev", "Count")
 AGGREGATIONS = {"Mean": "avg({})", "Median": "median({})", "Min": "min({})", "Max": "max({})", "Sum": "sum({})",
@@ -27,14 +29,14 @@ MAX_CELLS = 20_000
 # The cap is on the cells, not on the totals: with at most MAX_CELLS cells, totals add at most one per row and
 # column, plus the grand total, so a complete answer has fewer rows than this
 ROW_LIMIT = 2 * MAX_CELLS + 2
-TOTAL = "Total"
+TOTAL = "Total"   # the same word in English and French
 
 
 @dataclass(frozen=True)
 class Dimension:
     label: str
     sql: str                                   # expression on the dataset's table, sorting in the natural order
-    labels: Callable[[object], str] | None = None   # how a value is shown (month 1 -> "Jan")
+    labels: Callable[[object], str] | None = None   # how a value is shown (month 1 -> "Jan" / "janv.")
     filterable: bool = False                   # offered as a filter (a category with few values)
     season_sql: str | None = None              # expression used when the season is also picked (winter year)
 
@@ -88,16 +90,22 @@ class PivotResult:
 
 
 # --- Catalog ---------------------------------------------------------------------------------
+# The labels are read from the language catalogs (meteo/locales) when datasets() is called: the dashboard builds the
+# catalog in the visitor's language; the keys (dataset, dimension, measure, aggregation) never change.
 def _city() -> Dimension:
-    return Dimension("City", "city", filterable=True)
+    return Dimension(t("pivot.dim_city"), "city", filterable=True)
 
 
 def _dep() -> Dimension:
-    return Dimension("Département", "dep", filterable=True)
+    return Dimension(t("pivot.dim_dep"), "dep", filterable=True)
+
+
+def _decade_label(v) -> str:
+    return t("pivot.decade_label", decade=int(v))
 
 
 def _decade(year: str, season_year: str | None = None) -> Dimension:
-    return Dimension("Decade", f"({year}) // 10 * 10", labels=lambda v: f"{int(v)}s",
+    return Dimension(t("pivot.dim_decade"), f"({year}) // 10 * 10", labels=_decade_label,
                      season_sql=f"({season_year}) // 10 * 10" if season_year else None)
 
 
@@ -107,21 +115,21 @@ def _season_year(year: str, month: str) -> str:
 
 
 def _month(month: str) -> Dimension:
-    return Dimension("Month", month, labels=lambda v: MONTHS[int(v) - 1])
+    return Dimension(t("pivot.dim_month"), month, labels=lambda v: month_name(int(v), short=True))
 
 
 def _season(month: str) -> Dimension:
     """Meteorological seasons: winter is December, January and February."""
     sql = (f"CASE WHEN {month} IN (12, 1, 2) THEN 1 WHEN {month} IN (3, 4, 5) THEN 2 "
            f"WHEN {month} IN (6, 7, 8) THEN 3 ELSE 4 END")
-    return Dimension("Season", sql, labels=lambda v: SEASONS[int(v) - 1])
+    return Dimension(t("pivot.dim_season"), sql, labels=lambda v: t(f"season.{SEASONS[int(v) - 1]}"))
 
 
 def _calendar(year: str, month: str | None) -> dict[str, Dimension]:
     if not month:
-        return {"year": Dimension("Year", year), "decade": _decade(year)}
+        return {"year": Dimension(t("pivot.dim_year"), year), "decade": _decade(year)}
     sy = _season_year(year, month)
-    return {"year": Dimension("Year", year, season_sql=sy), "decade": _decade(year, sy),
+    return {"year": Dimension(t("pivot.dim_year"), year, season_sql=sy), "decade": _decade(year, sy),
             "season": _season(month), "month": _month(month)}
 
 
@@ -129,118 +137,113 @@ CITY_SPAN = "SELECT min(date), max(date) FROM city_daily"   # the city tables ar
 
 
 def datasets(th: dict | None = None) -> dict[str, Dataset]:
-    """The catalog; `th` holds the thresholds of config.yaml, used in the labels of the indicators."""
+    """The catalog, in the current language; `th` holds the thresholds of config.yaml, used in the labels of the
+    indicators."""
     th = {"hot_day": 30, "very_hot_day": 35, "tropical_night": 20, "frost_day": 0, "rain_day": 1, "heavy_rain": 20,
           "heatwave_min_days": 3} | (th or {})
+    days_unit = t("common.days_unit")
 
-    def temp(label: str, col: str, valid: str | None = None, **kw) -> Measure:
+    def temp(key: str, col: str, valid: str | None = None, **kw) -> Measure:
         sql = f"CASE WHEN {valid} THEN {col} END" if valid else col
-        return Measure(label, sql, "°C", scale="heat", **kw)
+        return Measure(t(f"pivot.m_{key}", **th), sql, "°C", scale="heat", **kw)
 
-    def rain(label: str, col: str, valid: str | None = None, **kw) -> Measure:
+    def rain(key: str, col: str, valid: str | None = None, **kw) -> Measure:
         sql = f"CASE WHEN {valid} THEN {col} END" if valid else col
-        return Measure(label, sql, "mm", aggs=AMOUNT_AGGS, **kw)
+        return Measure(t(f"pivot.m_{key}", **th), sql, "mm", aggs=AMOUNT_AGGS, **kw)
 
-    def days(label: str, col: str, valid: str, scale: str = "blue", **kw) -> Measure:
-        return Measure(label, f"CASE WHEN {valid} THEN {col} END", "days", aggs=AMOUNT_AGGS, scale=scale, **kw)
+    def days(key: str, col: str, valid: str, scale: str = "blue", **kw) -> Measure:
+        return Measure(t(f"pivot.m_{key}", **th), f"CASE WHEN {valid} THEN {col} END", days_unit, aggs=AMOUNT_AGGS,
+                       scale=scale, **kw)
 
     return {
         "yearly": Dataset(
-            "Yearly indicators by city", "city_yearly",
-            "One row per city and per year. Incomplete years are left out of each measure.",
+            t("pivot.ds_yearly"), "city_yearly", t("pivot.ds_yearly_desc"),
             {"city": _city()} | _calendar("year", None),
             {
-                "tmean": temp("Mean temperature", "tmean", "valid_temp"),
-                "tx_max": temp("Hottest day (TX max)", "tx_max", "valid_temp", agg="Max"),
-                "tn_min": temp("Coldest night (TN min)", "tn_min", "valid_temp", agg="Min"),
-                "rr": rain("Annual rainfall", "rr", "valid_rain", decimals=0),
-                "hot_days": days(f"Hot days (TX ≥ {th['hot_day']} °C)", "hot_days", "valid_temp", "heat"),
-                "very_hot_days": days(f"Very hot days (TX ≥ {th['very_hot_day']} °C)", "very_hot_days", "valid_temp",
-                                      "heat"),
-                "tropical_nights": days(f"Tropical nights (TN ≥ {th['tropical_night']} °C)", "tropical_nights",
-                                        "valid_temp", "heat"),
-                "frost_days": days(f"Frost days (TN < {th['frost_day']} °C)", "frost_days", "valid_temp"),
-                "rain_days": days(f"Rain days (RR ≥ {th['rain_day']} mm)", "rain_days", "valid_rain"),
-                "heavy_rain_days": days(f"Heavy rain days (RR ≥ {th['heavy_rain']} mm)", "heavy_rain_days",
-                                        "valid_rain"),
-                "longest_dry_spell": days("Longest dry spell", "longest_dry_spell", "valid_rain", agg="Max"),
-                "heatwave_days": days("Heatwave days", "heatwave_days", "valid_temp", "heat"),
+                "tmean": temp("mean_temp", "tmean", "valid_temp"),
+                "tx_max": temp("hottest_day", "tx_max", "valid_temp", agg="Max"),
+                "tn_min": temp("coldest_night", "tn_min", "valid_temp", agg="Min"),
+                "rr": rain("annual_rain", "rr", "valid_rain", decimals=0),
+                "hot_days": days("hot_days", "hot_days", "valid_temp", "heat"),
+                "very_hot_days": days("very_hot_days", "very_hot_days", "valid_temp", "heat"),
+                "tropical_nights": days("tropical_nights", "tropical_nights", "valid_temp", "heat"),
+                "frost_days": days("frost_days", "frost_days", "valid_temp"),
+                "rain_days": days("rain_days", "rain_days", "valid_rain"),
+                "heavy_rain_days": days("heavy_rain_days", "heavy_rain_days", "valid_rain"),
+                "longest_dry_spell": days("longest_dry", "longest_dry_spell", "valid_rain", agg="Max"),
+                "heatwave_days": days("heatwave_days", "heatwave_days", "valid_temp", "heat"),
             },
-            year_sql="year", span_sql=CITY_SPAN, row_name="years",
+            year_sql="year", span_sql=CITY_SPAN, row_name=t("pivot.rows_years"),
         ),
         "monthly": Dataset(
-            "Monthly values by city", "city_monthly",
-            "One row per city and per month. Incomplete months are left out of each measure.",
+            t("pivot.ds_monthly"), "city_monthly", t("pivot.ds_monthly_desc"),
             {"city": _city()} | _calendar("year", "month"),
             {
-                "tmean": temp("Mean temperature", "tmean", "valid_temp"),
-                "tn": temp("Mean minimum temperature", "tn", "valid_temp"),
-                "tx": temp("Mean maximum temperature", "tx", "valid_temp"),
-                "rr": rain("Monthly rainfall", "rr", "valid_rain", decimals=0),
-                "rain_days": days(f"Rain days (RR ≥ {th['rain_day']} mm)", "rain_days", "valid_rain"),
+                "tmean": temp("mean_temp", "tmean", "valid_temp"),
+                "tn": temp("mean_min", "tn", "valid_temp"),
+                "tx": temp("mean_max", "tx", "valid_temp"),
+                "rr": rain("monthly_rain", "rr", "valid_rain", decimals=0),
+                "rain_days": days("rain_days", "rain_days", "valid_rain"),
             },
-            year_sql="year", season_year_sql=_season_year("year", "month"), span_sql=CITY_SPAN, row_name="months",
+            year_sql="year", season_year_sql=_season_year("year", "month"), span_sql=CITY_SPAN,
+            row_name=t("pivot.rows_months"),
         ),
         "daily": Dataset(
-            "Daily values by city", "city_daily",
-            "One row per city and per day (about 550,000 rows).",
+            t("pivot.ds_daily"), "city_daily", t("pivot.ds_daily_desc"),
             {"city": _city()} | _calendar("year(date)", "month(date)"),
             {
-                "tmean": temp("Mean temperature", "tmean"),
-                "tn": temp("Minimum temperature", "tn"),
-                "tx": temp("Maximum temperature", "tx"),
-                "rr": rain("Daily rainfall", "rr"),
+                "tmean": temp("mean_temp", "tmean"),
+                "tn": temp("min_temp", "tn"),
+                "tx": temp("max_temp", "tx"),
+                "rr": rain("daily_rain", "rr"),
                 # Stored in m/s by Météo-France, shown in km/h like the rest of the site
-                "ffm": Measure("Mean wind speed", "3.6 * ffm", "km/h", decimals=0),
-                "fxi": Measure("Strongest gust", "3.6 * fxi", "km/h", agg="Max", decimals=0),
+                "ffm": Measure(t("pivot.m_mean_wind"), "3.6 * ffm", "km/h", decimals=0),
+                "fxi": Measure(t("pivot.m_gust"), "3.6 * fxi", "km/h", agg="Max", decimals=0),
             },
             year_sql="year(date)", season_year_sql=_season_year("year(date)", "month(date)"), span_sql=CITY_SPAN,
-            row_name="days",
+            row_name=t("pivot.rows_days"),
         ),
         "heatwaves": Dataset(
-            "Heatwaves", "city_heatwaves",
-            f"One row per heat episode: at least {th['heatwave_min_days']} consecutive days with "
-            f"TX ≥ {th['hot_day']} °C, dated by its first day.",
+            t("pivot.ds_heatwaves"), "city_heatwaves", t("pivot.ds_heatwaves_desc", **th),
             {"city": _city()} | _calendar("year(start_date)", "month(start_date)"),
             {
-                "episodes": Measure("Number of heatwaves", "start_date", "episodes", agg="Count", aggs=("Count",),
-                                    decimals=0, scale="heat"),
-                "n_days": Measure("Length", "n_days", "days", aggs=AMOUNT_AGGS, scale="heat"),
-                "tx_peak": temp("Peak temperature", "tx_peak", agg="Max"),
+                "episodes": Measure(t("pivot.m_n_heatwaves"), "start_date", t("pivot.unit_episodes"), agg="Count",
+                                    aggs=("Count",), decimals=0, scale="heat"),
+                "n_days": Measure(t("pivot.m_length"), "n_days", days_unit, aggs=AMOUNT_AGGS, scale="heat"),
+                "tx_peak": temp("peak", "tx_peak", agg="Max"),
             },
             year_sql="year(start_date)", season_year_sql=_season_year("year(start_date)", "month(start_date)"),
-            span_sql=CITY_SPAN, row_name="heatwaves",
+            span_sql=CITY_SPAN, row_name=t("pivot.rows_heatwaves"),
         ),
         "stations": Dataset(
-            "Weather stations", "dim_station",
-            "Every station of the downloaded départements, open or closed, with its completeness.",
+            t("pivot.ds_stations"), "dim_station", t("pivot.ds_stations_desc"),
             {"dep": _dep(),
-             "altitude": Dimension("Altitude", "altitude // 250 * 250", labels=lambda v: f"{int(v)}-{int(v) + 249} m"),
-             "opened": Dimension("First record (decade)", "year(first_date) // 10 * 10", labels=lambda v: f"{int(v)}s"),
-             "closed": Dimension("Last record (decade)", "year(last_date) // 10 * 10", labels=lambda v: f"{int(v)}s")},
+             "altitude": Dimension(t("pivot.dim_altitude"), "altitude // 250 * 250",
+                                   labels=lambda v: f"{int(v)}-{int(v) + 249} m"),
+             "opened": Dimension(t("pivot.dim_opened"), "year(first_date) // 10 * 10", labels=_decade_label),
+             "closed": Dimension(t("pivot.dim_closed"), "year(last_date) // 10 * 10", labels=_decade_label)},
             {
-                "stations": Measure("Number of stations", "station_id", "stations", agg="Count", aggs=("Count",),
-                                    decimals=0),
-                "altitude": Measure("Altitude", "altitude", "m", decimals=0),
-                "completeness_temp": Measure("Temperature completeness", "100 * completeness_temp", "%", decimals=0),
-                "n_rows": Measure("Daily records", "n_rows", "rows", agg="Sum", aggs=AMOUNT_AGGS, decimals=0),
+                "stations": Measure(t("pivot.m_n_stations"), "station_id", t("pivot.unit_stations"), agg="Count",
+                                    aggs=("Count",), decimals=0),
+                "altitude": Measure(t("pivot.m_altitude"), "altitude", "m", decimals=0),
+                "completeness_temp": Measure(t("pivot.m_completeness"), "100 * completeness_temp", "%", decimals=0),
+                "n_rows": Measure(t("pivot.m_daily_records"), "n_rows", t("pivot.unit_rows"), agg="Sum",
+                                  aggs=AMOUNT_AGGS, decimals=0),
             },
-            row_name="stations",
+            row_name=t("pivot.rows_stations"),
         ),
         "records": Dataset(
-            "All daily records (25 million rows)", "obs_daily",
-            "Every validated daily record of every station, by département: DuckDB aggregates the 25 million rows "
-            "in well under a second.",
+            t("pivot.ds_records"), "obs_daily", t("pivot.ds_records_desc"),
             {"dep": _dep()} | _calendar("year(date)", "month(date)"),
             {
-                "tn": temp("Minimum temperature", "tn"),
-                "tx": temp("Maximum temperature", "tx"),
-                "tm": temp("Mean temperature", "tm"),
-                "rr": rain("Daily rainfall", "rr"),
-                "fxi": Measure("Strongest gust", "3.6 * fxi", "km/h", agg="Max", decimals=0),
+                "tn": temp("min_temp", "tn"),
+                "tx": temp("max_temp", "tx"),
+                "tm": temp("mean_temp", "tm"),
+                "rr": rain("daily_rain", "rr"),
+                "fxi": Measure(t("pivot.m_gust"), "3.6 * fxi", "km/h", agg="Max", decimals=0),
             },
             year_sql="year(date)", season_year_sql=_season_year("year(date)", "month(date)"),
-            span_sql="SELECT min(date), max(date) FROM obs_daily", row_name="daily records",
+            span_sql="SELECT min(date), max(date) FROM obs_daily", row_name=t("pivot.rows_records"),
         ),
     }
 
@@ -251,7 +254,7 @@ DATASETS = datasets()
 # --- Query -------------------------------------------------------------------------------------
 def _pick(options: dict, key, what: str):
     if not isinstance(key, str) or key not in options:
-        raise ValueError(f"Unknown {what}: {key!r}")
+        raise ValueError(t("pivot.err_unknown", what=t(f"pivot.what_{what}"), key=repr(key)))
     return options[key]
 
 
@@ -259,29 +262,30 @@ def build_query(spec: PivotSpec, catalog: dict[str, Dataset] = DATASETS) -> tupl
     """SQL text made only of catalog fragments, and the values to bind to its ? placeholders."""
     ds = _pick(catalog, spec.dataset, "dataset")
     if not 1 <= len(spec.rows) <= 2:
-        raise ValueError("Pick one or two dimensions for the rows")
+        raise ValueError(t("pivot.err_rows"))
     keys = [*spec.rows] + ([spec.column] if spec.column else [])
     if len(set(keys)) != len(keys):
-        raise ValueError("A dimension can only be used once")
+        raise ValueError(t("pivot.err_twice"))
     # With the season, the year and decade are those of the season (December goes with the next winter)
     season = "season" in keys
     dims = [_pick(ds.dimensions, k, "dimension") for k in keys]
     exprs = [d.season_sql if season and d.season_sql else d.sql for d in dims]
     measure = _pick(ds.measures, spec.measure, "measure")
     if spec.agg not in measure.aggs:
-        raise ValueError(f"{spec.agg!r} does not apply to {measure.label}: choose one of {', '.join(measure.aggs)}")
+        raise ValueError(t("pivot.err_agg", agg=repr(spec.agg), measure=measure.label,
+                           aggs=", ".join(t(f"pivot.agg_{a}") for a in measure.aggs)))
 
     where, params = [], []
     for key, values in spec.filters.items():
         dim = _pick(ds.dimensions, key, "filter")
         if not dim.filterable:
-            raise ValueError(f"{dim.label} cannot be filtered")
+            raise ValueError(t("pivot.err_filter", dim=dim.label))
         if values:
             where.append(f"{dim.sql} IN ({', '.join('?' for _ in values)})")
             params.extend(str(v) for v in values)
     if spec.years:
         if ds.year_sql is None:
-            raise ValueError(f"{ds.label} has no year to filter on")
+            raise ValueError(t("pivot.err_years", dataset=ds.label))
         lo, hi = (int(y) for y in spec.years)   # anything that is not a number stops here
         year_sql = ds.season_year_sql if season and ds.season_year_sql else ds.year_sql
         where.append(f"{year_sql} BETWEEN ? AND ?")
@@ -326,7 +330,7 @@ def run_pivot(con, spec: PivotSpec, catalog: dict[str, Dataset] = DATASETS) -> P
     elapsed = time.perf_counter() - t0
     cells = int((long.filter(regex=r"^g\d+$") == 0).all(axis=1).sum())
     if len(long) >= ROW_LIMIT or cells > MAX_CELLS:
-        raise ValueError(f"More than {MAX_CELLS:,} cells: add a filter or choose broader dimensions")
+        raise ValueError(t("pivot.err_cells", cells=num(MAX_CELLS, 0)))
     ds = catalog[spec.dataset]
     measure = ds.measures[spec.measure]
     keys = [*spec.rows] + ([spec.column] if spec.column else [])
@@ -347,7 +351,8 @@ def run_pivot(con, spec: PivotSpec, catalog: dict[str, Dataset] = DATASETS) -> P
         table.columns = [str(c) for c in table.columns]
         table = table.reset_index()
     else:
-        name = measure.label if measure.label not in row_labels else f"{measure.label} · {spec.agg.lower()}"
+        name = (measure.label if measure.label not in row_labels
+                else f"{measure.label} · {t(f'pivot.agg_{spec.agg}').lower()}")
         table = frame[row_labels + ["value"]].rename(columns={"value": name})
     for name in row_labels:
         table[name] = table[name].astype(str)
@@ -358,7 +363,7 @@ def filter_values(con, dataset: str, key: str, catalog: dict[str, Dataset] = DAT
     """Values offered for a filter (the query only uses catalog fragments)."""
     dim = _pick(_pick(catalog, dataset, "dataset").dimensions, key, "filter")
     if not dim.filterable:
-        raise ValueError(f"{dim.label} cannot be filtered")
+        raise ValueError(t("pivot.err_filter", dim=dim.label))
     rows = con.execute(f"SELECT DISTINCT {dim.sql} FROM {catalog[dataset].table} WHERE {dim.sql} IS NOT NULL ORDER BY 1")
     return [str(r[0]) for r in rows.fetchall()]
 

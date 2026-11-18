@@ -5,6 +5,8 @@
 - `publish` after the widgets: the current choices are written to the address, so copying it shares them. Only
   public values go there (cities, years, sample names, public route links): never an uploaded or drawn track.
 - `copy_link` is the "Copy link" button of the page header.
+
+The language (`lang`, dashboard/language.py) belongs to every page: `publish` leaves it in the address.
 """
 from __future__ import annotations
 
@@ -13,6 +15,9 @@ from typing import Any
 
 import streamlit as st
 
+from meteo.i18n import t
+
+KEEP = {"lang"}   # parameters of every page
 COPY_LINK = """
 <style>
   [data-testid="stElementContainer"]:has(#copy-link) { margin-top: -0.9rem; margin-bottom: -0.4rem; }
@@ -20,16 +25,16 @@ COPY_LINK = """
                border: 1px solid rgba(128,128,128,0.35); background: transparent; color: inherit; opacity: 0.8; }
   #copy-link:hover { opacity: 1; }
 </style>
-<button id="copy-link" type="button" title="Copy the address of this page with its current choices">Copy link</button>
+<button id="copy-link" type="button" title="%(tip)s">%(copy)s</button>
 <script>
 (() => {
   const b = document.getElementById("copy-link");
   if (!b || b.dataset.ready) return;
   b.dataset.ready = "1";
   b.addEventListener("click", async () => {
-    try { await navigator.clipboard.writeText(location.href); b.textContent = "Link copied"; }
-    catch (e) { window.prompt("Copy this link:", location.href); }
-    setTimeout(() => { b.textContent = "Copy link"; }, 2000);
+    try { await navigator.clipboard.writeText(location.href); b.textContent = %(copied)s; }
+    catch (e) { window.prompt(%(prompt)s, location.href); }
+    setTimeout(() => { b.textContent = %(copy_js)s; }, 2000);
   });
 })();
 </script>
@@ -69,6 +74,8 @@ def restore(key: str, name: str, default: Any = None, parse: Callable[[str], Any
 def publish(values: dict[str, Any]) -> None:
     """Writes the page's choices to the address; parameters of other pages are removed, None leaves one out."""
     for name in list(st.query_params):
+        if name in KEEP:
+            continue
         if name not in values or values[name] is None:
             del st.query_params[name]
             st.session_state.pop(_marker(name), None)
@@ -83,4 +90,8 @@ def publish(values: dict[str, Any]) -> None:
 
 
 def copy_link() -> None:
-    st.html(COPY_LINK, unsafe_allow_javascript=True)
+    import html
+    import json
+    st.html(COPY_LINK % {"tip": html.escape(t("share.copy_tip")), "copy": html.escape(t("share.copy")),
+                         "copied": json.dumps(t("share.copied")), "prompt": json.dumps(t("share.prompt")),
+                         "copy_js": json.dumps(t("share.copy"))}, unsafe_allow_javascript=True)
