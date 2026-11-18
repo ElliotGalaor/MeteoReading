@@ -11,6 +11,8 @@ tests
 docs
 deploy
 *.md
-# Results are rebuilt in the image, except the versioned ERA5 comparison
+# Results are rebuilt in the image, except the versioned inputs downloaded once: the ERA5 comparison and the
+# climate model patterns (both copied by the Dockerfile)
 reports
 !reports/tables/era5_validation.csv
+!reports/tables/climate_patterns.csv
