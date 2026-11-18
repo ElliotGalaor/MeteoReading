@@ -38,6 +38,7 @@ class Track:
     name: str
     points: pd.DataFrame  # lat, lon, ele (NaN if unknown), time (UTC, NaT if unknown), dist_km
     time_issue: str | None = None   # why the file's timestamps were not used, if it had some: missing / unordered
+    activity: str | None = None     # the activity its source gives (a Geotrek route's practice), if any
 
     @property
     def has_time(self) -> bool:

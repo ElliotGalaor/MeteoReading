@@ -123,6 +123,10 @@ def _temperature_chart(p: Projection, today: pd.Timestamp, city: str) -> None:
                         line=dict(color=colour, width=2), marker=dict(size=6, color=colour),
                         customdata=rec[f"{var}_normal"], meta={"csv": t("pred.csv_measured", name=name)},
                         hovertemplate=t("pred.hover_measured", name=name))
+        # The dashed line joins the last measurement to the first projected day, as the band does (no hover: the
+        # two points have their own; unnamed, so the CSV leaves it out)
+        fig.add_scatter(x=proj["date"].iloc[:2], y=proj[var].iloc[:2], mode="lines", showlegend=False,
+                        legendgroup=var, line=dict(color=colour, width=2, dash="dash"), hoverinfo="skip")
         fig.add_scatter(x=days["date"], y=days[var], mode="lines", showlegend=False, legendgroup=var,
                         line=dict(color=colour, width=2, dash="dash"), meta={"csv": t("pred.csv_projected", name=name)},
                         customdata=np.stack([days[f"{var}_low"], days[f"{var}_high"], days[f"{var}_normal"]], axis=1),

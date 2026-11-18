@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 from meteo.climate_ahead import LEVEL_NOW, nearest_region, patterns_from_daily, project_city, shifted
-from meteo.departure import best, read_plan, sweep, wind_aware
+from meteo.departure import best, best_window, read_plan, sweep, wind_aware
 from meteo.ensemble import spread
 from meteo.gps import build_track, sample_points, with_times
 from meteo.route_scores import OZONE_INFO, assess
@@ -137,6 +137,20 @@ def test_the_best_departure_is_the_reading_shown_once_chosen():
     a = assess(shown.points, "Cycling", "Europe/Paris")
     assert (a.danger.value, a.comfort.value) == (pick["danger"], pick["comfort"])
     assert read_plan(fetched, t, pd.Timestamp("2026-11-30 08:00", tz="Europe/Paris"), "Cycling", 20.0) is None
+
+
+def test_a_daylight_departure_beats_a_more_comfortable_one_in_the_dark():
+    """Darkness only adds a few danger points on foot: a mild evening must not win over a cool morning (#77)."""
+    starts = pd.date_range("2026-11-18 08:00", periods=5, freq="30min", tz="Europe/Paris").append(
+        pd.date_range("2026-11-18 19:00", periods=3, freq="30min", tz="Europe/Paris"))
+    sw = pd.DataFrame({"departure": starts, "danger": [10] * 5 + [15] * 3, "comfort": [40, 41, 42, 41, 40, 55, 56, 55],
+                       "dark_hours": [0.0] * 5 + [2.0] * 3})
+    pick = best(sw)
+    assert pick["departure"].hour == 9 and pick["comfort"] == 42
+    a, b = best_window(sw, pick)
+    assert a.hour == 8 and b.hour < 12                      # the window stays in the morning
+    night = sw[sw["dark_hours"] > 0]
+    assert best(night)["comfort"] == 56                      # with only night starts, the most comfortable of them
 
 
 # --- Air quality, official warnings, 15-minute rain ------------------------------------------------------

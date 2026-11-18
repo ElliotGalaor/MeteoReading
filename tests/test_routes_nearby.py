@@ -77,9 +77,15 @@ GPX = (b'<gpx xmlns="http://www.topografix.com/GPX/1/1"><trk><name>x</name><trks
 
 class LinkSession(OSMSession):
     def get(self, url, params=None, timeout=None, stream=False):
-        if url == "https://geotrek-admin.ecrins-parcnational.fr/api/v2/trek/995106/":
-            return Resp({"name": "10 - Vallon de la Buffe",
-                         "gpx": "https://geotrek-admin.ecrins-parcnational.fr/api/fr/treks/995106/a.gpx"})
+        api = "https://geotrek-admin.ecrins-parcnational.fr/api/v2"
+        if url == f"{api}/trek/995106/":     # a mountain-bike route of the Écrins
+            return Resp({"name": "10 - Vallon de la Buffe", "practice": 2,
+                         "gpx": f"{api.removesuffix('/v2')}/fr/treks/995106/a.gpx"})
+        if url == f"{api}/trek/996754/":     # a walk whose name says nothing of it
+            return Resp({"name": "Le vallon de Martignare", "practice": 4,
+                         "gpx": f"{api.removesuffix('/v2')}/fr/treks/996754/a.gpx"})
+        if url == f"{api}/trek_practice/":
+            return Resp({"results": [{"id": 2, "name": "VTT"}, {"id": 4, "name": "A pied"}]})
         if url.endswith("/a.kml"):
             return Resp(status=404)                     # Geotrek's KML is tried first; here only the GPX exists
         if url.endswith("/a.gpx") or url.endswith("boucle.gpx"):
@@ -92,6 +98,14 @@ class LinkSession(OSMSession):
 def test_geotrek_links(url):
     tracks = tracks_from_link(url, session=LinkSession())
     assert [t.name for t in tracks] == ["10 - Vallon de la Buffe"]
+
+
+def test_a_geotrek_link_gives_the_practice_the_site_publishes():
+    """The activity comes from the route's practice, not from a guess on its name (#75)."""
+    bike = tracks_from_link("https://rando.ecrins-parcnational.fr/trek/995106", session=LinkSession())[0]
+    walk = tracks_from_link("https://rando.ecrins-parcnational.fr/trek/996754", session=LinkSession())[0]
+    assert (bike.activity, walk.activity) == ("Cycling", "Walking")
+    assert tracks_from_link("https://www.openstreetmap.org/relation/7", session=LinkSession())[0].activity is None
 
 
 def test_osm_and_open_data_links():

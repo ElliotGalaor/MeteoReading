@@ -37,6 +37,18 @@ def daily(years=range(1951, 2001), city="X", amplitude=8.0, mean=13.0, trend=0.0
 
 
 # --- Records and the last weeks ------------------------------------------------------------------
+def test_climate_ahead_ranges_and_day_counts(monkeypatch):
+    """"(set by the warming level)" only for the mean temperature; a count's range that rounds to one number gets a
+    decimal; a count agrees with its number (#80, #82)."""
+    monkeypatch.syspath_prepend("dashboard")
+    import future_page
+    assert future_page._spread(0.0, 0.33, "days") == "(models: 0.0 to 0.3 days)"
+    assert future_page._spread(3.2, 9.4, "days") == "(models: 3 to 9 days)"
+    assert future_page._spread(0.0, 0.0, "days") == ""
+    assert future_page._spread(2.31, 2.34, "°C") == "(set by the warming level)"
+    assert (future_page._value(1.2, "days"), future_page._value(3, "days")) == ("1 day", "3 days")
+
+
 def test_day_of_year_leaves_out_29_february():
     d = pd.Series(pd.to_datetime(["2023-03-01", "2024-03-01", "2024-02-29", "2024-12-31"]))
     assert day_of_year(d).tolist()[:2] == [60, 60]

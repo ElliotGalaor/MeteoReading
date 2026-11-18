@@ -211,6 +211,20 @@ def test_summary_finds_rain_and_gusts():
     assert any("gusts" in i for i in insights)
 
 
+@pytest.mark.parametrize(("rain", "prob", "start"), [
+    (0.0, 5.0, "Dry all the way"),
+    (0.1, 92.0, "Light rain or snow possible"),     # under the rain threshold, but likely: not "dry" (#78)
+    (0.0, 60.0, "Light rain or snow possible"),
+])
+def test_dry_only_when_the_amount_and_the_probability_are_low(rain, prob, start):
+    t = parse_track(GPX, "ride.gpx")
+    samples = sample_points(t)
+    hourly = [_hourly(precipitation=np.full(48, rain), precipitation_probability=np.full(48, prob))
+              for _ in range(len(samples))]
+    _, insights = summarize(build_reading_table(samples, hourly, [200] * len(samples)), "Europe/Paris")
+    assert insights[0].startswith(start)
+
+
 class FakeSession:
     """Stands in for requests.Session: returns one location per requested coordinate.
 

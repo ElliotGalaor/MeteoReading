@@ -51,6 +51,7 @@ HOURLY = ["temperature_2m", "apparent_temperature", "precipitation", "precipitat
           # for the danger and comfort scores (route_scores.py); the archive has no probability, visibility or UV
           "is_day", "dew_point_2m", "snowfall", "visibility", "uv_index"]
 RAIN_THRESHOLD = 0.2         # mm/h: below this, the hour counts as dry
+LIGHT_PROB = 40              # %: from this probability, a route without a rainy hour is not called dry
 ICE_RAIN_MM = 0.1            # mm/h of rain or drizzle at 1 °C or below: risk of ice (also used by route_scores)
 MAX_GAP_S = 3 * 3600         # interpolate across at most 3 hours without a value
 CORE = ["temperature_2m", "precipitation", "wind_speed_10m", "weather_code"]   # needed for every reading
@@ -383,8 +384,15 @@ def summarize(df: pd.DataFrame, tz: str) -> tuple[dict, list[str]]:
     insights = []
     runs = _runs(rainy)
     if not runs:
+        # "Dry" only when both the amount and the probability are low: a drizzle or a few flakes under the threshold
+        # with a 90% probability is not dry (#78)
         prob = stats["max_rain_prob"]
-        insights.append(tr("rw.dry_prob", prob=percent(prob)) if prob is not None else tr("rw.dry"))
+        if rain.max() >= 0.05 or (prob is not None and prob >= LIGHT_PROB):
+            mm = num(RAIN_THRESHOLD, 1)
+            insights.append(tr("rw.light_prob", mm=mm, prob=percent(prob)) if prob is not None
+                            else tr("rw.light", mm=mm))
+        else:
+            insights.append(tr("rw.dry_prob", prob=percent(prob)) if prob is not None else tr("rw.dry"))
     else:
         for a, b in runs[:3]:
             km_a, km_b = df["dist_km"].iloc[a], df["dist_km"].iloc[b]

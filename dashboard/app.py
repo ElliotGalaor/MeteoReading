@@ -403,8 +403,15 @@ def page_year():
     k = st.columns(4)
     k[0].metric(t("year.kpi_anomaly"), f"{signed(yr['anom'].mean(), 1)} °C", border=True, help=t("year.kpi_anomaly_help"))
     k[1].metric(t("year.kpi_above"), f"{(yr['anom'] > 0).sum()}", border=True, help=t("year.kpi_above_help", n=len(yr)))
-    k[2].metric(t("year.kpi_records"), t("year.kpi_records_value", high=len(rec_hi), low=len(rec_lo)), border=True,
-                help=t("year.kpi_records_help", variable=variable, start=START, last=year - 1))
+    # Records against the years before this one: none in the first year of the city's data, few just after it
+    first = int(d["date"].dt.year.min())
+    if year <= first:
+        records, records_help = "–", t("year.kpi_records_first", year=year)
+    else:
+        records = t("year.kpi_records_value", high=len(rec_hi), low=len(rec_lo))
+        records_help = t("year.kpi_records_help", variable=variable, start=first, last=year - 1) + (
+            plural("year.kpi_records_few", year - first) if year - first < 10 else "")
+    k[2].metric(t("year.kpi_records"), records, border=True, help=records_help)
     # The day that stands out for the variable: hottest day, coldest night, warmest day on average
     kpi, i_k = {"Maximum": ("kpi_hottest", yr[col].idxmax()), "Minimum": ("kpi_coldest", yr[col].idxmin()),
                 "Mean": ("kpi_warmest", yr[col].idxmax())}[var]
@@ -503,10 +510,13 @@ def _year_rain(city: str, year: int, d: pd.DataFrame) -> None:
     rainy = int(wet.sum())
     dry_runs = np.diff(np.flatnonzero(np.concatenate([[True], wet, [True]]))) - 1
     so_far = last < 364
+    gap = round((total / normal_to_date - 1) * 100) if normal_to_date else 0
     k = st.columns(4)
+    # The arrow comes from the number: Streamlit reads it from the text, where the typographic minus "−" looks
+    # positive (an up arrow on a deficit, #74)
     k[0].metric(t("year.rain_kpi_so_far" if so_far else "year.rain_kpi"), f"{num(total, 0)} mm", border=True,
-                delta=t("year.rain_delta", pct=percent((total / normal_to_date - 1) * 100, 0, sign=True))
-                if normal_to_date else None, delta_color="off",
+                delta=t("year.rain_delta", pct=percent(gap, 0, sign=True)) if normal_to_date else None,
+                delta_color="off", delta_arrow="up" if gap > 0 else "down" if gap < 0 else "off",
                 help=t("year.rain_help", normal=num(normal_to_date, 0), first=REF[0], last=REF[1],
                        measured=int(measured[: last + 1].sum()), days=last + 1))
     k[1].metric(t("year.rainy_days", rain_day=num(TH["rain_day"], 0)), f"{rainy}", border=True)
@@ -647,7 +657,7 @@ def page_extremes():
                          "city": t("common.city"), "start_date": t("common.start"), "end_date": t("common.end"),
                          "n_days": t("common.length"), "tx_peak": t("extremes.col_peak"),
                          "tx_mean": t("extremes.col_mean_tx")})
-        st.caption(t("extremes.episodes_caption", n=num(len(hw), 0)))
+        st.caption(plural("extremes.episodes_caption", len(hw)))
     wind_panel()
     source_note()
 

@@ -15,7 +15,7 @@ from folium.plugins import Draw
 from plotly.subplots import make_subplots
 from streamlit_folium import st_folium
 
-from meteo.departure import best, best_window, plan_track, sweep, wind_aware
+from meteo.departure import DARK_SLACK_H, best, best_window, plan_track, sweep, wind_aware
 from meteo.ensemble import HEAVY_RAIN
 from meteo.ensemble import fetch as fetch_ensemble
 from meteo.ensemble import spread as ensemble_spread
@@ -170,8 +170,10 @@ def _route_points(route: dict) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=30)
-def _link_tracks(url: str) -> list[tuple[pd.DataFrame, str, str | None, bool]]:
-    return [(tr.points, tr.name, tr.time_issue, tr.looks_scrambled) for tr in tracks_from_link(url)]
+def _link_tracks(url: str) -> tuple[list[tuple[pd.DataFrame, str, str | None, bool]], str | None]:
+    """The tracks behind a link, and the activity its site gives (a Geotrek practice), if any."""
+    tracks = tracks_from_link(url)
+    return [(tr.points, tr.name, tr.time_issue, tr.looks_scrambled) for tr in tracks], tracks[0].activity
 
 
 def _load_route(route: dict) -> None:
@@ -183,6 +185,11 @@ def _load_route(route: dict) -> None:
         return
     if st.session_state.get("route_mode") != NEARBY:
         st.session_state["route_prev_mode"] = st.session_state.get("route_mode", "Sample track")
+        # The link box is not drawn while a nearby route is read, so Streamlit forgets it: kept here for "Back" (#76)
+        if st.session_state.get("route_mode") == LINK:
+            st.session_state["route_prev_link"] = st.session_state.get("route_link", "")
+        else:
+            st.session_state.pop("route_prev_link", None)
     st.session_state["route_geotrek"] = route | {"points": points}
     st.session_state["route_mode"] = NEARBY          # the Track control shows what is being read
     st.session_state["route_scroll_top"] = True       # and the page goes back up to the reading
@@ -193,6 +200,8 @@ def _load_route(route: dict) -> None:
 def _back_to_track() -> None:
     st.session_state.pop("route_geotrek", None)
     st.session_state["route_mode"] = st.session_state.pop("route_prev_mode", "Sample track")
+    if (link := st.session_state.pop("route_prev_link", None)) is not None:
+        st.session_state["route_link"] = link
 
 
 def _on_mode() -> None:
@@ -299,6 +308,7 @@ def page_route():
     restore("route_hour", "time", parse=time.fromisoformat)
     if (sp := from_link("speed")) is not None:
         st.session_state["route_link_speed"] = sp
+    link_activity = None   # the activity a linked route's site gives
     mode = st.segmented_control(t("route.track"), MODES + ([NEARBY] if geo else []), default="Sample track",
                                 required=True, key="route_mode", on_change=_on_mode,
                                 format_func=lambda m: t(f"route.mode_{MODE_KEYS[m]}"))
@@ -318,9 +328,11 @@ def page_route():
                                 placeholder="https://rando.ecrins-parcnational.fr/trek/995106", help=t("route.link_help"))
             if not url.strip():
                 st.info(t("route.link_info"))
+                publish({"track": "link"})   # no route shown: the address no longer names one
                 return
             try:
-                points, name, time_issue = _pick(_link_tracks(url.strip()), f"pick_link_{abs(hash(url.strip()))}")
+                found, link_activity = _link_tracks(url.strip())
+                points, name, time_issue = _pick(found, f"pick_link_{abs(hash(url.strip()))}")
             except (ValueError, RuntimeError) as exc:
                 st.error(t("route.link_error", error=exc))
                 return
@@ -372,6 +384,8 @@ def page_route():
         guessed = geo["activity"]
     elif mode == "Draw on the map":
         guessed = st.session_state.get("draw_activity", "Cycling")
+    elif mode == LINK and link_activity:
+        guessed = link_activity
     else:
         guessed = _guess_activity(track.name)
     guessed = st.session_state.get("route_link_activity", guessed)
@@ -605,7 +619,12 @@ def _vigilance(pts: pd.DataFrame, source: str) -> dict:
 
 def _vigilance_notes(pts: pd.DataFrame, vig: dict) -> None:
     link = f"[vigilance.meteofrance.fr]({OFFICIAL_PAGE})"
-    if vig["status"] == "not connected" or (vig["warnings"] is None and vig["status"] is None):
+    if vig["status"] == "not connected":
+        # No Météo-France key on this server (#73): say so rather than nothing, for a route in France or Corsica
+        if (pts["lat"].between(41.3, 51.1) & pts["lon"].between(-5.2, 9.6)).any():
+            st.caption(t("route.vig_off", link=link))
+        return
+    if vig["warnings"] is None and vig["status"] is None:
         return
     if vig["warnings"] is None:
         st.caption(t("route.vig_error", status=vig["status"], link=link))
@@ -658,7 +677,7 @@ def _when_to_leave(plan, activity: str, tz: str, points: pd.DataFrame, name: str
     choices = [d for d in (day0, day0 + timedelta(days=1)) if d <= last_day]
     pick = st.segmented_control(t("route.leave_day"), choices, default=day0, required=True, key=f"leave_day_{day0}",
                                 format_func=lambda d: fmt_date(d, "weekday")) or day0
-    now = pd.Timestamp.now(tz="UTC").floor("30min")
+    now = pd.Timestamp.now(tz="UTC").ceil("30min")   # the next half hour: never a departure already past (#77)
     with st.spinner(t("route.leave_spinner")):
         sw = _sweep(points, name, activity, speed, hours_per_day, tz, (pick,),
                     "on" if vig["warnings"] is not None else "", now)
@@ -692,6 +711,8 @@ def _when_to_leave(plan, activity: str, tz: str, points: pd.DataFrame, name: str
     leave = best_row["departure"].tz_convert(tz)
     chart(fig, 330, t("route.leave_chart", day=fmt_date(pick, "weekday_day"), time=f"{leave:%H:%M}"),
           t("route.leave_sub", window=window))
+    if sw["dark_hours"].min() > DARK_SLACK_H:
+        st.caption(t("route.leave_dark", hours=num(best_row["dark_hours"], 1)))
     same = best_row["departure"] == start
     if same:
         st.caption(t("route.leave_same"))
@@ -817,18 +838,27 @@ def _nearby_panel(track: Track, activity: str) -> None:
                       key=f"nearby_practice_{activity}_{abs(hash(tuple(groups)))}",
                       format_func=lambda g: t(f"route.practice_{g.replace(' ', '_')}"),
                       help=t("route.practice_help", activity=t(f"activity.{activity}").lower()))
-    order = c2.selectbox(t("route.sort"), ["Nearest", "Shortest", "Longest", "Least ascent"], key="nearby_sort",
-                         format_func=lambda o: t(f"route.sort_{o.replace(' ', '_')}"))
+    # Only the sorts the routes have data for: OpenStreetMap routes have no start, length or ascent (#83)
+    known = {"Nearest": any(r["distance_km"] is not None or r["passes_near"] for r in rows),
+             "Shortest": any(r["length_km"] for r in rows), "Longest": any(r["length_km"] for r in rows),
+             "Least ascent": any(r["ascent_m"] is not None for r in rows)}
+    sorts = [o for o, ok in known.items() if ok]
+    if st.session_state.get("nearby_sort") not in sorts:
+        st.session_state.pop("nearby_sort", None)
+    order = (c2.selectbox(t("route.sort"), sorts, key="nearby_sort",
+                          format_func=lambda o: t(f"route.sort_{o.replace(' ', '_')}")) if sorts else None)
     rows = [r for r in rows if r["group"] in (chosen or groups)]
     big = 1e9
     sorters = {"Nearest": lambda r: (r["nearness_km"], r["name"]),
                "Shortest": lambda r: (r["length_km"] if r["length_km"] else big, r["name"]),
                "Longest": lambda r: (-(r["length_km"] or 0), r["name"]),
                "Least ascent": lambda r: (r["ascent_m"] if r["ascent_m"] is not None else big, r["name"])}
-    rows.sort(key=sorters[order])
+    rows.sort(key=sorters[order] if order else (lambda r: r["name"]))
     shown_key = f"nearby_shown_{abs(hash((lat, lon, round(float(radius), 1))))}"
     view = rows[: st.session_state.get(shown_key, PAGE)]
-    st.caption(t("route.showing", shown=len(view), total=len(rows)) if rows else t("route.no_practice"))
+    numbered = any(r.get("start_lat") is not None for r in view)
+    st.caption(t("route.showing" if numbered else "route.showing_plain", shown=len(view), total=len(rows)) if rows
+               else t("route.no_practice"))
     sel_key = st.session_state.get("nearby_selected")
     selected = next((r for r in view if (r["provider"], r["trek_id"]) == sel_key), None)
     if view:
@@ -1061,10 +1091,17 @@ def _map(track: Track, pts: pd.DataFrame, tz: str) -> None:
           margin=dict(l=0, r=0, b=0))
 
 
+# Six pollens, three series colours: the colour and the dash follow the species, never its rank among those shown
+# (trees solid, herbs dashed)
+POLLEN_STYLE = {"alder_pollen": (0, "solid"), "birch_pollen": (1, "solid"), "olive_pollen": (2, "solid"),
+                "grass_pollen": (0, "dash"), "mugwort_pollen": (1, "dash"), "ragweed_pollen": (2, "dash")}
+assert set(POLLEN_STYLE) == set(POLLEN)
+
+
 def _profile(track: Track, pts: pd.DataFrame, ens=None) -> None:
     has_ele = pts["ele_profile"].notna().any()
     has_air = pts["european_aqi"].notna().any()
-    pollen_cols = [c for c in POLLEN if pts[c].notna().any()]
+    pollen_cols = [c for c in POLLEN_STYLE if pts[c].fillna(0).gt(0).any()]   # none in the air: no toggle (#83)
     show_pollen = bool(pollen_cols) and st.toggle(t("route.pollen"), key="route_pollen", help=t("route.pollen_help"))
     rain_row = t("route.row_rain")
     rows = [t("route.row_ele"), t("route.row_temp"), rain_row, t("route.row_wind")][0 if has_ele else 1:]
@@ -1142,11 +1179,16 @@ def _profile(track: Track, pts: pd.DataFrame, ens=None) -> None:
         fig.update_yaxes(rangemode="tozero", row=r, col=1)
     if show_pollen:
         r += 1
-        for i, c in enumerate(pollen_cols):
-            fig.add_scatter(x=pts["dist_km"], y=pts[c], mode="lines", name=t(f"route.pollen_{c}"),
-                            line=dict(color=SERIES[i % len(SERIES)], width=1.8),
+        for c in pollen_cols:
+            colour, dash = POLLEN_STYLE[c]
+            fig.add_scatter(x=pts["dist_km"], y=pts[c], mode="lines", name=t(f"route.pollen_{c}"), legend="legend2",
+                            line=dict(color=SERIES[colour], width=1.8, dash=dash),
                             hovertemplate=t("route.pollen_hover", name=t(f"route.pollen_{c}")), row=r, col=1)
         fig.update_yaxes(rangemode="tozero", row=r, col=1)
+        # The pollen legend sits in the pollen panel, not at the top of a chart over a thousand pixels tall
+        top = fig.layout["yaxis" if r == 1 else f"yaxis{r}"].domain[1]
+        fig.update_layout(legend2=dict(x=1, xanchor="right", y=top, yanchor="top", bgcolor="rgba(0,0,0,0)",
+                                       font=dict(size=11)), legend=dict(visible=False))
     fig.update_xaxes(title_text=t("route.distance_axis"), row=r, col=1)
     fig.update_annotations(selector=dict(text=moderate), x=None)
     for title in rows:

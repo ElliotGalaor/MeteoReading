@@ -11,16 +11,18 @@ def num(value, digits: int = 1) -> str:
     if value is None:
         return "–"
     text = f"{round(value):,}" if isinstance(value, int) or digits == 0 else f"{value:,.{digits}f}"
+    if text.startswith("-") and not any(c in "123456789" for c in text):
+        text = text[1:]   # a value that rounds to zero has no sign: "0.0", never "−0.0"
     if lang() == "fr":
         text = text.replace(",", NNBSP).replace(".", ",")
     return text.replace("-", MINUS)
 
 
 def signed(value, digits: int = 1) -> str:
-    """Signed number: +0.3 / −1.2."""
+    """Signed number: +0.3 / −1.2 / +0.0 (a value that rounds to zero is written +0.0)."""
     if value is None:
         return "–"
-    return ("+" if value >= 0 else "") + num(value, digits)
+    return ("+" if round(value, digits) >= 0 else "") + num(value, digits)
 
 
 def percent(value, digits: int = 0, sign: bool = False) -> str:
