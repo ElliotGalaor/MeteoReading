@@ -33,7 +33,20 @@ COPY_LINK = """
   b.dataset.ready = "1";
   b.addEventListener("click", async () => {
     try { await navigator.clipboard.writeText(location.href); b.textContent = %(copied)s; }
-    catch (e) { window.prompt(%(prompt)s, location.href); }
+    catch (e) {
+      // No clipboard: a prompt with the link, and where prompts are blocked too, the link selected next to the button
+      try { window.prompt(%(prompt)s, location.href); }
+      catch (e2) {
+        let f = document.getElementById("copy-link-text");
+        if (!f) {
+          f = document.createElement("input");
+          f.id = "copy-link-text"; f.readOnly = true; f.setAttribute("aria-label", %(prompt)s);
+          f.style.cssText = "margin-left:0.5rem;font:inherit;font-size:0.82rem;width:min(28rem,60vw)";
+          b.after(f);
+        }
+        f.value = location.href; f.focus(); f.select();
+      }
+    }
     setTimeout(() => { b.textContent = %(copy_js)s; }, 2000);
   });
 })();

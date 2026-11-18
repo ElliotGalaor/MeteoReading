@@ -65,6 +65,8 @@ def test_english_dates_and_ordinals():
     assert [ordinal(n) for n in (1, 2, 3, 4, 11, 12, 13, 21, 22, 40)] == \
         ["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "40th"]
     assert plural("common.n_days", 1) == "1 day" and plural("common.n_days", 3) == "3 days"
+    # A value that rounds to zero has no minus sign (#82)
+    assert (num(-0.04, 1), signed(-0.04, 1), num(-0.4, 0), signed(-0.6, 0)) == ("0.0", "+0.0", "0", "−1")
 
 
 def test_plotly_locale_names_sunday_first(french):

@@ -68,6 +68,12 @@ INSTANCES = [
 CYCLING_WORDS = ("vtt", "vélo", "velo", "cycl", "gravel", "bike")
 
 
+def practice_activity(practice: str) -> str:
+    """The activity of the route tool that fits a Geotrek practice: walking unless it is a bike practice (the sites
+    are hiking sites first)."""
+    return "Cycling" if any(w in (practice or "").lower() for w in CYCLING_WORDS) else "Walking"
+
+
 @dataclass
 class Suggestion:
     source: str
@@ -96,7 +102,7 @@ class Suggestion:
     @property
     def activity(self) -> str:
         """The activity of the route tool that fits the practice (walking unless it is a bike practice)."""
-        return "Cycling" if any(w in self.practice.lower() for w in CYCLING_WORDS) else "Walking"
+        return practice_activity(self.practice)
 
 
 def search_box(lat, lon, radius_km: float) -> tuple[float, float, float, float]:
@@ -126,7 +132,7 @@ def _names(session, inst: Instance, endpoint: str, field: str) -> dict[int, str]
     return {p["id"]: p.get(field) or "" for p in data.get("results", [])}
 
 
-def _practices(session, inst: Instance) -> dict[int, str]:
+def practice_names(session, inst: Instance) -> dict[int, str]:
     return _names(session, inst, "trek_practice", "name")
 
 
@@ -141,7 +147,7 @@ def _treks(session, inst: Instance, box: tuple, track_lat: np.ndarray, track_lon
     params = {"in_bbox": ",".join(f"{v:.4f}" for v in box), "language": "fr", "page_size": 500,
               "fields": "id,name,departure_geom,length_2d,ascent,duration,practice,difficulty,route,gpx"}
     data = _get(session, f"{inst.api}/trek/", params)
-    practices = _practices(session, inst)
+    practices = practice_names(session, inst)
     difficulties = _names(session, inst, "trek_difficulty", "label")
     route_types = _names(session, inst, "trek_route", "route")
     # Routes whose line enters a small box along the track pass near it, wherever they start

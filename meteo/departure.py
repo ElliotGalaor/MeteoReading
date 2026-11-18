@@ -23,6 +23,7 @@ from .route_weather import RouteReading, reread
 STEP_MIN = 30
 FIRST_HOUR, LAST_HOUR = 5, 20     # departures swept from 05:00 to 20:00
 SAFE_DANGER = 25                  # below this the danger is "Low": the best departure is the most comfortable of those
+DARK_SLACK_H = 0.25               # up to 15 minutes in the dark count as daylight when departures are compared
 
 
 def plan_track(track: Track, start: pd.Timestamp, activity: str, flat_kmh: float, hours_per_day: float | None = None,
@@ -97,23 +98,29 @@ def sweep(fetched: RouteReading, track: Track, days: list[date], tz: str, activi
 
 
 def best(sw: pd.DataFrame) -> pd.Series | None:
-    """The best departure: the most comfortable of those with a low danger (the earliest on a tie); without any,
-    the least dangerous."""
+    """The best departure: of those with a low danger, the ones that keep the most of the trip in daylight, and of
+    these the most comfortable (the earliest on a tie); without any, the least dangerous.
+    Darkness only adds a few danger points on foot, so a mild evening could otherwise win over a cool morning and
+    send a walker into the night (#77)."""
     if sw.empty:
         return None
     safe = sw[sw["danger"] < SAFE_DANGER]
     if not safe.empty:
+        if "dark_hours" in safe:
+            safe = safe[safe["dark_hours"] <= safe["dark_hours"].min() + DARK_SLACK_H]
         return safe.sort_values(["comfort", "departure"], ascending=[False, True]).iloc[0]
     return sw.sort_values(["danger", "comfort", "departure"], ascending=[True, False, True]).iloc[0]
 
 
 def best_window(sw: pd.DataFrame, pick: pd.Series, margin: int = 5) -> tuple[pd.Timestamp, pd.Timestamp]:
     """The run of departures around the best one that stay as good (comfort within `margin` points, same danger
-    level)."""
+    level, no more darkness)."""
     sw = sw.sort_values("departure").reset_index(drop=True)
     i = int(sw.index[sw["departure"] == pick["departure"]][0])
     ok = (sw["comfort"] >= pick["comfort"] - margin) & (
         sw["danger"].map(lambda v: level(v, DANGER_LEVELS)) == level(pick["danger"], DANGER_LEVELS))
+    if "dark_hours" in sw:
+        ok &= sw["dark_hours"] <= pick["dark_hours"] + DARK_SLACK_H
     a = b = i
     while a > 0 and ok[a - 1] and (sw["departure"][a] - sw["departure"][a - 1]) <= pd.Timedelta(minutes=STEP_MIN):
         a -= 1

@@ -9,7 +9,7 @@ import re
 from urllib.parse import urlparse
 
 from .download import quick_session
-from .geotrek import INSTANCES, fetch_route_file
+from .geotrek import INSTANCES, fetch_route_file, practice_activity, practice_names
 from .gps import Track, read_tracks
 from .i18n import t as tr
 from .osm_routes import relation_track
@@ -60,13 +60,17 @@ def tracks_from_link(url: str, session=None) -> list[Track]:
         m = re.search(r"/treks?/(\d+)", path)
         if not m:
             raise ValueError(tr("err.geotrek_link"))
-        resp = session.get(f"{inst.api}/trek/{m.group(1)}/", params={"fields": "name,gpx", "language": "fr"}, timeout=15)
+        resp = session.get(f"{inst.api}/trek/{m.group(1)}/", params={"fields": "name,gpx,practice", "language": "fr"},
+                           timeout=15)
         if resp.status_code != 200 or not resp.json().get("gpx"):
             raise RuntimeError(tr("err.geotrek_none", site=inst.name, id=m.group(1)))
         info = resp.json()
         tracks = read_tracks(*fetch_route_file(info["gpx"], session=session))
+        # The practice published by the site ("À pied", "VTT"…), not a guess from the name (#75)
+        practice = practice_names(session, inst).get(info.get("practice"), "") if info.get("practice") else ""
         for t in tracks:
             t.name = info.get("name") or t.name
+            t.activity = practice_activity(practice)
         return tracks
 
     # OpenStreetMap: a route relation, or a public GPS trace

@@ -71,14 +71,25 @@ def page_date():
                 ".scrollTo({top: 0, behavior: 'smooth'}); window.scrollTo(0, 0);</script>", unsafe_allow_javascript=True)
     last = _last_day()
     restore("date_city", "city", "Lyon", valid=lambda v: v in CITIES)
-    restore("date_day", "date", date(2003, 8, 12), parse=date.fromisoformat,
-            valid=lambda v: date(START, 1, 1) <= v <= last)
+    first = date(START, 1, 1)
+
+    def nearest(text: str) -> date:
+        """A link's date, moved to the nearest measured day when it is outside the data (and said, #82)."""
+        asked = date.fromisoformat(text)
+        shown = min(max(asked, first), last)
+        if shown != asked:
+            st.session_state["date_outside"] = asked
+        return shown
+    restore("date_day", "date", date(2003, 8, 12), parse=nearest)
     if st.session_state["date_day"] > last:
         st.session_state["date_day"] = last
+    if (asked := st.session_state.pop("date_outside", None)) is not None:
+        st.info(t("date.outside", asked=fmt_date(asked), first=fmt_date(first), last=fmt_date(last),
+                  shown=fmt_date(st.session_state["date_day"])), icon=":material/info:")
     f = st.columns([2, 2, 3])
     city = f[0].selectbox(t("common.city"), CITIES, key="date_city")
-    day = f[1].date_input(t("common.date"), min_value=date(START, 1, 1), max_value=last, key="date_day",
-                          format="DD/MM/YYYY")
+    day = f[1].date_input(t("common.date"), min_value=first, max_value=last, key="date_day", format="DD/MM/YYYY",
+                          help=t("date.range_help", first=fmt_date(first), last=fmt_date(last)))
     publish({"city": city, "date": day.isoformat()})
     day = pd.Timestamp(day)
     d = table("city_daily")

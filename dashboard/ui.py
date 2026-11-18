@@ -460,6 +460,9 @@ def css(p: dict) -> str:
                        background: none; border: none; color: {p['ink']}; padding: 0.3rem 0.4rem; cursor: pointer; }}
   .save-chart-image .save-icon {{ font-family: "Material Symbols Rounded"; font-size: 20px; line-height: 1;
                                   color: {p['ink2']}; font-feature-settings: "liga"; }}
+  /* Pills wrap onto several lines: Streamlit keeps them on one line that scrolls sideways, which on a phone hides
+     the last ones past the edge (#79) */
+  [data-testid="stButtonGroup"] > div:has(> button[data-variant="pills"]) {{ flex-wrap: wrap; row-gap: 0.4rem; }}
 </style>
 """
 

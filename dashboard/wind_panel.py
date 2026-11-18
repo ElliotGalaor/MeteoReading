@@ -27,9 +27,11 @@ def wind_panel() -> None:
         st.info(t("wind.none"))
         return
     valid["decade"] = valid["year"] // 10 * 10
-    # A decade is shown when at least 8 of its years have gusts measured on most days
+    # A decade is shown when 80% of its years have gusts measured on most days: 8 of 10, 5 of the 6 years of the
+    # current decade (a fixed 8 left 2020-25 out, while the heatmap above shows it, #82)
     pv = valid.groupby(["city", "decade"]).agg(days=("storm_days", "mean"), n=("year", "count")).reset_index()
-    pv = pv[pv["n"] >= 8].pivot(index="city", columns="decade", values="days")
+    span = np.minimum(pv["decade"] + 9, END) - np.maximum(pv["decade"], START) + 1
+    pv = pv[pv["n"] >= np.ceil(0.8 * span)].pivot(index="city", columns="decade", values="days")
     pv.columns = [f"{max(c, START)}-{str(min(c + 9, END))[2:]}" for c in pv.columns]
     pv = pv.loc[pv.mean(axis=1).sort_values().index]
     fig = go.Figure(go.Heatmap(z=pv.values, x=pv.columns, y=pv.index, colorscale=HEAT, xgap=2, ygap=2,
