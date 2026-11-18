@@ -56,7 +56,10 @@ from ui import (
     era5,
     fmt_date,
     is_dark,
+    is_narrow,
     is_phone,
+    main_width,
+    measure_layout,
     num,
     number,
     page_header,
@@ -165,9 +168,11 @@ def page_overview():
                                       orientation="h", y=-0.02, yanchor="top")),
             customdata=np.stack([m["city"], m["slope"], m["delta"], m["station_name"]], axis=1),
             hovertemplate=t("overview.map_hover", old=period(OLD), recent=period(RECENT))))
-        # Centred on the cities' bounds and zoomed to fit them all, Ajaccio included (narrower on phones)
+        # Centred on the cities' bounds and zoomed to fit them all, Ajaccio included, in the width the map gets: the
+        # whole main column on a narrow layout (the columns stack), two fifths of it beside the chart (#81)
         lat0, lat1, lon0, lon1 = m["lat"].min(), m["lat"].max(), m["lon"].min(), m["lon"].max()
-        width = 300 if is_phone() else 420
+        main = main_width()
+        width = ((main if is_narrow() else (main - 64) * 0.4) if main else (300 if is_phone() else 420)) - 20
         zoom = min(np.log2(width * 360 / (512 * (lon1 - lon0 + 1))),
                    np.log2(330 * 360 / (512 * (lat1 - lat0 + 1) / np.cos(np.radians((lat0 + lat1) / 2)))))
         fig.update_layout(map=dict(style="carto-positron", center=dict(lat=(lat0 + lat1) / 2, lon=(lon0 + lon1) / 2),
@@ -671,7 +676,7 @@ def page_quality():
     p = theme()
     st.graphviz_chart(f"""
     digraph {{
-      rankdir={"TB" if is_phone() else "LR"}; bgcolor="transparent"; nodesep=0.35; ranksep=0.45;
+      rankdir={"TB" if is_narrow() else "LR"}; bgcolor="transparent"; nodesep=0.35; ranksep=0.45;
       node [shape=box style="rounded,filled" fillcolor="{p['surface']}" color="{p['grid']}" fontname="Segoe UI" fontsize=11 fontcolor="{p['ink']}" margin="0.18,0.1"];
       edge [color="{p['muted']}" arrowsize=0.7];
       api  [label="{t('quality.g_api')}"];
@@ -799,4 +804,5 @@ with st.sidebar:
     st.caption(t("app.tagline", start=START, end=END))
 pause_when_idle()
 chart_gestures(is_phone())
+measure_layout()
 nav.run()

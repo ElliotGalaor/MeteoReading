@@ -8,7 +8,7 @@ import streamlit as st
 from meteo.climate_ahead import LEVEL_NOW, LEVELS, MODELS, REGIONS, RESULT_FILE, UNITS
 from meteo.i18n import plural
 from share import publish, restore
-from ui import CFG, OLD, RECENT, SERIES, TH, WARM, chart, is_phone, num, page_header, source_note, t
+from ui import CFG, OLD, RECENT, SERIES, TH, WARM, chart, is_narrow, num, page_header, source_note, t
 
 CITIES = [c.name for c in CFG.cities]
 
@@ -67,7 +67,7 @@ def page_future():
     old_label, recent_label = f"{OLD[0]}-{OLD[1]}", f"{RECENT[0]}-{RECENT[1]}"
     last_level = list(LEVELS)[-1]
     indicators = list(dict.fromkeys(c["indicator"]))
-    per_row = 1 if is_phone() else 2
+    per_row = 1 if is_narrow() else 2
     for i in range(0, len(indicators), per_row):
         cols = st.columns(per_row, gap="large")
         for col, code in zip(cols, indicators[i:i + per_row], strict=False):

@@ -89,7 +89,10 @@ from ui import (
     date_text,
     fmt_date,
     is_dark,
+    is_narrow,
+    is_phone,
     lang,
+    main_width,
     num,
     number,
     page_header,
@@ -268,12 +271,13 @@ def _zoom(lat: pd.Series, lon: pd.Series, width_px: float, height_px: float) -> 
     return float(np.clip(zoom, 3, 14))
 
 
-def _phone() -> bool:
-    """A phone, from the browser's user agent: the map is then about 350 px wide instead of 700."""
-    try:
-        return "Mobi" in (st.context.headers.get("User-Agent") or "")
-    except Exception:
-        return False
+def _map_px() -> float:
+    """The width the maps fit the track into (room left for the colour bar and the labels): about half the main column
+    on a narrow layout, where the map takes the whole column, else 520 px (#81)."""
+    if is_narrow():
+        width = main_width()
+        return max(190.0, 0.55 * width) if width else 190.0
+    return 520.0
 
 
 def _warehouse_last_date() -> date | None:
@@ -791,7 +795,7 @@ def _nearby_map(track: Track, view: list[dict], selected: dict | None, key: str)
             hovertemplate=t("route.starts_hover")))
     lat = list(pts["lat"]) + [r["start_lat"] for _, r in starts]
     lon = list(pts["lon"]) + [r["start_lon"] for _, r in starts]
-    zoom = _zoom(pd.Series(lat), pd.Series(lon), 190 if _phone() else 520, 330)
+    zoom = _zoom(pd.Series(lat), pd.Series(lon), _map_px(), 330)
     fig.update_layout(map=dict(style="carto-positron", zoom=zoom,
                                center=dict(lat=float(np.mean([min(lat), max(lat)])), lon=float(np.mean([min(lon), max(lon)])))),
                       showlegend=False, margin=dict(l=0, r=0, t=0, b=0), height=380)
@@ -863,7 +867,7 @@ def _nearby_panel(track: Track, activity: str) -> None:
     selected = next((r for r in view if (r["provider"], r["trek_id"]) == sel_key), None)
     if view:
         _nearby_map(track, view, selected, key=f"nearby_map_{shown_key}_{abs(hash(tuple(r['trek_id'] for r in view)))}")
-    if _phone():   # cards: a table needs a horizontal scroll on a phone
+    if is_narrow():   # cards: a table needs a horizontal scroll in a narrow column
         for i, r in enumerate(view):
             with st.container(border=True):
                 st.markdown(f"**{i + 1}. {r['name']}**")
@@ -897,7 +901,7 @@ def _nearby_panel(track: Track, activity: str) -> None:
     if selected:
         st.button(t("route.read_selected", name=selected["name"]), type="primary", icon=":material/hiking:",
                   on_click=_load_route, args=(selected,))
-    elif view and not _phone():
+    elif view and not is_narrow():
         st.caption(t("route.select_hint"))
     if failed:
         st.caption(t("route.not_reached", sites=", ".join(failed)))
@@ -1024,7 +1028,7 @@ def _draw_track() -> tuple[pd.DataFrame, str] | None:
         elif hits is not None:
             c1.caption(t("route.place_none"))
     # On a phone one finger scrolls the page past the map; two fingers move and zoom it (and a tap adds a point)
-    m = folium.Map(location=center, zoom_start=zoom, control_scale=True, dragging=not _phone(),
+    m = folium.Map(location=center, zoom_start=zoom, control_scale=True, dragging=not is_phone(),
                    tiles="CartoDB dark_matter" if is_dark() else "OpenStreetMap")
     Draw(draw_options={"polyline": {"shapeOptions": {"color": SERIES[0], "weight": 4}, "metric": True},
                        "polygon": False, "rectangle": False, "circle": False, "circlemarker": False, "marker": False},
@@ -1032,7 +1036,7 @@ def _draw_track() -> tuple[pd.DataFrame, str] | None:
     out = st_folium(m, key="draw_map", height=460, use_container_width=True, center=center, zoom=zoom,
                     returned_objects=["all_drawings"])
     waypoints = waypoints_from_drawings((out or {}).get("all_drawings"))
-    if _phone():
+    if is_phone():
         st.caption(t("route.draw_phone"))
     if len(waypoints) < 2:
         st.info(t("route.draw_info"))
@@ -1083,7 +1087,7 @@ def _map(track: Track, pts: pd.DataFrame, tz: str) -> None:
                                 textposition="top right", marker=dict(size=9, color=INK), hoverinfo="skip",
                                 textfont=dict(color=INK, size=13)))
     # Room for the track and its Start / Finish labels
-    zoom = _zoom(full["lat"], full["lon"], 190 if _phone() else 520, 330)   # minus the colour bar
+    zoom = _zoom(full["lat"], full["lon"], _map_px(), 330)   # minus the colour bar
     fig.update_layout(map=dict(style="carto-positron", zoom=zoom,
                                center=dict(lat=float(full["lat"].mean()), lon=float(full["lon"].mean()))),
                       showlegend=False)
