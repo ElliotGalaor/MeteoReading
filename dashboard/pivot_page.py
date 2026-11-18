@@ -6,6 +6,7 @@ import streamlit as st
 from matplotlib.colors import LinearSegmentedColormap
 
 from meteo.pivot import TOTAL, Measure, PivotResult, PivotSpec, datasets, filter_values, run_pivot, year_range
+from share import from_link, publish, restore
 from ui import (
     DARK_HEAT_STOPS,
     DARK_RAIN_STOPS,
@@ -120,10 +121,15 @@ def page_pivot():
     st.pills("Examples", list(EXAMPLES), key="pv_example", on_change=_on_example)
 
     keys = list(CATALOG)
+    restore("pv_dataset", "dataset", valid=lambda v: v in CATALOG)
     ds_key = st.selectbox("Dataset", keys, key="pv_dataset", format_func=lambda k: CATALOG[k].label)
     ds = CATALOG[ds_key]
     st.caption(ds.description)
     dims, measures = ds.dimensions, ds.measures
+    # A shared link: its choices for this dataset (anything unknown is ignored)
+    restore(f"pv_rows_{ds_key}", "rows", multi=True, valid=lambda v: 0 < len(v) <= 2 and set(v) <= set(dims))
+    restore(f"pv_col_{ds_key}", "column", valid=lambda v: v in dims)
+    restore(f"pv_measure_{ds_key}", "measure", valid=lambda v: v in measures)
 
     c1, c2, c3, c4 = st.columns([1.6, 1.1, 1.6, 1])
     # Defaults go through the session state, which the examples also write to (not through default= / index=)
@@ -136,7 +142,7 @@ def page_pivot():
     measure_key = c3.selectbox("Measure", list(measures), key=f"pv_measure_{ds_key}",
                                format_func=lambda k: measures[k].label)
     measure = measures[measure_key]
-    st.session_state.setdefault(f"pv_agg_{ds_key}_{measure_key}", measure.agg)
+    restore(f"pv_agg_{ds_key}_{measure_key}", "agg", measure.agg, valid=lambda v: v in measure.aggs)
     agg = c4.selectbox("Aggregation", list(measure.aggs), key=f"pv_agg_{ds_key}_{measure_key}")
 
     filterable = [k for k, d in dims.items() if d.filterable]
@@ -144,12 +150,22 @@ def page_pivot():
     f_cols = st.columns([1] * len(filterable) + ([1] if bounds else []) + ([1] if len(filterable) + bool(bounds) < 2 else []))
     filters = {}
     for col, key in zip(f_cols, filterable, strict=False):
+        restore(f"pv_f_{ds_key}_{key}", f"f_{key}", multi=True,
+                valid=lambda v, k=key: set(v) <= set(_filter_values(ds_key, k)))
         chosen = col.multiselect(f"{dims[key].label} filter", _filter_values(ds_key, key), key=f"pv_f_{ds_key}_{key}",
                                  placeholder="All")
         if chosen:
             filters[key] = tuple(chosen)
     years = None
     if bounds:
+        first, last = from_link("from"), from_link("to")
+        if first or last:
+            try:
+                lo, hi = sorted((int(first or bounds[0]), int(last or bounds[1])))
+                if bounds[0] <= lo <= hi <= bounds[1]:
+                    st.session_state[f"pv_years_{ds_key}"] = (lo, hi)
+            except ValueError:
+                pass
         st.session_state.setdefault(f"pv_years_{ds_key}", bounds)
         years = f_cols[len(filterable)].slider("Years", bounds[0], bounds[1], key=f"pv_years_{ds_key}",
                                                help="Complete years only: the current year is not over.")
@@ -157,6 +173,10 @@ def page_pivot():
     totals = t1.toggle("Totals", value=True, help="Computed on the underlying values: the total of a median is the "
                                                   "median of all the values.")
     colour = t2.toggle("Colour scale", value=True)
+    publish({"dataset": ds_key, "rows": rows, "column": None if column == NONE else column, "measure": measure_key,
+             "agg": None if agg == measure.agg else agg, **{f"f_{k}": list(v) for k, v in filters.items()},
+             "from": years[0] if years and years[0] != bounds[0] else None,
+             "to": years[1] if years and years[1] != bounds[1] else None})
 
     if not rows:
         st.info("Pick at least one dimension for the rows.")

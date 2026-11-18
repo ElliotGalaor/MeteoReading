@@ -22,6 +22,7 @@ from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 
 from . import viz
+from .climate_ahead import RESULT_FILE, climate_ahead
 from .config import Config
 from .stats import SEASON_ORDER, anomalies, composite, daily_outliers, period_mean, record_counts, seasonal, trend
 from .warehouse import connect
@@ -363,6 +364,9 @@ def run_analysis(cfg: Config) -> dict:
     france.rename("anomaly_c").to_csv(tables_dir / "france_anomaly.csv", index_label="year")
     cities.round(3).to_csv(tables_dir / "city_trends.csv", index=False)
     pd.DataFrame(res["extremes"]["per_city"]).to_csv(tables_dir / "city_extremes.csv", index=False)
+    ahead = climate_ahead(t, cfg)   # each city at the TRACC warming levels (needs the versioned model patterns)
+    if ahead is not None:
+        ahead.round(2).to_csv(tables_dir / RESULT_FILE, index=False)
 
     with open(cfg.reports_dir / "results.json", "w", encoding="utf-8") as f:
         json.dump(res, f, indent=2, ensure_ascii=False, default=_json_default)

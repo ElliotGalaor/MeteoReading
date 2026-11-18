@@ -95,7 +95,8 @@ On Google Cloud Run, by GitHub Actions. CI lints, runs the tests on three Python
 that contains the data (the pipeline runs during the build), then smoke-tests it: health endpoint, row count, and
 the dashboard rendered headless. CD never rebuilds: it takes that exact image by digest, deploys it to a staging
 service, then to production once I approve. GitHub authenticates to Google through Workload Identity Federation,
-so there is no service account key anywhere. Every Monday a scheduled run refreshes the data the same way.
+so there is no service account key anywhere. Every day a scheduled run rebuilds the code already in production with the new data and deploys it without
+a new approval; code changes still need one.
 
 **What if the site gets a lot of traffic, or a bot hammers it?**
 The bill is capped. A Google Cloud budget only sends alerts, so I added a kill switch: Cloud Billing posts the
@@ -106,7 +107,7 @@ half absorbs that delay. Each service also runs one instance at most, which boun
 **What would you do with more time?**
 Extend to the whole of France (it is one configuration setting), add sunshine and humidity, homogenise the
 series (Hamed and Rao's modified Mann-Kendall test, breakpoint detection), and add the official Météo-France
-heatwave indicator. The site is already online with a weekly data refresh.
+heatwave indicator. The site is already online with a daily data refresh.
 
 **How do you make sure the code works?**
 Over 80 automated tests, including an end-to-end test on a small synthetic dataset that reproduces every pitfall

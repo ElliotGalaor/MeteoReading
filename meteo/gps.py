@@ -482,6 +482,7 @@ def sample_points(track: Track, max_points: int = 40, min_step_km: float = 1.0) 
     targets = np.append(np.arange(0, total, step), total)
     idx = np.unique(np.clip(np.searchsorted(df["dist_km"].to_numpy(), targets), 0, len(df) - 1))
     s = df.iloc[idx].reset_index(drop=True).copy()
+    s["track_idx"] = idx   # row of the track: another plan of the same track gives its new times here
     # Direction of travel at each sample: from the previous to the next sample (more stable than GPS jitter)
     prev = s.shift(1).fillna(s.iloc[0])
     nxt = s.shift(-1).fillna(s.iloc[-1])
@@ -506,7 +507,13 @@ def passage_times(track: Track, start: pd.Timestamp, speed_kmh: float, climb_min
 
     With hours_per_day, the trip is split into days: after that many hours on the move, it goes on the next day at
     the same departure time (the stages of a multi-day route)."""
-    hours = moving_hours(track, speed_kmh, climb_min_per_100m)
+    return times_from_hours(track, start, moving_hours(track, speed_kmh, climb_min_per_100m), hours_per_day)
+
+
+def times_from_hours(track: Track, start: pd.Timestamp, hours: np.ndarray,
+                     hours_per_day: float | None = None) -> pd.Series:
+    """Time at each point from the hours on the move to reach it (see passage_times for `hours_per_day`)."""
+    hours = np.asarray(hours, dtype=float)
     start = pd.Timestamp(start)
     start = start.tz_convert("UTC") if start.tzinfo else start.tz_localize("UTC")
     if hours_per_day and hours_per_day > 0:

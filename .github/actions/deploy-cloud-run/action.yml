@@ -36,6 +36,12 @@ inputs:
   github-token:
     description: Token with packages:read, to pull the image from GHCR
     required: true
+  secrets:
+    description: >-
+      Secret Manager secrets given to the service as environment variables, "VAR=secret:version" separated by commas
+      (e.g. METEOFRANCE_API_KEY=meteofrance-api-key:latest); empty for none
+    required: false
+    default: ""
 
 outputs:
   url:
@@ -81,6 +87,7 @@ runs:
         PROJECT_ID: ${{ inputs.project-id }}
         RUNTIME_SA: ${{ inputs.runtime-service-account }}
         COMMIT: ${{ inputs.commit }}
+        SECRETS: ${{ inputs.secrets }}
       run: |
         # Streamlit keeps one WebSocket per visitor: session affinity, long timeout, moderate concurrency.
         # Scales to zero between visits (free tier), CPU boost to shorten cold starts. A single instance at
@@ -91,6 +98,7 @@ runs:
               --session-affinity --timeout 3600 --allow-unauthenticated
               --labels "app=meteoreading,commit=${COMMIT:-${GITHUB_SHA:0:7}}" --quiet)
         if [ -n "$RUNTIME_SA" ]; then args+=(--service-account "$RUNTIME_SA"); fi
+        if [ -n "$SECRETS" ]; then args+=(--set-secrets "$SECRETS"); fi
         gcloud run deploy "$SERVICE" "${args[@]}"
         url=$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format 'value(status.url)')
         echo "url=$url" >> "$GITHUB_OUTPUT"

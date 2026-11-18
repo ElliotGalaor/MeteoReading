@@ -59,6 +59,13 @@ def cmd_era5(cfg, args):
         run_era5_validation(cfg)
 
 
+def cmd_climate(cfg, args):
+    from .climate_ahead import run_patterns
+
+    with step("Climate model patterns (Open-Meteo Climate API, once)"):
+        run_patterns(cfg)
+
+
 def cmd_report(cfg, args):
     from .report import build_report
 
@@ -232,6 +239,7 @@ def main(argv: list[str] | None = None) -> int:
         ("build", cmd_build, "2. DuckDB warehouse: cleaning, quality checks, aggregates"),
         ("analyze", cmd_analyze, "3. statistics, figures and results.json"),
         ("era5", cmd_era5, "4. (optional) cross-validation against ERA5 / Open-Meteo"),
+        ("climate", cmd_climate, "(once) climate model patterns for the 2030-2100 view (Open-Meteo Climate API)"),
         ("report", cmd_report, "5. self-contained HTML report"),
     ]:
         sub.add_parser(name, help=text, description=text).set_defaults(func=fn)

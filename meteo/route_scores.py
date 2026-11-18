@@ -4,8 +4,8 @@ Both scores go from 0 to 100 and are meant to be explained in one sentence each,
 
 Danger (0 = nothing to worry about, 100 = do not go)
     At each point, every hazard (thunderstorm, ice, snow, heavy rain, gusts, heat, cold, poor visibility,
-    darkness) gets a score that rises linearly from a threshold where it starts to matter to one where it is
-    severe. The thresholds depend on the activity: a 60 km/h gust is a danger on a bike, not in a car. The
+    darkness, air pollution, an official orange or red warning) gets a score that rises linearly from a threshold
+    where it starts to matter to one where it is severe. The thresholds depend on the activity: a 60 km/h gust is a danger on a bike, not in a car. The
     hazards of a point add up like independent risks, 1 - (1 - a)(1 - b)..., so two moderate hazards at once
     weigh more than either of them. The score of the route mixes its worst moment (70%) and the average over
     the time spent on the way (30%): a trip is as dangerous as its worst part, and a long exposure counts
@@ -13,8 +13,18 @@ Danger (0 = nothing to worry about, 100 = do not go)
 
 Comfort (100 = ideal conditions for the activity)
     At each point, penalties are taken off 100: temperature outside the comfortable range of the activity,
-    muggy air, rain, wind (the headwind on a bike), snow, strong sun, darkness, fog. The score of the route is
-    the average over the time spent on the way.
+    muggy air, rain, wind (the headwind on a bike), snow, strong sun, darkness, fog, poor air quality. The score of
+    the route is the average over the time spent on the way.
+
+Air quality (when the forecast has it, about 4 days ahead)
+    Comfort loses half a point per point of European air quality index above 40 ("moderate"), at most 25, times
+    the activity's breathing weight (cycling 1, walking 0.8, driving 0.2). Danger rises from the European information
+    thresholds to the alert thresholds: ozone 180 -> 240 µg/m³, PM10 50 -> 80 µg/m³ (these are 1-hour and daily
+    thresholds; the hourly forecast is compared with both), up to 50 on a bike, 40 on foot, 10 in a car.
+
+Official warnings
+    When the reading carries Météo-France vigilance (`meteo/vigilance.py`), an orange warning where and when the
+    traveller passes adds a hazard of 50, a red one 90.
 
 The advice is generic: it comes from simple rules on the conditions met (where and when), worded for the
 activity. It does not replace the official warnings.
@@ -39,6 +49,12 @@ COMFORT_LEVELS = [(80, "Very pleasant"), (60, "Pleasant"), (40, "Mixed"), (20, "
 PEAK_WEIGHT = 0.7  # share of the worst moment in the route's danger score
 SIGNIFICANT = 10   # a hazard below this score is neither listed nor advised on
 WARN_FROM = 25     # from this hazard score (moderate), the advice points to the official warnings
+OZONE_INFO, OZONE_ALERT = 180, 240   # µg/m³, European information and alert thresholds
+PM10_INFO, PM10_ALERT = 50, 80       # µg/m³
+AQI_MODERATE = 40                    # European air quality index: above this, comfort points are lost
+POLLEN_HIGH = {"alder_pollen": 100, "birch_pollen": 100, "grass_pollen": 50, "mugwort_pollen": 30,
+               "olive_pollen": 200, "ragweed_pollen": 20}   # grains/m³: high for most allergy sufferers
+WIND_COMFORT_KMH = 20  # walking: mean wind above this costs comfort points (also the climate pages' "comfortable day")
 
 
 @dataclass(frozen=True)
@@ -57,18 +73,20 @@ class Profile:
     thermal_weight: float            # 1 outdoors; a car has heating and air conditioning
     rain_weight: float
     exposed: bool                    # outdoors (sun, muggy air, wind are felt)
+    air_weight: float = 1.0          # breathing: comfort points lost to poor air quality
+    air_danger: float = 50.0         # danger of air pollution at the alert thresholds
 
 
 PROFILES = {
     "Walking": Profile(gusts=(60, 110), heat=(30, 42), cold=(-10, -30), storm=70, wet_frost=40, snow=20,
                        visibility=0.4, darkness=15, comfort_range=(10, 22), thermal_weight=1.0, rain_weight=1.0,
-                       exposed=True),
+                       exposed=True, air_weight=0.8, air_danger=40),
     "Cycling": Profile(gusts=(40, 80), heat=(30, 42), cold=(-5, -25), storm=70, wet_frost=70, snow=50,
                        visibility=0.7, darkness=30, comfort_range=(12, 22), thermal_weight=1.0, rain_weight=1.0,
-                       exposed=True),
+                       exposed=True, air_weight=1.0, air_danger=50),
     "Driving": Profile(gusts=(70, 130), heat=(40, 50), cold=(-15, -35), storm=40, wet_frost=60, snow=40,
                        visibility=0.9, darkness=10, comfort_range=(5, 28), thermal_weight=0.3, rain_weight=0.4,
-                       exposed=False),
+                       exposed=False, air_weight=0.2, air_danger=10),
 }
 
 
@@ -160,6 +178,10 @@ def hazards(df: pd.DataFrame, p: Profile) -> pd.DataFrame:
         "Cold": ramp(feels, *p.cold),
         "Poor visibility": np.maximum(fog_code, ramp(column(df, "visibility"), 1000, 100) * p.visibility),
         "Darkness": np.where(is_night(df), p.darkness, 0.0),
+        "Air pollution": np.maximum(ramp(column(df, "ozone"), OZONE_INFO, OZONE_ALERT),
+                                    ramp(column(df, "pm10"), PM10_INFO, PM10_ALERT)) * p.air_danger / 100,
+        "Official warning": np.select([column(df, "vigilance_color", 1) >= 4, column(df, "vigilance_color", 1) >= 3],
+                                      [90.0, 50.0], 0.0),
     }, index=df.index)
 
 
@@ -192,7 +214,7 @@ def penalties(df: pd.DataFrame, p: Profile, activity: str) -> pd.DataFrame:
         head = np.nan_to_num(column(df, "headwind"), nan=0.0)
         wind = np.minimum(np.maximum(head - 5, 0) * 1.5, 35) + np.minimum(np.maximum(gusts - 35, 0) * 0.5, 15)
     elif activity == "Walking":
-        wind = np.minimum(np.maximum(np.nan_to_num(column(df, "wind_speed_10m"), nan=0.0) - 20, 0), 25)
+        wind = np.minimum(np.maximum(np.nan_to_num(column(df, "wind_speed_10m"), nan=0.0) - WIND_COMFORT_KMH, 0), 25)
     else:
         wind = np.minimum(np.maximum(gusts - 60, 0) * 0.5, 15)
     uv = np.nan_to_num(column(df, "uv_index"), nan=0.0)
@@ -207,6 +229,8 @@ def penalties(df: pd.DataFrame, p: Profile, activity: str) -> pd.DataFrame:
         "Strong sun": np.minimum(np.maximum(uv - 5, 0) * 4, 20) * p.exposed,
         "Darkness": np.where(is_night(df), 5.0 if activity == "Driving" else 10.0, 0.0),
         "Fog": np.where(codes_in(df, FOG), 15.0 if activity == "Driving" else 10.0, 0.0),
+        "Air quality": np.minimum(np.maximum(np.nan_to_num(column(df, "european_aqi"), nan=0.0) - AQI_MODERATE, 0)
+                                  * 0.5, 25) * p.air_weight,
     }, index=df.index)
 
 
@@ -240,6 +264,15 @@ def advise(df: pd.DataFrame, activity: str, h: pd.DataFrame, tz: str, past: bool
     gusts, uv = column(df, "wind_gusts_10m"), np.nan_to_num(column(df, "uv_index"), nan=0.0)
     out: list[Advice] = []
 
+    if "vigilance_color" in df and (column(df, "vigilance_color", 1) >= 3).any():
+        colour = column(df, "vigilance_color", 1)
+        red = colour >= 4
+        first = red if red.any() else colour >= 3
+        text = str(df["vigilance_text"].iloc[int(np.argmax(first))]) if "vigilance_text" in df else ""
+        out.append(Advice("🔴" if red.any() else "🟠",
+                          f"Official {'red' if red.any() else 'orange'} warning {where(first)}",
+                          (text + ". " if text else "") + "Follow the authorities' advice; consider postponing.",
+                          "danger"))
     if (h["Thunderstorm"] >= SIGNIFICANT).any():
         text = ("Heavy downpours and hail possible: slow down, never drive through a flooded road." if car else
                 "Stay away from summits, ridges and open ground, do not shelter under an isolated tree, and "
@@ -274,6 +307,28 @@ def advise(df: pd.DataFrame, activity: str, h: pd.DataFrame, tz: str, past: bool
         text = ("Dipped headlights or fog lights, and slow down." if car else
                 "Wear bright clothing" + (" and switch on your lights, even by day." if bike else "."))
         out.append(Advice("🌫️", f"Fog or poor visibility {where(h['Poor visibility'] >= SIGNIFICANT)}", text, "danger"))
+
+    ozone, pm10 = column(df, "ozone"), column(df, "pm10")
+    if (np.nan_to_num(ozone) >= OZONE_INFO).any() or (np.nan_to_num(pm10) >= PM10_INFO).any():
+        high_ozone = np.nan_to_num(ozone) >= OZONE_INFO
+        what = (f"ozone up to {np.nanmax(ozone):.0f} µg/m³" if high_ozone.any()
+                else f"fine particles (PM10) up to {np.nanmax(pm10):.0f} µg/m³")
+        mask = high_ozone if high_ozone.any() else np.nan_to_num(pm10) >= PM10_INFO
+        text = ("Above the information threshold: keep the effort moderate, avoid the afternoon for ozone, and "
+                "take it easy if you have asthma or heart trouble." if not car else
+                "Above the information threshold: set the ventilation to recirculate in towns.")
+        kind = "danger" if (h["Air pollution"] >= SIGNIFICANT).any() else "comfort"
+        out.append(Advice("😷", f"Air pollution: {what} {where(mask)}", text, kind))
+    elif not car and (np.nan_to_num(column(df, "european_aqi")) > 60).any():
+        aqi = column(df, "european_aqi")
+        out.append(Advice("😷", f"Poor air quality (European index up to {np.nanmax(aqi):.0f}) {where(aqi > 60)}",
+                          "Keep the effort moderate in the most polluted stretches.", "comfort"))
+    pollen = [(c, float(np.nanmax(column(df, c)))) for c, high in POLLEN_HIGH.items()
+              if c in df and np.nan_to_num(column(df, c)).max() >= high]
+    if pollen and not car:
+        names = ", ".join(f"{c.split('_')[0]} ({v:.0f} grains/m³)" for c, v in pollen)
+        out.append(Advice("🌾", f"High pollen: {names}", "For allergy sufferers: treatment before leaving, sunglasses, "
+                          "and a shower after the trip.", "info"))
 
     hot = feels >= 28
     if hot.any():
@@ -310,7 +365,7 @@ def advise(df: pd.DataFrame, activity: str, h: pd.DataFrame, tz: str, past: bool
                               "Plan more time and energy. Done the other way round, most of it would be with the "
                               "wind behind you, if the wind holds.", "comfort"))
 
-    warning = (h.drop(columns="Darkness").max() >= WARN_FROM).any()   # night is not in the weather warnings
+    warning = (h.drop(columns=["Darkness", "Air pollution"]).max() >= WARN_FROM).any()   # not weather warnings
     if warning and not past:
         out.append(Advice("📢", "Check the official warnings before you go",
                           "In France: Météo-France vigilance (vigilance.meteofrance.fr). Forecasts change: look "

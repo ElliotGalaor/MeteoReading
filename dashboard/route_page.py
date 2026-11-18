@@ -15,6 +15,10 @@ from folium.plugins import Draw
 from plotly.subplots import make_subplots
 from streamlit_folium import st_folium
 
+from meteo.departure import best, best_window, plan_track, sweep, wind_aware
+from meteo.ensemble import fetch as fetch_ensemble
+from meteo.ensemble import spread as ensemble_spread
+from meteo.ensemble import weight as ens_weight
 from meteo.geotrek import INSTANCES, PASS_BAND_KM, fetch_route_file, nearby_treks
 from meteo.gps import (
     ACTIVITIES,
@@ -23,18 +27,31 @@ from meteo.gps import (
     main_track,
     moving_hours,
     parse_track,
-    passage_times,
     read_tracks,
     sample_points,
     summary,
     to_gpx,
-    with_times,
 )
 from meteo.links import tracks_from_link
 from meteo.osm_routes import nearby_relations, relation_track
-from meteo.route_scores import DANGER_LEVELS, Assessment, Score, assess, is_past, level
+from meteo.route_scores import (
+    AQI_MODERATE,
+    DANGER_LEVELS,
+    OZONE_ALERT,
+    OZONE_INFO,
+    PM10_ALERT,
+    PM10_INFO,
+    PROFILES,
+    Assessment,
+    Score,
+    assess,
+    is_past,
+    level,
+)
+from meteo.route_timing import moving_hours as timing_hours
 from meteo.route_weather import (
     FORECAST_FUTURE_DAYS,
+    POLLEN,
     api_weight,
     clock_format,
     nearby_station_obs,
@@ -43,6 +60,12 @@ from meteo.route_weather import (
     whole,
 )
 from meteo.routing import geocode, track_from_waypoints, waypoints_from_drawings
+from meteo.vigilance import OFFICIAL_PAGE, at_points, departments
+from meteo.vigilance import api_key as vigilance_key
+from meteo.vigilance import covered_until as vigilance_until
+from meteo.vigilance import fetch as fetch_vigilance
+from meteo.vigilance import parse as parse_vigilance
+from share import from_link, publish, restore
 from ui import (
     AXIS,
     COOL,
@@ -102,6 +125,7 @@ def _timezone(lat: float, lon: float) -> str | None:
 PAGE = 10                              # routes listed at a time
 NEARBY, LINK = "Nearby route", "From a link"
 MODES = ["Sample track", "Draw on the map", "Upload a file", LINK]
+SHARED_MODES = {"sample": "Sample track", "link": LINK}   # the track choices a link can carry
 
 
 @st.cache_data(show_spinner=False, ttl=6 * 3600, max_entries=100)
@@ -173,9 +197,9 @@ def _samples() -> dict[str, str]:
 
 @st.cache_data(show_spinner=False, ttl=1800)
 def _reading(points: pd.DataFrame, name: str):
-    """Cached for 30 minutes: changing a widget and coming back does not call the API again."""
-    r = read_route(Track(name=name, points=points))
-    return r.points, r.source, r.timezone, r.insights, r.stats
+    """Cached for 30 minutes: changing a widget and coming back does not call the API again. The reading keeps the
+    forecast fetched, so the same trip can be read at other times (wind-aware pace, other departures) for free."""
+    return read_route(Track(name=name, points=points))
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
@@ -249,6 +273,20 @@ def page_route():
     geo = st.session_state.get("route_geotrek")   # a route picked in "Routes nearby", in place of the track
     if st.session_state.get("route_mode") == NEARBY and not geo:
         st.session_state["route_mode"] = "Sample track"
+    # A shared link: a sample or a public route link (never an uploaded or drawn track), and the plan
+    shared = from_link("track")
+    if shared in SHARED_MODES:
+        st.session_state.pop("route_geotrek", None)
+        geo = None
+        st.session_state["route_mode"] = SHARED_MODES[shared]
+    restore("route_link", "url")
+    if (act := from_link("activity")) in ACTIVITIES:
+        st.session_state["route_link_activity"] = act
+    today = date.today()
+    restore("route_day", "date", parse=date.fromisoformat, valid=lambda v: v <= today + timedelta(days=FORECAST_FUTURE_DAYS))
+    restore("route_hour", "time", parse=time.fromisoformat)
+    if (sp := from_link("speed")) is not None:
+        st.session_state["route_link_speed"] = sp
     mode = st.segmented_control("Track", MODES + ([NEARBY] if geo else []), default="Sample track",
                                 required=True, key="route_mode", on_change=_on_mode)
     if mode == NEARBY and geo:
@@ -311,8 +349,9 @@ def page_route():
                         st.warning("No sample track found in the samples/ folder.")
                         return
                     names = list(samples)
-                    default = next((i for i, n in enumerate(names) if n.startswith("Paris")), 0)
-                    name = st.selectbox("Sample", names, index=default)
+                    default = next((n for n in names if n.startswith("Paris")), names[0])
+                    restore("route_sample", "sample", default, valid=lambda v: v in names)
+                    name = st.selectbox("Sample", names, key="route_sample")
                     points, name, time_issue = _pick(_parse(open(samples[name], "rb").read(), samples[name]),
                                                      f"pick_{name}")
             except ValueError as exc:
@@ -326,11 +365,13 @@ def page_route():
         guessed = st.session_state.get("draw_activity", "Cycling")
     else:
         guessed = _guess_activity(track.name)
+    guessed = st.session_state.get("route_link_activity", guessed)
 
+    plan = None   # a planned trip: (base track without times, departure, flat speed, hours per day)
     with right:
         if track.has_time:
             timing = st.segmented_control("Timing", ["Recorded times", "Plan a new trip"], default="Recorded times",
-                                            required=True)
+                                          required=True)
         else:
             timing = "Plan a new trip"
             why = f"its timestamps cannot be used ({time_issue})" if time_issue else "this track has no timestamps"
@@ -347,17 +388,30 @@ def page_route():
         else:
             c1, c2 = st.columns(2)
             today = date.today()
-            day = c1.date_input("Departure date", today + timedelta(days=1),
-                                max_value=today + timedelta(days=FORECAST_FUTURE_DAYS),
+            st.session_state.setdefault("route_day", today + timedelta(days=1))
+            st.session_state.setdefault("route_hour", time(9, 0))
+            if st.session_state["route_day"] > today + timedelta(days=FORECAST_FUTURE_DAYS):
+                st.session_state["route_day"] = today + timedelta(days=FORECAST_FUTURE_DAYS)
+            day = c1.date_input("Departure date", max_value=today + timedelta(days=FORECAST_FUTURE_DAYS), key="route_day",
                                 help="Up to 16 days ahead (forecast). Past dates show the weather that actually happened.")
-            hour = c2.time_input("Departure time", time(9, 0), step=900)
+            hour = c2.time_input("Departure time", step=900, key="route_hour")
             c3, c4, c5 = st.columns([1.2, 1, 1.2])
             activity = c3.selectbox("Activity", options, index=options.index(guessed),
                                     help="Guessed from the track's name. Sets the speed, and the danger and comfort "
                                          "scores.")
             preset = ACTIVITIES[activity]
-            speed = c4.number_input("Speed (km/h)", 1.0, 150.0, float(preset["speed"]), step=0.5,
-                                    help="Average speed on the flat; time is added for climbs when walking or cycling.")
+            speed_key = f"route_speed_{activity}"
+            if (sp := st.session_state.pop("route_link_speed", None)) is not None:
+                try:
+                    if 1 <= float(sp) <= 150:
+                        st.session_state[speed_key] = float(sp)
+                except ValueError:
+                    pass
+            st.session_state.setdefault(speed_key, float(preset["speed"]))
+            speed = c4.number_input("Speed on the flat (km/h)", 1.0, 150.0, step=0.5, key=speed_key,
+                                    help="Walking: slower up steep slopes and down very steep ones (Tobler's rule). "
+                                         "Cycling: the effort that holds this speed on the flat is kept, so climbs, "
+                                         "descents and the forecast wind change the pace. Driving: this speed.")
             # Default: the time zone where the track starts (a 09:00 departure in Tokyo is 09:00 Tokyo time)
             first = track.points.iloc[0]
             local_tz = _timezone(round(float(first["lat"]), 2), round(float(first["lon"]), 2)) or "Europe/Paris"
@@ -372,7 +426,7 @@ def page_route():
                         f"Departure at {start:%H:%M}.")
             # Long routes: split into days, each starting at the departure time (the stages of a multi-day route)
             hours_per_day = None
-            total_h = float(moving_hours(track, speed, preset["climb_min_per_100m"])[-1])
+            total_h = float(timing_hours(track, activity, speed)[-1])
             if total_h > 10:
                 if st.toggle(f"Split into days (about {total_h:.0f} h on the move)", value=True, key="route_split",
                              help="Each day goes on from where the previous one stopped, at the departure time."):
@@ -382,31 +436,29 @@ def page_route():
                     days = int(np.ceil(total_h / hours_per_day - 1e-9))
                     st.caption(f"{days} days, each starting at {hour:%H:%M}."
                                + (" Beyond the 16 days of forecasts, the reading will stop." if days > 16 else ""))
-            track = with_times(track, passage_times(track, start, speed, preset["climb_min_per_100m"], hours_per_day))
+            plan = (track, start, speed, hours_per_day)
+            track = plan_track(track, start, activity, speed, hours_per_day)
 
+    _share_route(mode, geo, activity, plan)
     if mode == "Upload a file":
         st.caption(f"**{track.name}**")
-    s = summary(track)
-    k = st.columns(4)
-    k[0].metric("Distance", f"{num(s['distance_km'], 1)} km", border=True)
-    k[1].metric("Ascent", f"{num(s['ascent_m'], 0)} m" if s["ascent_m"] is not None else "–", border=True)
-    dur = s["duration_h"]   # departure to arrival, nights included on a multi-day plan
-    k[2].metric("Duration", f"{int(dur // 24)} d {int(dur % 24)} h" if dur >= 24 else f"{int(dur)} h {int(dur % 1 * 60):02d}",
-                border=True)
-    st.markdown("<div class='source'><a href='#routes-nearby'>Routes nearby ↓</a></div>", unsafe_allow_html=True)
-    n_points = len(sample_points(track))
-    k[3].metric("Weather points", f"{n_points}", border=True,
-                help=f"Points sampled along the route (at least 1 km apart). Cost: about "
-                     f"{api_weight(n_points, 3):.0f} Open-Meteo calls, out of a free quota of 10,000 per day.")
-
     try:
         with st.spinner("Reading the weather along the route…"):
-            pts, source, tz, insights, stats = _reading(track.points, track.name)
+            reading = _reading(track.points, track.name)
     except (ValueError, RuntimeError) as exc:
+        _track_kpis(track, activity, plan)
         st.error(str(exc))
         _nearby_panel(track, activity)
         return
+    still = track
+    if plan is not None:   # on a bike, the pace with the forecast wind (same forecast, read again)
+        reading, track = wind_aware(reading, track, plan[1], activity, plan[2], plan[3])
+    _track_kpis(track, activity, plan, still)
 
+    pts, source, tz, insights, stats = reading.points, reading.source, reading.timezone, reading.insights, reading.stats
+    vig = _vigilance(pts, source)
+    if vig["warnings"] is not None:
+        pts = at_points(pts, vig["deps"], vig["warnings"])
     local = pts["time"].dt.tz_convert(tz)
     scores = assess(pts, activity, tz)
     pts = pts.assign(local=local, local_str=local.dt.strftime(clock_format(local).replace("%a", "%a %d %b")),
@@ -422,22 +474,227 @@ def page_route():
     k[2].metric("Strongest gust", f"{stats['gust_max']:.0f} km/h", border=True)
     k[3].metric("Headwind share", f"{stats['headwind_share']:.0%}", border=True,
                 help=f"Wind component against you above 5 km/h. Tailwind on {stats['tailwind_share']:.0%} of the route.")
+    _vigilance_notes(pts, vig)
     for line in insights:
         st.markdown(f"<div class='finding'>{line}</div>", unsafe_allow_html=True)
+    if pts["precip_15min"].any():
+        st.caption("Rain in 15-minute steps for this trip starting soon (Météo-France AROME and DWD ICON-D2 where they "
+                   "cover the route, hourly values interpolated elsewhere).")
 
-    _scores_panel(scores, pts, source)
+    ens = None
+    if source == "forecast":
+        n_days = (pts["time"].max().date() - pts["time"].min().date()).days + 1
+        if st.toggle("Show how sure the forecast is (51 runs of the ECMWF ensemble)", key="route_ensemble",
+                     help="Reads the same trip in the 51 runs of the European ensemble forecast: bands on the charts, "
+                          f"the chance of rain and how much the runs agree. Costs about {ens_weight(len(pts), n_days):.0f}"
+                          " calls of the free Open-Meteo quota (10,000 a day, shared by all visitors)."):
+            try:
+                with st.spinner("Reading the 51 runs…"):
+                    ens = _ensemble(pts[["dist_km", "time", "lat", "lon"]], PROFILES[activity].gusts[0])
+            except (ValueError, RuntimeError, KeyError) as exc:
+                st.caption(f"The ensemble forecast could not be read: {exc}")
+
+    _scores_panel(scores, pts, source, ens)
+    if plan is not None and source == "forecast":
+        _when_to_leave(plan, activity, tz, still.points, track.name, vig, scores)
     st.subheader("Along the route")
     _map(track, pts, tz)
-    _profile(track, pts)
+    _profile(track, pts, ens)
     _scores_chart(scores, pts)
-    _table(pts)
+    _table(pts, ens)
     _station_panel(pts, tz)
 
     label = ("Open-Meteo forecast API (best available models for the area, e.g. Météo-France AROME/ARPEGE over France)"
              if source == "forecast" else "ERA5 reanalysis archive via the Open-Meteo API (what the weather actually was)")
-    st.markdown(f"<div class='source'>Weather: {label}. Times in {tz}. Temperatures are adjusted to the altitude "
+    extra = "; air quality and pollen: CAMS Europe via Open-Meteo" if pts["european_aqi"].notna().any() else ""
+    st.markdown(f"<div class='source'>Weather: {label}{extra}. Times in {tz}. Temperatures are adjusted to the altitude "
                 f"of each point (90 m terrain model).</div>", unsafe_allow_html=True)
     _nearby_panel(track, activity)
+
+
+def _share_route(mode: str, geo: dict | None, activity: str, plan) -> None:
+    """The address of the page: a sample or a public route link, and the plan (an uploaded or drawn track is never
+    put in it)."""
+    if mode == "Sample track":
+        values = {"track": "sample", "sample": st.session_state.get("route_sample")}
+    elif mode == LINK:
+        values = {"track": "link", "url": st.session_state.get("route_link", "").strip() or None}
+    elif mode == NEARBY and geo and geo.get("page_url"):
+        values = {"track": "link", "url": geo["page_url"]}
+    else:
+        publish({})
+        return
+    values["activity"] = activity
+    if plan is not None:
+        values.update(date=st.session_state["route_day"].isoformat(), time=f"{st.session_state['route_hour']:%H:%M}",
+                      speed=f"{plan[2]:g}")
+    publish(values)
+
+
+def _fmt_hours(h: float) -> str:
+    return f"{int(h // 24)} d {int(h % 24)} h" if h >= 24 else f"{int(h)} h {int(round(h % 1 * 60)) % 60:02d}"
+
+
+def _track_kpis(track: Track, activity: str, plan, still: Track | None = None) -> None:
+    """Distance, ascent, duration (with the other estimates of a planned trip) and weather points."""
+    s = summary(track)
+    k = st.columns(4)
+    k[0].metric("Distance", f"{num(s['distance_km'], 1)} km", border=True)
+    k[1].metric("Ascent", f"{num(s['ascent_m'], 0)} m" if s["ascent_m"] is not None else "–", border=True)
+    dur = s["duration_h"]   # departure to arrival, nights included on a multi-day plan
+    help_ = None
+    if plan is not None:
+        base, _, speed, _ = plan
+        moving = float(timing_hours(track if still is None else still, activity, speed)[-1])
+        old = float(moving_hours(base, speed, ACTIVITIES[activity]["climb_min_per_100m"])[-1])
+        lines = [f"On the move: {_fmt_hours(moving)} in still air"]
+        if still is not None and track is not still:
+            wind_h = float((track.points["time"].iloc[-1] - track.points["time"].iloc[0]).total_seconds() / 3600)
+            still_h = float((still.points["time"].iloc[-1] - still.points["time"].iloc[0]).total_seconds() / 3600)
+            lines.append(f"with the forecast wind: {_fmt_hours(wind_h)} instead of {_fmt_hours(still_h)} door to door")
+        lines.append(f"old estimate (flat speed + time per 100 m of climb): {_fmt_hours(old)}")
+        help_ = ("; ".join(lines) + ". The pace changes with the slope" + (" and the wind" if activity == "Cycling" else "")
+                 + ": see “How are the times computed?” below the scores.")
+    k[2].metric("Duration", _fmt_hours(dur), border=True, help=help_)
+    st.markdown("<div class='source'><a href='#routes-nearby'>Routes nearby ↓</a></div>", unsafe_allow_html=True)
+    n_points = len(sample_points(track))
+    k[3].metric("Weather points", f"{n_points}", border=True,
+                help=f"Points sampled along the route (at least 1 km apart). Cost: about "
+                     f"{api_weight(n_points, 3):.0f} Open-Meteo calls, out of a free quota of 10,000 per day.")
+    if still is not None and track is not still:
+        moving_wind = float((track.points["time"].iloc[-1] - track.points["time"].iloc[0]).total_seconds() / 3600)
+        moving_still = float((still.points["time"].iloc[-1] - still.points["time"].iloc[0]).total_seconds() / 3600)
+        if abs(moving_wind - moving_still) >= 0.1:
+            st.caption(f"On a bike the times include the forecast wind: {_fmt_hours(moving_wind)} door to door, against "
+                       f"{_fmt_hours(moving_still)} in still air.")
+
+
+@st.cache_data(show_spinner=False, ttl=1800)
+def _warnings() -> tuple[pd.DataFrame | None, str | None]:
+    """Current Météo-France vigilance (cached 30 minutes), or why there is none."""
+    key = vigilance_key()
+    if not key:
+        return None, "not connected"
+    try:
+        return parse_vigilance(fetch_vigilance(key)), None
+    except RuntimeError as exc:
+        return None, str(exc)
+
+
+@st.cache_data(show_spinner=False, ttl=86400)
+def _departments(points: pd.DataFrame) -> list[dict]:
+    return departments(points)
+
+
+def _vigilance(pts: pd.DataFrame, source: str) -> dict:
+    """The warnings that may apply to a forecast reading in France: {warnings, deps, status, until}."""
+    out = {"warnings": None, "deps": [], "status": None, "until": None}
+    if source != "forecast":
+        return out
+    warnings, status = _warnings()
+    out["status"] = status
+    if warnings is None:
+        return out
+    out["deps"] = _departments(pts[["dist_km", "lat", "lon"]].round(4))
+    out["warnings"], out["until"] = warnings, vigilance_until(warnings)
+    return out
+
+
+def _vigilance_notes(pts: pd.DataFrame, vig: dict) -> None:
+    link = f"[vigilance.meteofrance.fr]({OFFICIAL_PAGE})"
+    if vig["status"] == "not connected" or (vig["warnings"] is None and vig["status"] is None):
+        return
+    if vig["warnings"] is None:
+        st.caption(f"Official warnings could not be read ({vig['status']}): see {link}.")
+        return
+    if not vig["deps"]:
+        return   # outside France: no Météo-France vigilance
+    texts = pts.loc[pts["vigilance_color"] >= 2, ["vigilance_color", "vigilance_text"]].drop_duplicates("vigilance_text")
+    for colour, text in texts.sort_values("vigilance_color", ascending=False).itertuples(index=False):
+        (st.error if colour >= 4 else st.warning if colour == 3 else st.info)(f"{text}. Details: {link}",
+                                                                           icon=":material/warning:")
+    until = vig["until"]
+    if until is not None and pts["time"].max() > until:
+        st.caption(f"Météo-France vigilance covers today and tomorrow only (until {until:%a %d %b %H:%M} UTC): check "
+                   f"it again closer to the day on {link}.")
+    elif texts.empty:
+        st.caption(f"No Météo-France vigilance above green on the route when you pass ({link}).")
+
+
+@st.cache_data(show_spinner=False, ttl=1800)
+def _ensemble(points: pd.DataFrame, gust_danger: float):
+    first, last = points["time"].min().date(), points["time"].max().date()
+    frames, idx = fetch_ensemble(points, first, last)
+    return ensemble_spread(frames, idx, points, gust_danger)
+
+
+@st.cache_data(show_spinner=False, ttl=1800, max_entries=20)
+def _sweep(points: pd.DataFrame, name: str, activity: str, speed: float, hours_per_day: float | None, tz: str,
+           days: tuple, vig_key: str, now: pd.Timestamp):
+    """Every departure of the days, read from the forecast fetched for the planned trip (no new API call)."""
+    fetched = _reading(points, name)
+    warnings, _ = _warnings()
+    deps = _departments(fetched.points[["dist_km", "lat", "lon"]].round(4)) if vig_key and warnings is not None else []
+
+    def decorate(df):
+        return at_points(df, deps, warnings) if deps else df
+    return sweep(fetched, Track(name=name, points=points), list(days), tz, activity, speed, hours_per_day,
+                 decorate=decorate, now=now)
+
+
+def _use_departure(when: pd.Timestamp) -> None:
+    st.session_state["route_day"] = when.date()
+    st.session_state["route_hour"] = when.time().replace(second=0, microsecond=0)
+
+
+def _when_to_leave(plan, activity: str, tz: str, points: pd.DataFrame, name: str, vig: dict, scores: Assessment) -> None:
+    """Danger and comfort for every departure from 05:00 to 20:00, from the forecast already fetched."""
+    _, start, speed, hours_per_day = plan
+    st.markdown("<div class='chart-title'>When to leave</div>", unsafe_allow_html=True)
+    last_day = date.today() + timedelta(days=FORECAST_FUTURE_DAYS)
+    day0 = start.tz_convert(tz).date()
+    choices = [d for d in (day0, day0 + timedelta(days=1)) if d <= last_day]
+    pick = st.segmented_control("Day", choices, default=day0, required=True, key=f"leave_day_{day0}",
+                                format_func=lambda d: f"{d:%a %d %b}") or day0
+    now = pd.Timestamp.now(tz="UTC").floor("30min")
+    with st.spinner("Trying every departure…"):
+        sw = _sweep(points, name, activity, speed, hours_per_day, tz, (pick,),
+                    "on" if vig["warnings"] is not None else "", now)
+    if sw.empty:
+        st.caption("No departure that day fits within the forecast.")
+        return
+    best_row = best(sw)
+    a, b = best_window(sw, best_row)
+    dep = sw["departure"].dt.tz_convert(tz)
+    fig = go.Figure()
+    fig.add_vrect(x0=a.tz_convert(tz) - pd.Timedelta(minutes=10), x1=b.tz_convert(tz) + pd.Timedelta(minutes=10),
+                  fillcolor="rgba(195,194,183,0.35)", line_width=0, layer="below")
+    custom = np.stack([sw["arrival"].dt.strftime("%a %H:%M"), sw["danger_level"], sw["comfort_level"],
+                       sw["rain_mm"].round(1), (sw["headwind_share"] * 100).round(0), sw["dark_hours"].round(1)], axis=1)
+    fig.add_scatter(x=dep, y=sw["comfort"], mode="lines+markers", name="Comfort", line=dict(color=SERIES[0], width=2.2),
+                    marker=dict(size=7), customdata=custom,
+                    hovertemplate="leave %{x|%H:%M}, arrive %{customdata[0]}<br>comfort %{y:.0f} (%{customdata[2]})"
+                                  "<br>rain %{customdata[3]} mm · headwind on %{customdata[4]}% · "
+                                  "%{customdata[5]} h in the dark<extra></extra>")
+    fig.add_scatter(x=dep, y=sw["danger"], mode="lines+markers", name="Danger", line=dict(color=AXIS, width=2),
+                    marker=dict(size=8, color=[STATUS[DANGER_STATUS[lv]] for lv in sw["danger_level"]],
+                                line=dict(width=1.5, color="#fcfcfb")),
+                    customdata=custom, hovertemplate="leave %{x|%H:%M}: danger %{y:.0f} (%{customdata[1]})<extra></extra>")
+    fig.add_scatter(x=[best_row["departure"].tz_convert(tz)], y=[best_row["comfort"]], mode="markers",
+                    name="Best departure", marker=dict(symbol="star", size=16, color=SERIES[0],
+                                                       line=dict(width=1.5, color="#fcfcfb")), hoverinfo="skip")
+    fig.update_layout(yaxis=dict(range=[0, 104], title="score"), xaxis=dict(tickformat="%H:%M"), hovermode="x unified")
+    window = (f"{a.tz_convert(tz):%H:%M}" if a == b else f"{a.tz_convert(tz):%H:%M} to {b.tz_convert(tz):%H:%M}")
+    chart(fig, 330, f"Best time to leave on {pick:%A %d %B}: {best_row['departure'].tz_convert(tz):%H:%M}",
+          f"Each departure every 30 minutes, read from the same forecast · shaded: departures as good ({window})")
+    same = best_row["departure"] == start
+    if same:
+        st.caption("Your departure is the best of the day.")
+    else:
+        st.button(f"Leave at {best_row['departure'].tz_convert(tz):%H:%M} on {pick:%a %d %b} (comfort "
+                  f"{best_row['comfort']}, danger {best_row['danger']}, against {scores.comfort.value} and "
+                  f"{scores.danger.value} now)", on_click=_use_departure, args=(best_row["departure"].tz_convert(tz),),
+                  icon=":material/schedule:")
 
 
 PRACTICE_GROUPS = [   # Geotrek names practices in French, OpenStreetMap in English: one set of filters for both
@@ -631,8 +888,27 @@ score is 70% its worst moment and 30% the average over the time on the way.
 comfortable range of the activity, muggy air, rain, wind (the headwind on a bike), snow, strong sun, darkness
 and fog, then averaged over the time on the way.
 
+**Air quality** (forecasts up to about 4 days ahead): comfort loses points above a European air quality index of
+{aqi}, more on a bike than on foot, little in a car; danger rises from the European information thresholds to the
+alert thresholds (ozone {o3a}-{o3b} µg/m³, PM10 {pma}-{pmb} µg/m³).
+
+**Official warnings**: when Météo-France vigilance is connected, an orange warning where and when you pass adds a
+hazard of 50, a red one 90.
+
 **Advice**: simple rules on the conditions met, where and when, worded for the activity. They do not replace the
 official warnings. Details and thresholds: `meteo/route_scores.py`.
+""".format(aqi=AQI_MODERATE, o3a=OZONE_INFO, o3b=OZONE_ALERT, pma=PM10_INFO, pmb=PM10_ALERT)
+TIMES_METHOD = """
+**Walking**: Tobler's hiking rule, scaled to your speed on the flat. A gentle descent is the fastest; steep slopes
+are slower both up and down.
+
+**Cycling**: a constant effort. The power that holds your flat speed without wind is kept on every stretch, and the
+speed is where it balances gravity, rolling resistance and air drag (85 kg rider and bike, road position). The forecast
+head or tail wind at each point changes the drag: the times are computed in still air, the weather read, then the
+times computed again with that wind and the weather read again. Descents are capped at 55 km/h, steep climbs go no
+slower than 4 km/h (pushing the bike).
+
+**Driving**: your speed, whatever the slope. Details: `meteo/route_timing.py`.
 """
 
 
@@ -645,7 +921,7 @@ def _card(title: str, score: Score, status: str, why: str) -> str:
             f"<div class='score-why'>{why}</div></div>")
 
 
-def _scores_panel(scores: Assessment, pts: pd.DataFrame, source: str) -> None:
+def _scores_panel(scores: Assessment, pts: pd.DataFrame, source: str, ens=None) -> None:
     st.subheader(f"Safety and comfort · {scores.activity.lower()}")
     clock = dict(zip(pts["time"], pts["local_str"], strict=True))
     danger, comfort = scores.danger, scores.comfort
@@ -654,6 +930,11 @@ def _scores_panel(scores: Assessment, pts: pd.DataFrame, source: str) -> None:
                                               for f in danger.factors[:3])
     else:
         why = "No significant hazard on the way."
+    if ens is not None:
+        shares = [f"{name.lower()} in {share:.0%} of the runs" for name, share in ens.hazard_shares.items()
+                  if np.isfinite(share) and 0.05 <= share < 0.95]
+        if shares:
+            why += " · Ensemble: " + ", ".join(shares) + " (a risk in only some runs: possible, not certain)."
     c1, c2 = st.columns(2)
     c1.markdown(_card("Danger score", danger, DANGER_STATUS[danger.level], why), unsafe_allow_html=True)
     if comfort.factors:
@@ -661,8 +942,17 @@ def _scores_panel(scores: Assessment, pts: pd.DataFrame, source: str) -> None:
     else:
         why = "Nothing spoils the trip."
     c2.markdown(_card("Comfort score", comfort, COMFORT_STATUS[comfort.level], why), unsafe_allow_html=True)
-    with st.expander("How are the scores computed?"):
+    if ens is not None:
+        rain = f"rain somewhere on the route in {ens.rain_anywhere:.0%} of them" if np.isfinite(ens.rain_anywhere) else ""
+        st.markdown(f"<div class='finding'><b>Forecast confidence: {ens.confidence.lower()}</b>. Across the "
+                    f"{ens.n_members} runs of the ECMWF ensemble, temperatures along the route spread over "
+                    f"{ens.temp_spread:.1f} °C on average (80% of the runs inside), {rain}.</div>",
+                    unsafe_allow_html=True)
+    e1, e2 = st.columns(2)
+    with e1.expander("How are the scores computed?"):
         st.markdown(METHOD)
+    with e2.expander("How are the times computed?"):
+        st.markdown(TIMES_METHOD)
 
     st.markdown("<div class='chart-title'>What to plan for</div>", unsafe_allow_html=True)
     if is_past(pts):
@@ -728,7 +1018,8 @@ def _draw_track() -> tuple[pd.DataFrame, str] | None:
             c1.caption(f"Centred on {hits[0]['label']}")
         elif hits is not None:
             c1.caption("Place not found: try the name of a town, village or mountain.")
-    m = folium.Map(location=center, zoom_start=zoom, control_scale=True,
+    # On a phone one finger scrolls the page past the map; two fingers move and zoom it (and a tap adds a point)
+    m = folium.Map(location=center, zoom_start=zoom, control_scale=True, dragging=not _phone(),
                    tiles="CartoDB dark_matter" if is_dark() else "OpenStreetMap")
     Draw(draw_options={"polyline": {"shapeOptions": {"color": SERIES[0], "weight": 4}, "metric": True},
                        "polygon": False, "rectangle": False, "circle": False, "circlemarker": False, "marker": False},
@@ -736,6 +1027,8 @@ def _draw_track() -> tuple[pd.DataFrame, str] | None:
     out = st_folium(m, key="draw_map", height=460, use_container_width=True, center=center, zoom=zoom,
                     returned_objects=["all_drawings"])
     waypoints = waypoints_from_drawings((out or {}).get("all_drawings"))
+    if _phone():
+        st.caption("On a phone, move and zoom the map with two fingers: one finger scrolls the page.")
     if len(waypoints) < 2:
         st.info("Pick the line tool (top left of the map), click your waypoints, then click the last point again "
                 "to finish. The edit and bin tools below it let you move or delete the line.")
@@ -771,15 +1064,17 @@ def _map(track: Track, pts: pd.DataFrame, tz: str) -> None:
     fig = go.Figure()
     fig.add_trace(go.Scattermap(lat=full["lat"], lon=full["lon"], mode="lines", line=dict(width=3, color=INK2),
                                 hoverinfo="skip", name="Track"))
+    extra = [(f"<br>air quality index {a:.0f}" if pd.notna(a) else "") + (f"<br>⚠️ {v}" if v else "")
+             for a, v in zip(pts["european_aqi"], pts.get("vigilance_text", pd.Series([""] * len(pts))), strict=True)]
     custom = np.stack([pts["dist_km"], pts["local_str"], pts["icon"] + " " + pts["condition"], pts["temperature_2m"],
                        pts["precipitation"].fillna(0), pts["wind_from"], pts["wind_speed_10m"], pts["headwind"],
-                       pts["danger"], pts["comfort"]], axis=1)
+                       pts["danger"], pts["comfort"], extra], axis=1)
     fig.add_trace(go.Scattermap(
         lat=pts["lat"], lon=pts["lon"], mode="markers", marker=marker, customdata=custom, name="Weather",
         hovertemplate="<b>km %{customdata[0]:.1f}</b> · %{customdata[1]}<br>%{customdata[2]}<br>"
                       "%{customdata[3]:.1f} °C · rain %{customdata[4]:.1f} mm/h<br>"
                       "wind from %{customdata[5]} %{customdata[6]:.0f} km/h (headwind %{customdata[7]:+.0f})<br>"
-                      "danger %{customdata[8]:.0f} · comfort %{customdata[9]:.0f}<extra></extra>"))
+                      "danger %{customdata[8]:.0f} · comfort %{customdata[9]:.0f}%{customdata[10]}<extra></extra>"))
     ends = pts.iloc[[0, -1]]
     fig.add_trace(go.Scattermap(lat=ends["lat"], lon=ends["lon"], mode="markers+text", text=["Start", "Finish"],
                                 textposition="top right", marker=dict(size=9, color=INK), hoverinfo="skip",
@@ -793,10 +1088,20 @@ def _map(track: Track, pts: pd.DataFrame, tz: str) -> None:
           margin=dict(l=0, r=0, b=0))
 
 
-def _profile(track: Track, pts: pd.DataFrame) -> None:
+def _profile(track: Track, pts: pd.DataFrame, ens=None) -> None:
     has_ele = pts["ele_profile"].notna().any()
+    has_air = pts["european_aqi"].notna().any()
+    pollen_cols = [c for c in POLLEN if pts[c].notna().any()]
+    show_pollen = bool(pollen_cols) and st.toggle("Show pollen", key="route_pollen",
+                                                  help="Pollen along the route (CAMS Europe), for allergy sufferers.")
     rows = ["Elevation (m)", "Temperature (°C)", "Rain (mm/h)", "Wind along the route (km/h)"][0 if has_ele else 1:]
-    fig = make_subplots(rows=len(rows), cols=1, shared_xaxes=True, vertical_spacing=0.06, subplot_titles=rows)
+    if ens is not None:
+        rows.insert(rows.index("Rain (mm/h)") + 1, "Chance of rain (% of the ensemble runs)")
+    if has_air:
+        rows.append("Air quality (European index)")
+    if show_pollen:
+        rows.append("Pollen (grains/m³)")
+    fig = make_subplots(rows=len(rows), cols=1, shared_xaxes=True, vertical_spacing=0.05, subplot_titles=rows)
     r = 1
     hover_time = pts["local_str"]
     if has_ele:
@@ -809,6 +1114,14 @@ def _profile(track: Track, pts: pd.DataFrame) -> None:
         fig.update_yaxes(range=[max(lo - (hi - lo) * 0.15 - 10, 0) if lo >= 0 else lo - 10, hi + (hi - lo) * 0.1 + 10],
                          row=r, col=1)
         r += 1
+    if ens is not None:
+        e = ens.points
+        fig.add_scatter(x=e["dist_km"], y=e["t_p90"], mode="lines", line=dict(width=0), hoverinfo="skip",
+                        showlegend=False, row=r, col=1)
+        fig.add_scatter(x=e["dist_km"], y=e["t_p10"], mode="lines", line=dict(width=0), fill="tonexty",
+                        fillcolor="rgba(195,194,183,0.35)", name="80% of the ensemble runs", showlegend=False,
+                        customdata=e["t_p90"], hovertemplate="km %{x:.1f}: %{y:.1f} to %{customdata:.1f} °C"
+                                                             "<extra>80% of the runs</extra>", row=r, col=1)
     fig.add_scatter(x=pts["dist_km"], y=pts["temperature_2m"], mode="lines+markers", name="Temperature",
                     line=dict(color=SERIES[1], width=2.2), marker=dict(size=7), customdata=hover_time,
                     hovertemplate="km %{x:.1f} · %{customdata}: %{y:.1f} °C<extra>temperature</extra>", row=r, col=1)
@@ -818,26 +1131,64 @@ def _profile(track: Track, pts: pd.DataFrame) -> None:
     r += 1
     prob = pts["precipitation_probability"]
     prob_txt = [f"{p:.0f}%" if pd.notna(p) else "n/a" for p in prob]
+    step = np.where(pts["precip_15min"], "15-minute data", "hourly data")
     fig.add_bar(x=pts["dist_km"], y=pts["precipitation"].fillna(0), name="Rain", marker_color=SERIES[0],
-                showlegend=False, customdata=np.stack([hover_time, prob_txt], axis=1),
-                hovertemplate="km %{x:.1f} · %{customdata[0]}: %{y:.1f} mm/h (probability %{customdata[1]})<extra></extra>",
+                showlegend=False, customdata=np.stack([hover_time, prob_txt, step], axis=1),
+                hovertemplate="km %{x:.1f} · %{customdata[0]}: %{y:.1f} mm/h (probability %{customdata[1]}, "
+                              "%{customdata[2]})<extra></extra>",
                 row=r, col=1)
     fig.update_yaxes(rangemode="tozero", row=r, col=1)
     r += 1
+    if ens is not None:
+        fig.add_scatter(x=ens.points["dist_km"], y=ens.points["rain_chance"] * 100, mode="lines", name="Chance of rain",
+                        line=dict(color=SERIES[0], width=2), fill="tozeroy", fillcolor="rgba(195,194,183,0.35)",
+                        showlegend=False, hovertemplate="km %{x:.1f}: rain in %{y:.0f}% of the runs<extra></extra>",
+                        row=r, col=1)
+        fig.update_yaxes(range=[0, 104], row=r, col=1)
+        r += 1
     fig.add_bar(x=pts["dist_km"], y=pts["headwind"], name="Headwind (+) / tailwind (−)", showlegend=False,
                 marker_color=[WARM if v >= 0 else COOL for v in pts["headwind"]], customdata=hover_time,
                 hovertemplate="km %{x:.1f} · %{customdata}: %{y:+.0f} km/h<extra>head/tail wind</extra>", row=r, col=1)
     fig.add_scatter(x=pts["dist_km"], y=pts["wind_gusts_10m"], mode="lines", name="Gusts", line=dict(color=INK, width=1.5),
                     customdata=hover_time, hovertemplate="km %{x:.1f} · %{customdata}: %{y:.0f} km/h<extra>gusts</extra>",
                     row=r, col=1)
+    if ens is not None:
+        fig.add_scatter(x=ens.points["dist_km"], y=ens.points["gust_p90"], mode="lines", name="Gusts, 90% of the runs below",
+                        line=dict(color=INK, width=1, dash="dot"),
+                        hovertemplate="km %{x:.1f}: gusts up to %{y:.0f} km/h in 90% of the runs<extra></extra>",
+                        row=r, col=1)
+    if has_air:
+        r += 1
+        aqi = pts["european_aqi"]
+        fig.add_bar(x=pts["dist_km"], y=aqi, name="Air quality", showlegend=False,
+                    marker_color=[STATUS["good"] if v <= 20 else STATUS["warning"] if v <= 60 else STATUS["serious"]
+                                  if v <= 80 else STATUS["critical"] for v in aqi.fillna(0)],
+                    customdata=np.stack([hover_time, pts["ozone"].round(0), pts["pm2_5"].round(0),
+                                         pts["pm10"].round(0)], axis=1),
+                    hovertemplate="km %{x:.1f} · %{customdata[0]}: index %{y:.0f}<br>ozone %{customdata[1]} · PM2.5 "
+                                  "%{customdata[2]} · PM10 %{customdata[3]} µg/m³<extra></extra>", row=r, col=1)
+        fig.add_hline(y=AQI_MODERATE, line=dict(color=MUTED, width=1, dash="dot"), row=r, col=1,
+                      annotation_text="moderate", annotation_position="top left",
+                      annotation_font=dict(color=MUTED, size=11))
+        fig.update_yaxes(rangemode="tozero", row=r, col=1)
+    if show_pollen:
+        r += 1
+        for i, c in enumerate(pollen_cols):
+            fig.add_scatter(x=pts["dist_km"], y=pts[c], mode="lines", name=POLLEN[c],
+                            line=dict(color=SERIES[i % len(SERIES)], width=1.8),
+                            hovertemplate=f"km %{{x:.1f}}: %{{y:.0f}} grains/m³<extra>{POLLEN[c]}</extra>", row=r, col=1)
+        fig.update_yaxes(rangemode="tozero", row=r, col=1)
     fig.update_xaxes(title_text="distance (km)", row=r, col=1)
-    fig.update_annotations(font=dict(size=13, color=INK2), x=0, xanchor="left")
-    fig.update_layout(bargap=0.3, hovermode="closest")
-    chart(fig, 230 * len(rows), "Profile of the route",
-          "Each panel shares the same distance axis · red bars: wind against you, blue: wind behind you")
+    fig.update_annotations(selector=dict(text="moderate"), x=None)
+    for title in rows:
+        fig.update_annotations(selector=dict(text=title), font=dict(size=13, color=INK2), x=0, xanchor="left")
+    fig.update_layout(bargap=0.3, hovermode="closest", showlegend=show_pollen)
+    chart(fig, 220 * len(rows), "Profile of the route",
+          "Each panel shares the same distance axis · red bars: wind against you, blue: wind behind you"
+          + (" · shaded: 80% of the ensemble runs" if ens is not None else ""))
 
 
-def _table(pts: pd.DataFrame) -> None:
+def _table(pts: pd.DataFrame, ens=None) -> None:
     tbl = pd.DataFrame({
         "km": pts["dist_km"].round(1), "time": pts["local_str"], "elevation_m": pts["ele_profile"].round(0),
         "conditions": pts["icon"] + " " + pts["condition"], "temp_c": pts["temperature_2m"].round(1),
@@ -846,6 +1197,13 @@ def _table(pts: pd.DataFrame) -> None:
         "headwind_kmh": pts["headwind"].round(0), "gusts_kmh": pts["wind_gusts_10m"].round(0),
         "danger": pts["danger"].round(0), "comfort": pts["comfort"].round(0),
     })
+    if pts["european_aqi"].notna().any():
+        tbl["air_index"] = pts["european_aqi"].round(0)
+        tbl["ozone"] = pts["ozone"].round(0)
+    if ens is not None:
+        tbl["rain_chance_pct"] = (ens.points["rain_chance"] * 100).round(0).to_numpy()
+    if "vigilance_text" in pts and pts["vigilance_text"].ne("").any():
+        tbl["vigilance"] = pts["vigilance_text"]
     with st.expander("Point-by-point reading", expanded=False):
         st.dataframe(tbl, hide_index=True, column_config={
             "km": st.column_config.NumberColumn("km", format="%.1f"), "time": "Time",
@@ -858,7 +1216,12 @@ def _table(pts: pd.DataFrame) -> None:
             "headwind_kmh": st.column_config.NumberColumn("Headwind", format="%+d km/h"),
             "gusts_kmh": st.column_config.NumberColumn("Gusts", format="%d km/h"),
             "danger": st.column_config.NumberColumn("Danger", format="%d", help="0 = none, 100 = do not go"),
-            "comfort": st.column_config.NumberColumn("Comfort", format="%d", help="100 = ideal for the activity")})
+            "comfort": st.column_config.NumberColumn("Comfort", format="%d", help="100 = ideal for the activity"),
+            "air_index": st.column_config.NumberColumn("Air index", format="%d", help="European air quality index"),
+            "ozone": st.column_config.NumberColumn("Ozone", format="%d µg/m³"),
+            "rain_chance_pct": st.column_config.NumberColumn("Rain chance", format="%d%%",
+                                                             help="Share of the 51 ensemble runs with rain"),
+            "vigilance": "Vigilance"})
         st.download_button("Download as CSV", tbl.to_csv(index=False).encode("utf-8"), "route_weather.csv", "text/csv",
                            icon=":material/download:")
 
@@ -874,6 +1237,7 @@ def _station_panel(pts: pd.DataFrame, tz: str) -> None:
                        f"{last:%d %B %Y}).")
             return
         obs = _stations(pts[["dist_km", "lat", "lon", "time"]], tz)
+        obs["fxi"] = obs["fxi"] * 3.6   # m/s in the warehouse, km/h like the reading above
         if obs.empty:
             st.caption("No station of the downloaded départements within 5 km of the route had data that day.")
             return
@@ -887,4 +1251,4 @@ def _station_panel(pts: pd.DataFrame, tz: str) -> None:
             "tn": st.column_config.NumberColumn("Min temp.", format="%.1f °C"),
             "tx": st.column_config.NumberColumn("Max temp.", format="%.1f °C"),
             "rr": st.column_config.NumberColumn("Rain", format="%.1f mm"),
-            "fxi": st.column_config.NumberColumn("Max gust", format="%.1f m/s")})
+            "fxi": st.column_config.NumberColumn("Max gust", format="%d km/h")})

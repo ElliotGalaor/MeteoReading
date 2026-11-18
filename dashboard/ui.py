@@ -280,11 +280,15 @@ def themed(fig: go.Figure) -> go.Figure:
 
 
 def page_header(title: str, lead: str, tab: str | None = None) -> None:
-    """Title and lead of a page; the browser tab is named after the page (`tab`, or the title)."""
+    """Title and lead of a page, and its "Copy link" button; the browser tab is named after the page (`tab`, or the
+    title)."""
+    from share import copy_link  # dashboard/share.py (imported here: ui is also imported from outside the app)
+
     st.set_page_config(page_title=f"{tab or title} · Météo Analytics")
     st.markdown(css(theme()), unsafe_allow_html=True)
     st.title(title)
     st.markdown(f"<div class='lead'>{lead}</div>", unsafe_allow_html=True)
+    copy_link()
 
 
 def source_note(extra: str = "") -> None:

@@ -47,11 +47,11 @@ a single self-contained file, to download (GitHub shows its source) and open in 
 | **Exploratory machine learning**: PCA + k-means, choice of k by silhouette | [meteo/analysis.py](meteo/analysis.py) |
 | **Cross-validation** against an independent source (ERA5 reanalysis) | [meteo/era5.py](meteo/era5.py) |
 | **Data visualisation**: colour-blind-safe palette, one idea per chart | [reports/figures/](reports/figures/) |
-| **Dashboard**: 8 interactive pages, including a pivot table built from a whitelisted catalog (no SQL from the client, bound parameters, totals with `GROUPING SETS`) and a projection of the coming days from past data alone, checked out of sample; light or dark following the device's setting, with a dark palette checked for contrast and colour blindness; on a touch screen one finger scrolls past the charts and two fingers pinch to zoom them | [dashboard/](dashboard/), [meteo/pivot.py](meteo/pivot.py), [meteo/projection.py](meteo/projection.py), [meteo/palette.py](meteo/palette.py) |
+| **Dashboard**: 10 interactive pages, including a pivot table built from a whitelisted catalog (no SQL from the client, bound parameters, totals with `GROUPING SETS`) and a projection of the coming days from past data alone, checked out of sample; light or dark following the device's setting, with a dark palette checked for contrast and colour blindness; on a touch screen one finger scrolls past the charts and maps, two fingers zoom or move them; every page's choices are kept in its address, so a link opens the same view | [dashboard/](dashboard/), [meteo/pivot.py](meteo/pivot.py), [meteo/projection.py](meteo/projection.py), [meteo/palette.py](meteo/palette.py) |
 | **Geospatial data**: GPX/KML/GeoJSON parsing (safe XML), routing on OpenStreetMap, resampling, elevation, bearings, time interpolation, head/tail wind, nearby routes from public APIs | [meteo/gps.py](meteo/gps.py), [meteo/routing.py](meteo/routing.py), [meteo/route_weather.py](meteo/route_weather.py), [meteo/geotrek.py](meteo/geotrek.py) |
 | **Explainable scoring**: danger and comfort indices from documented, per-activity thresholds (piecewise linear, combined as independent risks, time-weighted), rule-based advice | [meteo/route_scores.py](meteo/route_scores.py) |
 | **Software quality**: externalised configuration, automated tests, `ruff` lint, pipeline reproducible in one command | [tests/](tests/), [config.yaml](config.yaml) |
-| **DevOps**: GitHub Actions CI (lint, tests on 3 Python versions, **Docker** image with its data built once, smoke-tested and published to GHCR, weekly data refresh) and CD (that same image promoted on **Google Cloud Run**: staging, then production after approval, keyless authentication through Workload Identity Federation) | [.github/workflows/](.github/workflows/), [Dockerfile](Dockerfile), [docs/DEPLOY.md](docs/DEPLOY.md) |
+| **DevOps**: GitHub Actions CI (lint, tests on 3 Python versions, **Docker** image with its data built once, smoke-tested and published to GHCR, daily data refresh) and CD (that same image promoted on **Google Cloud Run**: staging, then production after approval, keyless authentication through Workload Identity Federation) | [.github/workflows/](.github/workflows/), [Dockerfile](Dockerfile), [docs/DEPLOY.md](docs/DEPLOY.md) |
 
 ## Quick start
 
@@ -113,8 +113,9 @@ The dashboard runs on **Google Cloud Run**, deployed by GitHub Actions:
   health endpoint, ~25 million rows in the warehouse, dashboard rendered headless;
 - **continuous delivery**: every push to `main` publishes the tested image to GitHub Container Registry, then deploys
   that same image, never rebuilt, to a staging service and, after approval, to production on Cloud Run;
-- **weekly data refresh**: every Monday the image is rebuilt with the latest Météo-France observations and
-  deployed the same way.
+- **daily data refresh**: every day the code already in production is rebuilt with the latest Météo-France
+  observations and goes to production without a new approval (only the data changed); code changes still wait for
+  theirs.
 
 - **capped cost**: at most one instance per service, and a kill switch (a Cloud Function fed by the billing
   budget) takes the site offline if half of the 5 USD monthly budget is spent, then reopens it the next month.
@@ -130,14 +131,16 @@ docker run -p 8080:8080 ghcr.io/elliotgalaor/meteoreading:latest
 
 | Page | Content |
 |---|---|
-| **Overview** | key indicators, warming stripes, map of the cities, main takeaways |
-| **Explore a city** | up to 3 cities, 13 indicators, by season, as values or anomalies, with a tested trend |
-| **A year in detail** | every day of a year compared with the normal (mean and 10th-90th percentiles) |
-| **Extremes and records** | city × decade heatmap, then vs now, records, filterable heat episodes |
+| **Overview** | key indicators, warming stripes, map of the cities, the last 60 days against the normal (with the date of the latest measurement, the rank of the month so far and the records of the last 30 days), main takeaways |
+| **Explore a city** | up to 3 cities, 13 indicators, by season, as values or anomalies, with a tested trend; the best weeks of the year for walking or cycling then and now, the dates of the warm and cold seasons, and the last weeks of one city |
+| **A year in detail** | every day of a year compared with the normal (mean and 10th-90th percentiles) and with the records of each calendar day before that year, record days starred; or the year's cumulative rainfall against the normal, with the daily rainfall |
+| **Explore a date** | the weather of any day since 1951 in a city, each value ranked against the same day of every year, the day's records, the days around it; heatwaves and cold waves (Météo-France's percentile method, per city) and dry spells ranked by intensity, one click from their peak day |
+| **Extremes and records** | city × decade heatmap, then vs now, records, filterable heat episodes; storm days (gusts ≥ 100 km/h) by decade with a tested trend, and the strongest gust of each city |
+| **Climate ahead** | each city at the official French warming levels (TRACC: +2 °C in 2030, +2.7 °C in 2050, +4 °C in 2100): hot days, very hot days, tropical nights, frost days, rainfall, as the median and range of 7 climate models, labelled as scenarios |
 | **Data and quality** | pipeline diagram, quality summary, station network, series splicing, ERA5 validation, limitations |
 | **Pivot table** | cross any dimension (city, year, decade, season, month, département, altitude…) with any measure and aggregation, on 6 datasets up to the 25 million daily records; filters, totals, colour scale, CSV export, and the generated query shown |
 | **Prediction** | a 7-day bulletin projected from past measurements only, clearly labelled as a projection and not a forecast: the normal of each day (seasonal cycle plus warming trend), the gap of the last measured day fading at the pace seen in the past, an 80% range, chances of rain, frost and heat, and an out-of-sample check of how many days ahead it beats the normal |
-| **Route weather** | weather along a route drawn on the map, uploaded or picked from the samples: map, profile, point-by-point reading, nearby station observations |
+| **Route weather** | weather along a route drawn on the map, uploaded or picked from the samples: map, profile, point-by-point reading, nearby station observations; the best time to leave, travel times from the slope and the wind, how sure the forecast is, air quality and pollen, rain in 15-minute steps for a trip starting soon, Météo-France warnings when connected |
 
 ## Pivot table, without client-side SQL
 
@@ -174,12 +177,15 @@ Then the tool:
 1. **reads the track** safely (`defusedxml`), from a file, a drawing or a **link** (a Geotrek route page, an
    OpenStreetMap relation or GPS trace, a GPS file on data.gouv.fr: only these sites are fetched,
    [meteo/links.py](meteo/links.py)); drops repeated points, computes distances, ascent and the direction of travel;
-2. **times each point**: the recorded timestamps for a past activity, or an estimate for a planned trip
-   (departure time + speed, with extra time for climbs when walking or cycling); a long route can be **split into
-   days**, each going on from where the previous one stopped, at the departure time;
+2. **times each point**: the recorded timestamps for a past activity, or an estimate for a planned trip from the
+   departure and the speed on the flat ([meteo/route_timing.py](meteo/route_timing.py)): **Tobler's hiking rule**
+   on foot, a **constant effort** on a bike (gravity, rolling resistance and air drag, so descents are faster and a
+   headwind slows you down: the times are redone with the forecast wind), the speed itself by car; a long route can
+   be **split into days**, each going on from where the previous one stopped, at the departure time;
 3. **samples up to 40 points** at least 1 km apart and fetches the hourly weather for all of them in one batch:
    the **Open-Meteo forecast API** for the last 2 months and the next 16 days (best models for the area, e.g.
-   Météo-France AROME/ARPEGE over France), the **ERA5 archive** for older trips;
+   Météo-France AROME/ARPEGE over France), the **ERA5 archive** for older trips; for forecasts, **air quality and
+   pollen** (CAMS Europe, about 4 days ahead) and, for a trip starting within 2 hours, **rain in 15-minute steps**;
 4. **interpolates the weather at the exact time** you pass each point (wind as a vector), adjusts temperatures to
    the altitude, and splits the wind into **headwind / tailwind / crosswind** along your heading;
 5. **writes the reading**: where and when it rains, temperature range (coldest point), wind against you, strong
@@ -196,6 +202,14 @@ Then the tool:
      around km 238 (20:58): dipped headlights or fog lights, and slow down"), with a pointer to the official
      Météo-France warnings when a hazard is at least moderate.
      The thresholds are in [meteo/route_scores.py](meteo/route_scores.py) and tested.
+   - air quality counts too (comfort above a moderate European index, danger between the European information and
+     alert thresholds for ozone and PM10), and so does an orange or red **Météo-France vigilance** on the route when
+     the site has its free API key ([meteo/vigilance.py](meteo/vigilance.py), docs/DEPLOY.md);
+   - **when to leave**: every departure from 05:00 to 20:00 is read from the forecast already fetched (no new API
+     call), and the best one is a click away; its reading is exactly the one shown once it is chosen
+     ([meteo/departure.py](meteo/departure.py));
+   - **how sure the forecast is**, on request: the 51 runs of the ECMWF ensemble give bands on the charts, the
+     chance of rain and a confidence level ([meteo/ensemble.py](meteo/ensemble.py)).
 7. **suggests routes nearby**, within any radius from 2 to 50 km: hiking, cycling and trail routes from the public
    Geotrek APIs of 11 parks and départements (Écrins, Vanoise, Vercors, Cévennes, the regional parks of
    Provence-Alpes-Côte d'Azur, Loire-Atlantique, Doubs, Jura…, about 5,000 routes), and local waymarked routes from
@@ -267,7 +281,7 @@ To analyse the whole of France (overseas territories included), set `extra_depar
 
 - Non-homogenised series (changes of instruments, urbanisation around stations): only identified relocations are corrected.
 - Statistical tests assume independent years: the p-values are slightly optimistic (next step: Hamed and Rao's modified Mann-Kendall test).
-- Next steps: extend to the whole of France, add sunshine and humidity (the "autres paramètres" files), the official Météo-France heatwave indicator. (The dashboard is already online, and its data is refreshed every Monday.)
+- Next steps: extend to the whole of France, add sunshine and humidity (the "autres paramètres" files), the official Météo-France heatwave indicator. (The dashboard is already online, and its data is refreshed every day.)
 
 ## Structure
 
