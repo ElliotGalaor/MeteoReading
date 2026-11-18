@@ -36,14 +36,17 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+from .fmt import num, pct
 from .gps import segment_km
-from .route_weather import ICE_RAIN_MM, clock_format, whole
+from .i18n import t
+from .route_weather import ICE_RAIN_MM, clock_format, clock_text, whole
 
 THUNDER, HAIL = {95}, {96, 99}
 FREEZING = {56, 57, 66, 67}
 SNOW = {71, 73, 75, 77, 85, 86}
 FOG = {45, 48}
 
+# Levels, hazards and penalties are codes: the pages name them t("level.…"), t("hazard.…"), t("penalty.…")
 DANGER_LEVELS = [(75, "Severe"), (50, "High"), (25, "Moderate"), (0, "Low")]
 COMFORT_LEVELS = [(80, "Very pleasant"), (60, "Pleasant"), (40, "Mixed"), (20, "Unpleasant"), (0, "Very unpleasant")]
 PEAK_WEIGHT = 0.7  # share of the worst moment in the route's danger score
@@ -251,15 +254,17 @@ def comfort_score(df: pd.DataFrame, pen: pd.DataFrame) -> tuple[Score, np.ndarra
 
 # --- Advice -----------------------------------------------------------------------------------
 def advise(df: pd.DataFrame, activity: str, h: pd.DataFrame, tz: str, past: bool = False) -> list[Advice]:
+    """The advice, worded in the current language (meteo/locales, section "advice")."""
     local = df["time"].dt.tz_convert(tz)
     clock = clock_format(local)
 
     def where(mask) -> str:
         """'around km 12 (14:30)' for the first point where `mask` is true."""
         i = int(np.argmax(np.asarray(mask)))
-        return f"around km {df['dist_km'].iloc[i]:.0f} ({local.iloc[i].strftime(clock)})"
+        return t("advice.where", km=num(df["dist_km"].iloc[i], 0), time=clock_text(local.iloc[i], clock))
 
     bike, car = activity == "Cycling", activity == "Driving"
+    mode = "car" if car else "bike" if bike else "walk"
     feels, rain = column(df, "apparent_temperature"), np.nan_to_num(column(df, "precipitation"), nan=0.0)
     gusts, uv = column(df, "wind_gusts_10m"), np.nan_to_num(column(df, "uv_index"), nan=0.0)
     out: list[Advice] = []
@@ -270,111 +275,82 @@ def advise(df: pd.DataFrame, activity: str, h: pd.DataFrame, tz: str, past: bool
         first = red if red.any() else colour >= 3
         text = str(df["vigilance_text"].iloc[int(np.argmax(first))]) if "vigilance_text" in df else ""
         out.append(Advice("🔴" if red.any() else "🟠",
-                          f"Official {'red' if red.any() else 'orange'} warning {where(first)}",
-                          (text + ". " if text else "") + "Follow the authorities' advice; consider postponing.",
-                          "danger"))
+                          t("advice.official_red" if red.any() else "advice.official_orange", where=where(first)),
+                          (text + ". " if text else "") + t("advice.official_text"), "danger"))
     if (h["Thunderstorm"] >= SIGNIFICANT).any():
-        text = ("Heavy downpours and hail possible: slow down, never drive through a flooded road." if car else
-                "Stay away from summits, ridges and open ground, do not shelter under an isolated tree, and "
-                "consider postponing.")
-        out.append(Advice("⛈️", f"Thunderstorms {where(h['Thunderstorm'] >= SIGNIFICANT)}", text, "danger"))
+        out.append(Advice("⛈️", t("advice.storm", where=where(h["Thunderstorm"] >= SIGNIFICANT)),
+                          t("advice.storm_car" if car else "advice.storm_out"), "danger"))
     if (h["Ice"] >= SIGNIFICANT).any():
-        text = {"Walking": "Shoes with a good grip, and poles if you have them; ice is hard to see.",
-                "Cycling": "Ice is invisible on the road: consider not riding, or lower the tyre pressure and avoid "
-                           "braking in bends.",
-                "Driving": "Slow down, keep a long distance and brake gently; bridges freeze first."}[activity]
-        out.append(Advice("🧊", f"Risk of ice {where(h['Ice'] >= SIGNIFICANT)}", text, "danger"))
+        out.append(Advice("🧊", t("advice.ice", where=where(h["Ice"] >= SIGNIFICANT)), t(f"advice.ice_{activity}"),
+                          "danger"))
     if (h["Snow"] >= SIGNIFICANT).any():
-        text = {"Walking": "Waterproof boots and warm layers; in the mountains, check the avalanche bulletin.",
-                "Cycling": "Grip and visibility drop sharply: shorten the ride or postpone it.",
-                "Driving": "Winter tyres or chains, more time for the journey, and a blanket in the car."}[activity]
-        out.append(Advice("❄️", f"Snow {where(h['Snow'] >= SIGNIFICANT)}", text, "danger"))
+        out.append(Advice("❄️", t("advice.snow", where=where(h["Snow"] >= SIGNIFICANT)), t(f"advice.snow_{activity}"),
+                          "danger"))
     if (h["Gusts"] >= SIGNIFICANT).any():
-        text = {"Walking": "Avoid ridges and forests (falling branches), and keep children close.",
-                "Cycling": "Hold the handlebars firmly and watch for crosswinds on open sections, on bridges and "
-                           "when lorries pass.",
-                "Driving": "Slow down, especially with a trailer, a van or a roof box."}[activity]
-        out.append(Advice("💨", f"Gusts up to {np.nanmax(gusts):.0f} km/h", text, "danger"))
+        out.append(Advice("💨", t("advice.gusts", kmh=num(np.nanmax(gusts), 0)), t(f"advice.gusts_{activity}"),
+                          "danger"))
     if (h["Heavy rain"] >= SIGNIFICANT).any():
-        text = ("Slow down (aquaplaning), switch on dipped headlights and leave more distance." if car else
-                "Waterproof jacket and trousers; paths and roads get slippery, and streams can rise quickly.")
-        out.append(Advice("🌧️", f"Heavy rain {where(h['Heavy rain'] >= SIGNIFICANT)}", text, "danger"))
+        out.append(Advice("🌧️", t("advice.heavy_rain", where=where(h["Heavy rain"] >= SIGNIFICANT)),
+                          t("advice.heavy_rain_car" if car else "advice.heavy_rain_out"), "danger"))
     elif (rain >= 0.2).any():
-        text = ("Wet roads: leave more distance." if car else
-                "Take a waterproof layer" + (", mudguards and a rear light." if bike else "."))
-        out.append(Advice("☔", f"Rain {where(rain >= 0.2)}", text, "comfort"))
+        out.append(Advice("☔", t("advice.rain", where=where(rain >= 0.2)), t(f"advice.rain_{mode}"), "comfort"))
     if (h["Poor visibility"] >= SIGNIFICANT).any():
-        text = ("Dipped headlights or fog lights, and slow down." if car else
-                "Wear bright clothing" + (" and switch on your lights, even by day." if bike else "."))
-        out.append(Advice("🌫️", f"Fog or poor visibility {where(h['Poor visibility'] >= SIGNIFICANT)}", text, "danger"))
+        out.append(Advice("🌫️", t("advice.fog", where=where(h["Poor visibility"] >= SIGNIFICANT)),
+                          t(f"advice.fog_{mode}"), "danger"))
 
     ozone, pm10 = column(df, "ozone"), column(df, "pm10")
     if (np.nan_to_num(ozone) >= OZONE_INFO).any() or (np.nan_to_num(pm10) >= PM10_INFO).any():
         high_ozone = np.nan_to_num(ozone) >= OZONE_INFO
-        what = (f"ozone up to {np.nanmax(ozone):.0f} µg/m³" if high_ozone.any()
-                else f"fine particles (PM10) up to {np.nanmax(pm10):.0f} µg/m³")
+        what = (t("advice.ozone", value=num(np.nanmax(ozone), 0)) if high_ozone.any()
+                else t("advice.pm10", value=num(np.nanmax(pm10), 0)))
         mask = high_ozone if high_ozone.any() else np.nan_to_num(pm10) >= PM10_INFO
-        text = ("Above the information threshold: keep the effort moderate, avoid the afternoon for ozone, and "
-                "take it easy if you have asthma or heart trouble." if not car else
-                "Above the information threshold: set the ventilation to recirculate in towns.")
         kind = "danger" if (h["Air pollution"] >= SIGNIFICANT).any() else "comfort"
-        out.append(Advice("😷", f"Air pollution: {what} {where(mask)}", text, kind))
+        out.append(Advice("😷", t("advice.pollution", what=what, where=where(mask)),
+                          t("advice.pollution_car" if car else "advice.pollution_out"), kind))
     elif not car and (np.nan_to_num(column(df, "european_aqi")) > 60).any():
         aqi = column(df, "european_aqi")
-        out.append(Advice("😷", f"Poor air quality (European index up to {np.nanmax(aqi):.0f}) {where(aqi > 60)}",
-                          "Keep the effort moderate in the most polluted stretches.", "comfort"))
+        out.append(Advice("😷", t("advice.poor_air", aqi=num(np.nanmax(aqi), 0), where=where(aqi > 60)),
+                          t("advice.poor_air_text"), "comfort"))
     pollen = [(c, float(np.nanmax(column(df, c)))) for c, high in POLLEN_HIGH.items()
               if c in df and np.nan_to_num(column(df, c)).max() >= high]
     if pollen and not car:
-        names = ", ".join(f"{c.split('_')[0]} ({v:.0f} grains/m³)" for c, v in pollen)
-        out.append(Advice("🌾", f"High pollen: {names}", "For allergy sufferers: treatment before leaving, sunglasses, "
-                          "and a shower after the trip.", "info"))
+        names = ", ".join(t("advice.pollen_item", name=t(f"advice.pollen_{c}"), value=num(v, 0)) for c, v in pollen)
+        out.append(Advice("🌾", t("advice.pollen", names=names), t("advice.pollen_text"), "info"))
 
     hot = feels >= 28
     if hot.any():
-        text = ("Keep water in the car and never leave anyone in a parked car." if car else
-                "Drink regularly (about half a litre per hour of effort), set off earlier, cover your head and "
-                "slow down in the hottest hours.")
         kind = "danger" if (h["Heat"] >= SIGNIFICANT).any() else "comfort"
-        out.append(Advice("🥵", f"Heat: feels like up to {whole(np.nanmax(feels))} °C", text, kind))
+        out.append(Advice("🥵", t("advice.heat", value=whole(np.nanmax(feels))),
+                          t("advice.heat_car" if car else "advice.heat_out"), kind))
     cold = feels <= 5
     if cold.any() and not car:
-        text = ("Several thin layers, gloves and a hat" +
-                (", a windproof jacket and overshoes: riding adds wind chill." if bike else "."))
         kind = "danger" if (h["Cold"] >= SIGNIFICANT).any() else "comfort"
-        out.append(Advice("🧤", f"Cold: feels like down to {whole(np.nanmin(feels))} °C", text, kind))
+        out.append(Advice("🧤", t("advice.cold", value=whole(np.nanmin(feels))), t(f"advice.cold_{mode}"), kind))
     temps = column(df, "temperature_2m")
     if not car and np.nanmax(temps) - np.nanmin(temps) >= 8:
-        out.append(Advice("🧥", f"From {whole(np.nanmin(temps))} to {whole(np.nanmax(temps))} °C along the way",
-                          "Altitude or time of day: bring a layer you can put on and take off.", "comfort"))
+        out.append(Advice("🧥", t("advice.range", low=whole(np.nanmin(temps)), high=whole(np.nanmax(temps))),
+                          t("advice.range_text"), "comfort"))
     if (uv >= 6).any() and not car:
-        out.append(Advice("🕶️", f"Strong sun (UV index up to {uv.max():.0f})",
-                          "Sunscreen, sunglasses and a cap; refill water more often.", "comfort"))
+        out.append(Advice("🕶️", t("advice.uv", uv=num(uv.max(), 0)), t("advice.uv_text"), "comfort"))
     night = is_night(df)
     if night.any():
-        text = ("Headlights on, and take breaks: night driving is more tiring." if car else
-                "Front and rear lights, reflective clothing" + ("." if bike else ", and a head torch."))
-        out.append(Advice("🌙", f"In the dark {where(night)}", text, "danger" if bike else "comfort"))
+        out.append(Advice("🌙", t("advice.dark", where=where(night)), t(f"advice.dark_{mode}"),
+                          "danger" if bike else "comfort"))
     if not car:
         head = column(df, "headwind")
         w = segment_km(df["dist_km"])   # over km, like the reading's "headwind on X% of the route"
         head_share = float(w[head > 5].sum() / w.sum())
         tail_share = float(w[head < -5].sum() / w.sum())
         if head_share >= 0.4 and tail_share < 0.15:
-            out.append(Advice("🧭", f"Headwind on {head_share:.0%} of the way",
-                              "Plan more time and energy. Done the other way round, most of it would be with the "
-                              "wind behind you, if the wind holds.", "comfort"))
+            out.append(Advice("🧭", t("advice.headwind", share=pct(head_share)), t("advice.headwind_text"), "comfort"))
 
     warning = (h.drop(columns=["Darkness", "Air pollution"]).max() >= WARN_FROM).any()   # not weather warnings
     if warning and not past:
-        out.append(Advice("📢", "Check the official warnings before you go",
-                          "In France: Météo-France vigilance (vigilance.meteofrance.fr). Forecasts change: look "
-                          "again on the day.", "info"))
+        out.append(Advice("📢", t("advice.check"), t("advice.check_text"), "info"))
     elif not out and past:
-        out.append(Advice("👍", "Good conditions", "Nothing in the weather called for special care.", "info"))
+        out.append(Advice("👍", t("advice.good"), t("advice.good_past"), "info"))
     elif not out:
-        out.append(Advice("👍", "Good conditions", "Nothing in the forecast calls for special care: enjoy the trip. "
-                          "Forecasts change, so look again on the day.", "info"))
+        out.append(Advice("👍", t("advice.good"), t("advice.good_text"), "info"))
     order = {"danger": 0, "comfort": 1, "info": 2}
     return sorted(out, key=lambda a: order[a.kind])
 
@@ -391,7 +367,7 @@ def assess(df: pd.DataFrame, activity: str, tz: str, now: pd.Timestamp | None = 
 
     For a trip already over, the advice does not talk about forecasts."""
     if activity not in PROFILES:
-        raise ValueError(f"Unknown activity {activity!r}: choose one of {', '.join(PROFILES)}")
+        raise ValueError(t("advice.err_activity", activity=repr(activity), activities=", ".join(PROFILES)))
     p = PROFILES[activity]
     h = hazards(df, p)
     pen = penalties(df, p, activity)

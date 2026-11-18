@@ -16,8 +16,10 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 
 from .download import quick_session
+from .fmt import num
 from .geotrek import Suggestion, search_box
 from .gps import MAX_POINTS, Track, build_track, chain_parts
+from .i18n import t
 
 log = logging.getLogger(__name__)
 
@@ -81,15 +83,15 @@ def relation_track(relation_id: int, name: str | None = None, session=None) -> T
     try:
         resp = session.get(f"{OSM_API}/relation/{int(relation_id)}/full.json", timeout=30)
     except OSError as exc:
-        raise RuntimeError("OpenStreetMap is not answering: try again in a moment.") from exc
+        raise RuntimeError(t("err.osm_down")) from exc
     if resp.status_code != 200:
-        raise RuntimeError(f"Could not load this OpenStreetMap route ({resp.status_code})")
+        raise RuntimeError(t("err.osm_status", status=resp.status_code))
     elements = resp.json().get("elements", [])
     nodes = {e["id"]: (e["lat"], e["lon"]) for e in elements if e.get("type") == "node"}
     ways = {e["id"]: e.get("nodes", []) for e in elements if e.get("type") == "way"}
     rel = next((e for e in elements if e.get("type") == "relation" and e.get("id") == int(relation_id)), None)
     if rel is None:
-        raise ValueError("This OpenStreetMap relation is empty")
+        raise ValueError(t("err.osm_empty"))
     parts = []
     for m in rel.get("members", []):
         if m.get("type") == "way" and m.get("ref") in ways and m.get("role", "") in ("", "forward", "backward", "main"):
@@ -97,8 +99,8 @@ def relation_track(relation_id: int, name: str | None = None, session=None) -> T
             if len(pts) >= 2:
                 parts.append([(la, lo, None, None) for la, lo in pts])
     if sum(len(p) for p in parts) > MAX_POINTS:
-        raise ValueError("This route is too large to read in one go")
+        raise ValueError(t("err.osm_large"))
     track = build_track(chain_parts(parts), name or rel.get("tags", {}).get("name") or f"Relation {relation_id}")
     if track.distance_km > MAX_ROUTE_KM:
-        raise ValueError(f"This route is {track.distance_km:,.0f} km long: too long to read in one go")
+        raise ValueError(t("err.osm_long", km=num(track.distance_km, 0)))
     return track

@@ -70,9 +70,9 @@ def members_at(frame: pd.DataFrame, variable: str, t: pd.Timestamp) -> np.ndarra
 class Spread:
     points: pd.DataFrame       # per point of the reading: t_p10, t_p90, wind_p10, wind_p90, gust_p90, rain_chance
     rain_anywhere: float       # share of runs with rain somewhere on the route
-    hazard_shares: dict        # hazard name -> share of runs where it happens somewhere on the route
+    hazard_shares: dict        # "gust" / "heavy" -> share of runs where it happens somewhere on the route
     temp_spread: float         # mean width of the 10-90% temperature range along the route (°C)
-    confidence: str            # "High", "Medium" or "Low"
+    confidence: str            # "High", "Medium", "Low" or "Unknown" (a code: the page names it)
     n_members: int
 
 
@@ -104,8 +104,8 @@ def spread(frames: list[pd.DataFrame], idx: np.ndarray, reading: pd.DataFrame, g
         out[c] = np.interp(dist, at["dist_km"][ok], at[c][ok]) if ok.sum() >= 2 else np.nan
     width = float(np.nanmean(at["t_p90"] - at["t_p10"])) if len(at) else np.nan
     anywhere = float(hits["rain"].mean()) if "rain" in hits else np.nan
-    shares = {f"Gusts ≥ {gust_danger:.0f} km/h": float(hits["gust"].mean()) if "gust" in hits else np.nan,
-              f"Heavy rain ≥ {HEAVY_RAIN:.0f} mm/h": float(hits["heavy"].mean()) if "heavy" in hits else np.nan}
+    shares = {"gust": float(hits["gust"].mean()) if "gust" in hits else np.nan,      # gusts ≥ gust_danger
+              "heavy": float(hits["heavy"].mean()) if "heavy" in hits else np.nan}    # rain ≥ HEAVY_RAIN mm/h
     if not np.isfinite(width):
         confidence = "Unknown"
     elif width >= 5 or 0.35 <= anywhere <= 0.65:

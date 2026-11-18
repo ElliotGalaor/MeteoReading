@@ -217,7 +217,7 @@ def test_a_wider_spread_of_runs_gives_wider_bands_and_less_confidence():
     assert in_six_days.temp_spread > 3 * tomorrow.temp_spread
     assert (tomorrow.confidence, in_six_days.confidence) == ("High", "Low")
     assert in_six_days.rain_anywhere == pytest.approx(26 / 51)
-    assert tomorrow.hazard_shares["Gusts ≥ 40 km/h"] == pytest.approx(10 / 51)
+    assert tomorrow.hazard_shares["gust"] == pytest.approx(10 / 51)
 
 
 # --- 2030-2100 ----------------------------------------------------------------------------------------------
@@ -237,10 +237,10 @@ def test_model_patterns_and_the_projection_of_a_city():
     models = pd.concat([p.reset_index().assign(model="A"),
                         p.reset_index().assign(model="B", d_tx=p["d_tx"].to_numpy() * 2)])
     out = project_city(city, list(range(1961, 2026)), models, TH, (1961, 1990), (2011, 2025))
-    hot = out[out["indicator"].str.startswith("Hot days")].set_index("period")
+    hot = out[out["indicator"] == "hot_days"].set_index("period")
     assert hot.loc["2011-2025", "median"] == 0                   # 29.5 °C: just below 30
-    assert (hot.loc["+4 °C, 2100", "low"] <= hot.loc["+4 °C, 2100", "median"] <= hot.loc["+4 °C, 2100", "high"])
-    assert hot.loc["+4 °C, 2100", "high"] == pytest.approx(31)   # every July day crosses 30 °C
+    assert hot.loc["2100", "low"] <= hot.loc["2100", "median"] <= hot.loc["2100", "high"]
+    assert hot.loc["2100", "high"] == pytest.approx(31)   # every July day crosses 30 °C
     assert shifted(city.head(3), p.reset_index(), 0.0)["tx"].tolist() == [15.0] * 3   # no warming to come
     assert shifted(city.head(3), p.reset_index(), 4.0 - LEVEL_NOW)["tx"].iloc[0] > 15
     assert nearest_region(43.3, 5.4) == "South" and nearest_region(48.4, -4.5) == "West"

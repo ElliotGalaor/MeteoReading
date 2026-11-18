@@ -148,7 +148,7 @@ def test_one_day_in_context():
     d.loc[d["date"] == "2000-08-15", "tx"] = 50.0
     ctx = day_in_context(d, "2000-08-15")
     assert ctx["tx"]["rank"] == 1 and ctx["tx"]["word"] == "hottest" and ctx["tx"]["record_year"] == 2000
-    assert rank_text(ctx["tx"], "2000-08-15") == "1st hottest 15 August of 50 years"
+    assert rank_text(ctx["tx"], "2000-08-15") == "hottest 15 August of 50 years"
     assert ctx["ffm"]["value"] == pytest.approx(3.0 * 3.6)   # wind in km/h
 
 

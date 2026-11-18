@@ -21,15 +21,27 @@
 </head>
 <body>
   <main>
-    <h1>The dashboard is paused</h1>
-    <p>Nothing happened in this tab for a while, so it disconnected: the server can then go to sleep instead of
-       running for an open tab. Your page is one click away.</p>
+    <h1 id="title">The dashboard is paused</h1>
+    <p id="text">Nothing happened in this tab for a while, so it disconnected: the server can then go to sleep instead
+       of running for an open tab. Your page is one click away.</p>
     <a class="button" id="resume" href="/">Resume</a>
   </main>
   <script>
     // Back to the page the visitor was on (a path of this site only)
     const from = new URLSearchParams(location.search).get("from");
     if (from && from.startsWith("/") && !from.startsWith("//")) document.getElementById("resume").href = from;
+    // In the page's language: the one its link carried (?lang=), else the browser's (dashboard/language.py)
+    const chosen = from && new URLSearchParams(from.split("?")[1] || "").get("lang");
+    const lang = chosen || ((navigator.language || "").toLowerCase().startsWith("fr") ? "fr" : "en");
+    if (lang === "fr") {
+      document.documentElement.lang = "fr";
+      document.title = "En pause · Météo Analytics";
+      document.getElementById("title").textContent = "Le tableau de bord est en pause";
+      document.getElementById("text").textContent = "Rien ne s’est passé dans cet onglet depuis un moment, il s’est " +
+        "donc déconnecté : le serveur peut alors se mettre en veille au lieu de tourner pour un onglet ouvert. " +
+        "Votre page est à un clic.";
+      document.getElementById("resume").textContent = "Reprendre";
+    }
   </script>
 </body>
 </html>

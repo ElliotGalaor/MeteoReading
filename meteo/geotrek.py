@@ -18,6 +18,7 @@ import numpy as np
 
 from .download import quick_session
 from .gps import haversine_km
+from .i18n import t as tr
 
 log = logging.getLogger(__name__)
 
@@ -211,7 +212,7 @@ def fetch_route_file(url: str, session=None) -> tuple[bytes, str]:
     the KML of the same route (same line, with altitudes) comes in a second or two: the KML is read first, the GPX
     only if the KML cannot be had."""
     if not any(url.startswith(i.api.rsplit("/api/", 1)[0] + "/") for i in INSTANCES):
-        raise ValueError("Not a Geotrek route of the known instances")
+        raise ValueError(tr("err.geotrek_unknown"))
     session = session or quick_session()
     urls = ([(url[:-4] + ".kml", "route.kml")] if url.endswith(".gpx") else []) + [(url, "route.gpx")]
     for candidate, name in urls:
@@ -222,9 +223,9 @@ def fetch_route_file(url: str, session=None) -> tuple[bytes, str]:
         if resp.status_code != 200:
             continue
         if len(resp.content) > MAX_GPX_BYTES:
-            raise ValueError("This route's file is too large")
+            raise ValueError(tr("err.route_file_large"))
         return resp.content, name
-    raise RuntimeError("The route's website is not answering: try again in a moment.")
+    raise RuntimeError(tr("err.route_site_down"))
 
 
 def fetch_gpx(url: str, session=None) -> bytes:

@@ -15,6 +15,10 @@ Maps (Plotly's MapLibre maps) get MapLibre's own "cooperative gestures" on touch
 page and shows "Use two fingers to move the map", two fingers move and zoom the map. On a computer they keep their
 usual gestures (that mode would ask for Ctrl to zoom with the wheel). The drawing map (Leaflet) is set apart in the
 route page: it does not follow one finger on a phone.
+
+Saving a chart on a phone: Plotly's toolbar is hidden there (without hover it would sit over legends and labels), so
+each chart keeps only its camera button, hidden too, and the "Save image" button under the chart (dashboard/ui.py)
+presses the camera of the chart just above it: Plotly then downloads the PNG.
 """
 from __future__ import annotations
 
@@ -122,6 +126,17 @@ SCRIPT = """
       });
     });
   }
+
+  // "Save image" under a chart: the camera of the nearest chart above the button
+  document.addEventListener("click", (e) => {
+    const button = e.target instanceof Element && e.target.closest(".save-chart-image");
+    if (!button) return;
+    const above = [...document.querySelectorAll(".js-plotly-plot")]
+      .filter((gd) => gd.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const gd = above[above.length - 1];
+    const camera = gd && gd.querySelector(".modebar-btn");
+    if (camera) camera.dispatchEvent(new MouseEvent("click", {bubbles: true, cancelable: true}));
+  }, true);
   if (touch) {
     let queued = false;
     new MutationObserver(() => {
@@ -136,6 +151,18 @@ SCRIPT = """
 """
 
 
-def chart_gestures() -> None:
-    """Adds the touch gestures of the charts to the page (installed once per tab)."""
+PHONE_STYLE = """
+<style id="phone-charts">
+  /* Phones: no Plotly toolbar over the charts; "Save image" under each chart presses its hidden camera */
+  .js-plotly-plot .modebar-container { display: none !important; }
+  [data-testid="stElementContainer"]:has(#phone-charts) { display: none; }
+</style>
+"""
+
+
+def chart_gestures(phone: bool = False) -> None:
+    """Adds the touch gestures of the charts to the page (installed once per tab), and on a phone hides the charts'
+    toolbars."""
     st.html(SCRIPT, unsafe_allow_javascript=True)
+    if phone:
+        st.html(PHONE_STYLE)

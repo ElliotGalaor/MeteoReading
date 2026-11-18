@@ -21,6 +21,8 @@ import numpy as np
 import pandas as pd
 
 from .download import make_session
+from .i18n import fmt_date
+from .i18n import t as tr
 from .route_weather import subset
 
 VIGILANCE_API = "https://public-api.meteofrance.fr/public/DPVigilance/v1/cartevigilance/encours"
@@ -28,9 +30,9 @@ GEO_API = "https://geo.api.gouv.fr/communes"
 OFFICIAL_PAGE = "https://vigilance.meteofrance.fr"
 KEY_ENV = "METEOFRANCE_API_KEY"
 POINTS = 15
-COLOURS = {1: "green", 2: "yellow", 3: "orange", 4: "red"}
+COLOURS = {1: "green", 2: "yellow", 3: "orange", 4: "red"}   # named tr("vigilance.colour_…")
 PHENOMENA = {1: "wind", 2: "rain and flooding", 3: "thunderstorms", 4: "floods", 5: "snow and ice", 6: "heatwave",
-             7: "extreme cold", 8: "avalanches", 9: "waves and coastal flooding"}
+             7: "extreme cold", 8: "avalanches", 9: "waves and coastal flooding"}   # English; tr("vigilance.ph_1")…
 
 
 def api_key() -> str | None:
@@ -62,21 +64,21 @@ def fetch(key: str, session=None) -> dict:
     try:
         resp = session.get(VIGILANCE_API, timeout=15, headers={"apikey": key, "accept": "application/json"})
     except OSError as exc:
-        raise RuntimeError("Météo-France's vigilance service is not answering") from exc
+        raise RuntimeError(tr("vigilance.err_down")) from exc
     if resp.status_code != 200:
-        raise RuntimeError(f"Météo-France's vigilance service answered {resp.status_code}")
+        raise RuntimeError(tr("vigilance.err_status", status=resp.status_code))
     try:
         return resp.json()
     except ValueError as exc:
-        raise RuntimeError("Météo-France's vigilance could not be read") from exc
+        raise RuntimeError(tr("vigilance.err_read")) from exc
 
 
 def parse(payload: dict) -> pd.DataFrame:
-    """One row per zone and period: domain, start, end (UTC), colour (1-4), phenomena [(name, colour)]."""
+    """One row per zone and period: domain, start, end (UTC), colour (1-4), phenomena [(id, colour)]."""
     try:
         periods = payload["product"]["periods"]
     except (KeyError, TypeError) as exc:
-        raise RuntimeError("Météo-France's vigilance could not be read (unexpected format)") from exc
+        raise RuntimeError(tr("vigilance.err_format")) from exc
     rows = []
     for period in periods:
         start = pd.Timestamp(period.get("begin_validity_time"))
@@ -85,11 +87,16 @@ def parse(payload: dict) -> pd.DataFrame:
         end = end.tz_localize("UTC") if end.tzinfo is None else end.tz_convert("UTC")
         domains = (period.get("timelaps") or {}).get("domain_ids") or []
         for d in domains:
-            items = [(PHENOMENA.get(int(it.get("phenomenon_id", 0)), "other"), int(it.get("phenomenon_max_color_id", 1)))
+            items = [(int(it.get("phenomenon_id", 0)), int(it.get("phenomenon_max_color_id", 1)))
                      for it in d.get("phenomenon_items") or []]
             rows.append({"domain": str(d.get("domain_id")), "start": start, "end": end,
                          "colour": int(d.get("max_color_id", 1)), "phenomena": items})
     return pd.DataFrame(rows, columns=["domain", "start", "end", "colour", "phenomena"])
+
+
+def phenomenon(pid: int) -> str:
+    """Name of a Météo-France phenomenon in the current language."""
+    return tr(f"vigilance.ph_{pid}") if pid in PHENOMENA else tr("vigilance.ph_other")
 
 
 def _applies(domain: str, code: str | None) -> bool:
@@ -112,12 +119,14 @@ def at_points(points: pd.DataFrame, deps: list[dict], warnings: pd.DataFrame) ->
         if hits.empty:
             continue
         top = hits.loc[hits["colour"].idxmax()]
-        phen = sorted({name for _, r in hits.iterrows() for name, c in r["phenomena"] if c >= max(top["colour"], 2)})
+        phen = sorted({phenomenon(p) for _, r in hits.iterrows() for p, c in r["phenomena"]
+                       if c >= max(top["colour"], 2)})
         out.loc[i, "vigilance_color"] = int(top["colour"])
         if top["colour"] >= 2:
-            out.loc[i, "vigilance_text"] = (f"{COLOURS[int(top['colour'])].capitalize()} vigilance for "
-                                            f"{', '.join(phen) or 'weather'} in {dep['name']} ({dep['code']}), "
-                                            f"until {top['end']:%a %d %b %H:%M} UTC")
+            end = pd.Timestamp(top["end"])
+            out.loc[i, "vigilance_text"] = tr("vigilance.text", colour=tr(f"vigilance.colour_{int(top['colour'])}"),
+                                             phenomena=", ".join(phen) or tr("vigilance.weather"), dep=dep["name"],
+                                             code=dep["code"], until=f"{fmt_date(end, 'weekday')} {end:%H:%M}")
     return out
 
 

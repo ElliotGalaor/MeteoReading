@@ -343,7 +343,7 @@ def test_unusable_timestamps_say_why():
     rows = [(45.0, 5.0 + i / 100, 200, f"2025-07-15T06:{i:02d}:00Z") for i in range(10)]
     rows[4], rows[5] = rows[5], rows[4]
     t = build_track(rows)
-    assert not t.has_time and t.time_issue == "the timestamps are not in order"
+    assert not t.has_time and t.time_issue == "unordered"
     assert build_track([(45.0, 5.0 + i / 100, 200, None) for i in range(10)]).time_issue is None
 
 

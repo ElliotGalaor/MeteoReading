@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 
 from .climatology import day_of_year, doy_climatology
+from .i18n import fmt_date, t
 from .route_scores import PROFILES, WIND_COMFORT_KMH
 
 SUMMER_TX = 25.0          # °C: warm season, normal maximum at or above
@@ -60,9 +61,8 @@ def week_label(week: int) -> str:
 
 
 def _day_label(doy: int) -> str:
-    """'12 May' for a day 1-365 of a year without 29 February."""
-    d = pd.Timestamp("2001-01-01") + pd.Timedelta(days=int(doy) - 1)
-    return f"{d.day} {d.strftime('%b')}"
+    """'12 May' ('12 mai') for a day 1-365 of a year without 29 February."""
+    return fmt_date(pd.Timestamp("2001-01-01") + pd.Timedelta(days=int(doy) - 1), "day_month")
 
 
 def wind_coverage(daily: pd.DataFrame, period: tuple[int, int]) -> float:
@@ -95,7 +95,7 @@ class Season:
 
     @property
     def label(self) -> str:
-        return f"{_day_label(self.start)} to {_day_label(self.end)}"
+        return t("seasons.span", start=_day_label(self.start), end=_day_label(self.end))
 
 
 def _longest_run(mask: np.ndarray) -> tuple[int, int] | None:

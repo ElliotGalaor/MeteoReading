@@ -17,6 +17,9 @@ import pandas as pd
 from defusedxml import DefusedXmlException
 from defusedxml import ElementTree as ET
 
+from .fmt import num
+from .i18n import t as tr
+
 MAX_POINTS = 200_000
 ELE_DEADBAND_M = 5.0      # altitude changes smaller than this are noise
 EARTH_RADIUS_KM = 6371.0
@@ -34,7 +37,7 @@ ACTIVITIES = {
 class Track:
     name: str
     points: pd.DataFrame  # lat, lon, ele (NaN if unknown), time (UTC, NaT if unknown), dist_km
-    time_issue: str | None = None   # why the file's timestamps were not used, if it had some
+    time_issue: str | None = None   # why the file's timestamps were not used, if it had some: missing / unordered
 
     @property
     def has_time(self) -> bool:
@@ -80,19 +83,19 @@ def read_tracks(data: bytes, filename: str) -> list[Track]:
     parsers = {".gpx": ("GPX", _parse_gpx), ".kml": ("KML", _parse_kml),
                ".geojson": ("GeoJSON", _parse_geojson), ".json": ("GeoJSON", _parse_geojson)}
     if ext not in parsers:
-        raise ValueError(f"Unsupported file type '{ext}': use .gpx, .kml or .geojson")
+        raise ValueError(tr("err.file_type", ext=ext))
     kind, parser = parsers[ext]
     if not data.strip():
-        raise ValueError("the file is empty.")
+        raise ValueError(tr("err.file_empty"))
     try:
         pieces, file_name = parser(data)
     except DefusedXmlException:
-        raise ValueError("the file declares XML entities or a DTD, which are refused for security reasons.") from None
+        raise ValueError(tr("err.file_entities")) from None
     except ParseError as exc:
         line = exc.position[0] if getattr(exc, "position", None) else "?"
-        raise ValueError(f"this is not a valid {kind} file: the XML is broken or cut off (line {line}).") from None
+        raise ValueError(tr("err.file_xml", kind=kind, line=line)) from None
     except json.JSONDecodeError:
-        raise ValueError("this is not a valid GeoJSON file: the JSON is broken or cut off.") from None
+        raise ValueError(tr("err.file_json")) from None
     return _assemble(pieces, file_name or stem)
 
 
@@ -117,7 +120,7 @@ def _clean_name(name: str | None) -> str | None:
 def _assemble(pieces: list[_Piece], default_name: str) -> list[Track]:
     total = sum(len(rows) for p in pieces for rows in p.parts)
     if total > MAX_POINTS:
-        raise ValueError(f"Track too large ({total:,} points, maximum {MAX_POINTS:,})")
+        raise ValueError(tr("err.too_large", n=num(total, 0), max=num(MAX_POINTS, 0)))
     tracks = []
     for p in pieces:
         try:
@@ -125,11 +128,10 @@ def _assemble(pieces: list[_Piece], default_name: str) -> list[Track]:
         except ValueError:
             continue   # a line with fewer than 2 valid points
     if not tracks:
-        raise ValueError("The track needs at least 2 valid points")
+        raise ValueError(tr("err.two_points"))
     tracks = _join_touching(tracks)
     if len(tracks) > MAX_TRACKS:
-        raise ValueError(f"the file holds {len(tracks):,} separate lines: it looks like a network or a collection of "
-                         "routes, not one route. Export a single route.")
+        raise ValueError(tr("err.network", n=num(len(tracks), 0)))
     names = [t.name for t in tracks]
     for i, t in enumerate(tracks, 1):   # tell apart tracks with the same name
         if names.count(t.name) > 1:
@@ -207,7 +209,7 @@ def chain_parts(parts: list[list[tuple]]) -> list[tuple]:
 def build_track(rows: list[tuple], name: str = "Track") -> Track:
     """(lat, lon, ele, time) rows -> clean Track with cumulative distance."""
     if len(rows) > MAX_POINTS:
-        raise ValueError(f"Track too large ({len(rows):,} points, maximum {MAX_POINTS:,})")
+        raise ValueError(tr("err.too_large", n=num(len(rows), 0), max=num(MAX_POINTS, 0)))
     df = pd.DataFrame(rows, columns=["lat", "lon", "ele", "time"])
     df["lat"] = pd.to_numeric(df["lat"], errors="coerce")
     df["lon"] = pd.to_numeric(df["lon"], errors="coerce")
@@ -218,14 +220,14 @@ def build_track(rows: list[tuple], name: str = "Track") -> Track:
     same = (df["lat"].diff() == 0) & (df["lon"].diff() == 0)
     df = df[~same].reset_index(drop=True)
     if len(df) < 2:
-        raise ValueError("The track needs at least 2 valid points")
+        raise ValueError(tr("err.two_points"))
     # Times are only used if (almost) every point has one and they move forward
     t = df["time"]
-    time_issue = None
+    time_issue = None   # a code: the page says it with tr("route.time_issue_…")
     if t.notna().any() and t.notna().mean() < 0.9:
-        time_issue = "too many points have no timestamp"
+        time_issue = "missing"
     elif t.notna().any() and not t.dropna().is_monotonic_increasing:
-        time_issue = "the timestamps are not in order"
+        time_issue = "unordered"
     if time_issue or t.isna().all():
         df["time"] = pd.NaT
     elif t.isna().any():
@@ -272,7 +274,7 @@ def _parse_gpx(data: bytes) -> tuple[list[_Piece], str | None]:
     if not pieces and waypoints:
         pieces = [_Piece(file_name, [waypoints])]
     if not pieces:
-        raise ValueError("No track, route or waypoints found in the GPX file")
+        raise ValueError(tr("err.gpx_empty"))
     return pieces, file_name
 
 
@@ -319,7 +321,7 @@ def _parse_kml(data: bytes) -> tuple[list[_Piece], str | None]:
     if not pieces and len(points) >= 2:   # only places: read them in order, like GPX waypoints
         pieces = [_Piece(file_name, [points])]
     if not pieces:
-        raise ValueError("No line found in the KML file")
+        raise ValueError(tr("err.kml_empty"))
     return pieces, file_name
 
 
@@ -352,7 +354,7 @@ def _lines(geom: dict) -> list:
 def _parse_geojson(data: bytes) -> tuple[list[_Piece], str | None]:
     obj = _load_json(data)
     if not isinstance(obj, dict) or not (obj.get("type") in GEOJSON_TYPES or "features" in obj):
-        raise ValueError("this JSON file is not GeoJSON: it has no Feature, FeatureCollection or geometry.")
+        raise ValueError(tr("err.not_geojson"))
     file_name = obj.get("name") if isinstance(obj.get("name"), str) else None
     features = obj.get("features") or ([obj] if obj.get("type") == "Feature" else [{"geometry": obj}])
     pieces, points = [], []
@@ -386,7 +388,7 @@ def _parse_geojson(data: bytes) -> tuple[list[_Piece], str | None]:
     if not pieces and points:
         pieces = [_Piece(file_name, [points])]
     if not pieces:
-        raise ValueError("No line or points found in the GeoJSON file")
+        raise ValueError(tr("err.geojson_empty"))
     return pieces, file_name
 
 
