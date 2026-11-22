@@ -5,8 +5,26 @@ import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
 
-from meteo.wind import MIN_COVERAGE, MIN_YEARS, STORM_KMH, gust_records, storm_trends, storm_years
-from ui import END, HEAT, START, chart, date_text, is_dark, listing, num, number, pct, pvalue, signed, styled, t, table
+from meteo.i18n import fmt_date, plural
+from meteo.wind import MIN_COVERAGE, MIN_YEARS, MS_TO_KMH, STORM_KMH, gust_records, storm_trends, storm_years
+from ui import (
+    END,
+    HEAT,
+    START,
+    chart,
+    date_text,
+    is_dark,
+    listing,
+    num,
+    number,
+    pct,
+    pvalue,
+    rejected_values,
+    signed,
+    styled,
+    t,
+    table,
+)
 
 
 @st.cache_data(show_spinner=False)
@@ -27,9 +45,11 @@ def wind_panel() -> None:
         st.info(t("wind.none"))
         return
     valid["decade"] = valid["year"] // 10 * 10
-    # A decade is shown when at least 8 of its years have gusts measured on most days
+    # A decade is shown when 80% of its years have gusts measured on most days: 8 of 10, 5 of the 6 years of the
+    # current decade (a fixed 8 left 2020-25 out, while the heatmap above shows it, #82)
     pv = valid.groupby(["city", "decade"]).agg(days=("storm_days", "mean"), n=("year", "count")).reset_index()
-    pv = pv[pv["n"] >= 8].pivot(index="city", columns="decade", values="days")
+    span = np.minimum(pv["decade"] + 9, END) - np.maximum(pv["decade"], START) + 1
+    pv = pv[pv["n"] >= np.ceil(0.8 * span)].pivot(index="city", columns="decade", values="days")
     pv.columns = [f"{max(c, START)}-{str(min(c + 9, END))[2:]}" for c in pv.columns]
     pv = pv.loc[pv.mean(axis=1).sort_values().index]
     fig = go.Figure(go.Heatmap(z=pv.values, x=pv.columns, y=pv.index, colorscale=HEAT, xgap=2, ygap=2,
@@ -75,3 +95,9 @@ def wind_panel() -> None:
         rec = _records()
         st.dataframe(styled(rec, {"date": date_text(), "gust_kmh": number(0, "km/h")}), hide_index=True, height=400,
                      column_config={"city": t("common.city"), "date": t("common.date"), "gust_kmh": t("wind.col_gust")})
+        left_out = rejected_values()
+        left_out = left_out[(left_out["variable"] == "fxi") & left_out["city"].notna()]
+        if len(left_out):
+            items = [t("wind.left_out_item", city=v["city"], kmh=num(v["value"] * MS_TO_KMH, 0),
+                       date=fmt_date(v["date"], "short")) for _, v in left_out.iterrows()]
+            st.caption(plural("wind.records_left_out", len(items), items=listing(items), page=t("app.nav_quality")))

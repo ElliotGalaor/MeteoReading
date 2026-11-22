@@ -89,12 +89,15 @@ runs:
         COMMIT: ${{ inputs.commit }}
         SECRETS: ${{ inputs.secrets }}
       run: |
-        # Streamlit keeps one WebSocket per visitor: session affinity, long timeout, moderate concurrency.
+        # Streamlit keeps one WebSocket per visitor: session affinity, long timeout.
+        # Concurrency counts every request in flight, and each open tab holds its WebSocket for as long as it stays
+        # open while a first visit fetches ~145 static files at once: at 20, five tabs opening together got
+        # "429 Rate exceeded" on some scripts (#72). The cost is per instance, so a higher concurrency costs nothing.
         # Scales to zero between visits (free tier), CPU boost to shorten cold starts. A single instance at
         # most bounds what an hour can cost, so the budget guard (deploy/gcp-budget.sh) acts in time.
         args=(--image "$REF" --project "$PROJECT_ID" --region "$REGION"
               --port 8080 --memory 2Gi --cpu 1 --cpu-boost
-              --min-instances 0 --max-instances 1 --concurrency 20
+              --min-instances 0 --max-instances 1 --concurrency 80
               --session-affinity --timeout 3600 --allow-unauthenticated
               --labels "app=meteoreading,commit=${COMMIT:-${GITHUB_SHA:0:7}}" --quiet)
         if [ -n "$RUNTIME_SA" ]; then args+=(--service-account "$RUNTIME_SA"); fi

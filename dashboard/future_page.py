@@ -6,8 +6,9 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from meteo.climate_ahead import LEVEL_NOW, LEVELS, MODELS, REGIONS, RESULT_FILE, UNITS
+from meteo.i18n import plural
 from share import publish, restore
-from ui import CFG, OLD, RECENT, SERIES, TH, WARM, chart, is_phone, num, page_header, source_note, t
+from ui import CFG, OLD, RECENT, SERIES, TH, WARM, chart, is_narrow, num, page_header, source_note, t
 
 CITIES = [c.name for c in CFG.cities]
 
@@ -18,12 +19,26 @@ def _table() -> pd.DataFrame | None:
     return pd.read_csv(path, dtype={"period": str}) if path.exists() else None
 
 
-def _number(v: float, unit: str) -> str:
-    return num(v, 1) if unit == "°C" else num(v, 0)
+def _number(v: float, unit: str, digits: int = 0) -> str:
+    return num(v, 1) if unit == "°C" else num(v, digits)
 
 
-def _value(v: float, unit: str) -> str:
-    return f"{_number(v, unit)} {unit if unit != 'days' else t('common.days_unit')}"
+def _value(v: float, unit: str, digits: int = 0) -> str:
+    """With its unit: "12.4 °C", "640 mm", "1 day", "3 days" (a day count agrees with its number)."""
+    if unit == "days":
+        return plural("common.n_days", round(float(v), digits))
+    return f"{_number(v, unit, digits)} {unit}"
+
+
+def _spread(low: float, high: float, unit: str) -> str:
+    """The models' range at the last warming level. The annual mean warming is the TRACC level itself (the models
+    only split it between seasons): no range. A count whose range rounds to one number gets a decimal (#80)."""
+    if unit == "°C":
+        return t("ahead.set_by_level") if _number(low, unit) == _number(high, unit) else             t("ahead.range", low=_number(low, unit), high=_value(high, unit))
+    digits = 0 if _number(low, unit) != _number(high, unit) else 1
+    if _number(low, unit, digits) == _number(high, unit, digits):
+        return ""
+    return t("ahead.range", low=_number(low, unit, digits), high=_value(high, unit, digits))
 
 
 def _period(code: str) -> str:
@@ -52,7 +67,7 @@ def page_future():
     old_label, recent_label = f"{OLD[0]}-{OLD[1]}", f"{RECENT[0]}-{RECENT[1]}"
     last_level = list(LEVELS)[-1]
     indicators = list(dict.fromkeys(c["indicator"]))
-    per_row = 1 if is_phone() else 2
+    per_row = 1 if is_narrow() else 2
     for i in range(0, len(indicators), per_row):
         cols = st.columns(per_row, gap="large")
         for col, code in zip(cols, indicators[i:i + per_row], strict=False):
@@ -79,9 +94,7 @@ def page_future():
                 lo, hi = float(d["low"].min()), float(d["high"].max())
                 fig.update_yaxes(range=[lo - 1.5, hi + 1])
             now, end = d.loc[recent_label, "median"], d.loc[last_level]
-            # The annual mean warming is the TRACC level itself: the models only split it between seasons
-            spread = (t("ahead.range", low=_number(end["low"], unit), high=_value(end["high"], unit))
-                      if _number(end["low"], unit) != _number(end["high"], unit) else t("ahead.set_by_level"))
+            spread = _spread(end["low"], end["high"], unit)
             with col:
                 chart(fig, 300, _indicator(code),
                       t("ahead.sub", recent=recent_label, now=_value(now, unit), level=_period(last_level),

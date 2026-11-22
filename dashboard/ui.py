@@ -101,6 +101,23 @@ def table(name: str) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
+def rejected_values() -> pd.DataFrame:
+    """The values rejected after a check by hand (config.yaml) that the current data still holds, with their city."""
+    try:
+        rj = table("dq_rejected")
+    except duckdb.CatalogException:  # a warehouse built before the table existed
+        return pd.DataFrame(columns=["station_id", "station_name", "city", "date", "variable", "value",
+                                     "reason_en", "reason_fr", "source"])
+    cities = table("ref_station")[["station_id", "city"]].drop_duplicates("station_id")
+    return rj[rj["applied"]].merge(cities, on="station_id", how="left").reset_index(drop=True)
+
+
+def rejected_reason(row) -> str:
+    """The reason of a rejected value in the page's language (English when there is no translation)."""
+    return (row["reason_fr"] if lang() == "fr" else "") or row["reason_en"]
+
+
+@st.cache_data(show_spinner=False)
 def results() -> dict:
     return json.loads((CFG.reports_dir / "results.json").read_text(encoding="utf-8"))
 
@@ -153,11 +170,92 @@ RAIN = colorscale(RAIN_STOPS)
 
 
 def is_phone() -> bool:
-    """A phone, from the browser's user agent (the layout cannot measure the screen)."""
+    """A phone, from the browser's user agent: for what depends on touch (the chart toolbar, map gestures). The layout
+    follows the width of the main column instead (is_narrow)."""
     try:
         return "Mobi" in (st.context.headers.get("User-Agent") or "")
     except Exception:
         return False
+
+
+# The main column's width, measured in the browser: tablets and narrow windows get the narrow layout, not only the
+# browsers that call themselves mobile (#81). Sent in steps of 40 px, once settled, and only when it changes: a rerun
+# when the page first opens, then one per resize that crosses a step.
+NARROW_PX = 760          # a main column narrower than this gets the one-column layout of phones
+LAYOUT_JS = """
+export default function (component) {
+  const { setStateValue, data } = component;
+  const STEP = 40;
+  const main = () => document.querySelector('[data-testid="stMainBlockContainer"]');
+  // Maps do not redraw when the rerun moves them into a column of another width: a resize event, once the page
+  // has been drawn again, makes Plotly and MapLibre fit their new size
+  const nudge = () => window.dispatchEvent(new Event("resize"));
+  let last = data && data.width, timer = null;
+  const report = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const el = main();
+      if (!el) return;
+      const cs = getComputedStyle(el);
+      const w = Math.floor((el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)) / STEP) * STEP;
+      if (w > 0 && w !== last) {
+        last = w;
+        setStateValue("width", w);
+        setTimeout(nudge, 1500);
+        setTimeout(nudge, 4000);
+      }
+    }, 250);
+  };
+  report();
+  const ro = new ResizeObserver(report);     // window resized, sidebar opened or closed
+  if (main()) ro.observe(main());
+  return () => { ro.disconnect(); clearTimeout(timer); };
+}
+"""
+_layout_component = None
+
+
+def measure_layout() -> None:
+    """Mounts the width probe (nothing shown) once per run, before the page, and keeps the last width it sent."""
+    global _layout_component
+    if _layout_component is None:      # registered once per process, not at import (ui is also used outside the app)
+        _layout_component = st.components.v2.component("meteo_layout_width", js=LAYOUT_JS)
+    known = st.session_state.get("main_width")
+    result = _layout_component(key="layout_width", data={"width": known}, default={"width": known},
+                               on_width_change=lambda: None)
+    width = result.get("width") if hasattr(result, "get") else getattr(result, "width", None)
+    if width:
+        st.session_state["main_width"] = int(width)
+
+
+def main_width() -> int | None:
+    """The main column's width in px, once the browser has measured it."""
+    try:
+        return st.session_state.get("main_width")
+    except Exception:
+        return None
+
+
+def is_narrow(px: int = NARROW_PX) -> bool:
+    """Too narrow for content side by side: from the main column's width, or before the browser has measured it,
+    from the user agent (phones)."""
+    width = main_width()
+    return width < px if width else is_phone()
+
+
+# The narrow layout for the columns the pages lay side by side, from 640 px of window (below, Streamlit stacks them
+# itself): two columns stack, three or more go two by two
+NARROW_CSS = """
+<style>
+  @media (min-width: 640px) {
+    [data-testid="stMain"] [data-testid="stHorizontalBlock"] { flex-wrap: wrap; }
+    [data-testid="stMain"] [data-testid="stColumn"] { min-width: calc(50% - 2rem); }
+    [data-testid="stMain"] [data-testid="stColumn"]:first-child:nth-last-child(2),
+    [data-testid="stMain"] [data-testid="stColumn"]:first-child:nth-last-child(2) ~ [data-testid="stColumn"] {
+      min-width: 100%; }
+  }
+</style>
+"""
 
 
 def slug(text: str | None) -> str:
@@ -460,6 +558,18 @@ def css(p: dict) -> str:
                        background: none; border: none; color: {p['ink']}; padding: 0.3rem 0.4rem; cursor: pointer; }}
   .save-chart-image .save-icon {{ font-family: "Material Symbols Rounded"; font-size: 20px; line-height: 1;
                                   color: {p['ink2']}; font-feature-settings: "liga"; }}
+  /* Pills wrap onto several lines: Streamlit keeps them on one line that scrolls sideways, which on a phone hides
+     the last ones past the edge (#79) */
+  [data-testid="stButtonGroup"] > div:has(> button[data-variant="pills"]) {{ flex-wrap: wrap; row-gap: 0.4rem; }}
+  /* Metric labels and values go onto a second line rather than ending in "…", and values shrink in narrow boxes
+     (#81) */
+  [data-testid="stMetricLabel"] *, [data-testid="stMetricValue"] * {{ white-space: normal !important;
+      overflow: visible !important; text-overflow: clip !important; }}
+  [data-testid="stMetricValue"] {{ line-height: 1.2; }}
+  [data-testid="stMetric"] {{ container-type: inline-size; }}
+  @container (max-width: 240px) {{ [data-testid="stMetricValue"] {{ font-size: 1.4rem; }} }}
+  /* The width probe (measure_layout) shows nothing */
+  .st-key-layout_width {{ display: none; }}
 </style>
 """
 
@@ -534,7 +644,7 @@ def page_header(title: str, lead: str, tab: str | None = None) -> None:
     from share import copy_link  # dashboard/share.py (imported here: ui is also imported from outside the app)
 
     st.set_page_config(page_title=f"{tab or title} · Météo Analytics")
-    st.markdown(css(theme()), unsafe_allow_html=True)
+    st.markdown(css(theme()) + (NARROW_CSS if is_narrow() else ""), unsafe_allow_html=True)
     st.title(title)
     st.markdown(f"<div class='lead'>{lead}</div>", unsafe_allow_html=True)
     copy_link()

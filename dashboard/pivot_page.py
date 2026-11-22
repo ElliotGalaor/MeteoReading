@@ -104,8 +104,7 @@ def _on_example() -> None:
         st.session_state["pv_example"] = None   # a shortcut, not a mode: the widgets can be changed from there
 
 
-def _style(result: PivotResult, measure: Measure, colour: bool):
-    table = result.table
+def _style(table: pd.DataFrame, result: PivotResult, measure: Measure, colour: bool):
     values = [c for c in table.columns if c not in result.row_labels]
     body_cols = [c for c in values if c != TOTAL]
     body_rows = table.index[table[result.row_labels[0]] != TOTAL]
@@ -212,8 +211,17 @@ def page_pivot():
                    for d in sorted({lo // 10 * 10, hi // 10 * 10}) if max(lo, d) > d or min(hi, d + 9) < d + 9]
         if partial:
             st.caption(t("pivot.partial", decades=listing(partial)))
-    height = min(36 * (len(result.table) + 1) + 4, 640)
-    st.dataframe(_style(result, measure, colour), hide_index=True, height=height, placeholder="–")
+    # The Total row in a table of its own under the body: in the same table, sorting a column moved it among the
+    # rows (#82). Fixed widths keep the two tables' columns aligned.
+    table = result.table
+    is_total = table[result.row_labels[0]] == TOTAL
+    body, total = table[~is_total], table[is_total]
+    config = {c: st.column_config.Column(width="medium" if c in result.row_labels else 110) for c in table.columns}
+    height = min(36 * (len(body) + 1) + 4, 640)
+    st.dataframe(_style(body, result, measure, colour), hide_index=True, height=height, placeholder="–",
+                 column_config=config)
+    if not total.empty:
+        st.dataframe(_style(total, result, measure, colour), hide_index=True, placeholder="–", column_config=config)
     csv = result.table.copy()
     for c in [c for c in csv.columns if c not in result.row_labels]:
         csv[c] = csv[c].round(result.decimals).astype("Int64" if result.decimals == 0 else float)

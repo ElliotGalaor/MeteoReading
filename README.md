@@ -42,7 +42,7 @@ a single self-contained file, to download (GitHub shows its source) and open in 
 | **Bulk data collection**: 40 files (268 MB) discovered through the data.gouv.fr API, downloaded in parallel, with retries and a traceability manifest | [meteo/download.py](meteo/download.py) |
 | **Quota-aware API client**: computes the cost of each call, rate limiter, cache | [meteo/era5.py](meteo/era5.py) |
 | **Analytical SQL**: CTEs, window functions, `QUALIFY`, `PIVOT`, macros, "gaps and islands" | [sql/](sql/) and [sql/example_queries.sql](sql/example_queries.sql) |
-| **Data quality**: quality codes, physical bounds, consistency, duplicates, completeness, series splicing | [sql/02_quality.sql](sql/02_quality.sql), [sql/03_stations.sql](sql/03_stations.sql) |
+| **Data quality**: quality codes, physical bounds, consistency, values checked by hand, duplicates, completeness, series splicing | [sql/02_quality.sql](sql/02_quality.sql), [sql/03_stations.sql](sql/03_stations.sql) |
 | **Statistics**: anomalies, regression with CI, Mann-Kendall, Theil-Sen, records (Meehl 2009), z-scores | [meteo/stats.py](meteo/stats.py) |
 | **Exploratory machine learning**: PCA + k-means, choice of k by silhouette | [meteo/analysis.py](meteo/analysis.py) |
 | **Cross-validation** against an independent source (ERA5 reanalysis) | [meteo/era5.py](meteo/era5.py) |
@@ -243,7 +243,7 @@ data.gouv.fr (API)          Open-Meteo (ERA5 API)
                      │
                      ▼  DuckDB, logic written in SQL (sql/01 → 04)
        stg_daily     25 M typed rows, quality codes kept
-       obs_flags     status of each measurement (valid, missing, suspect, out of range, inconsistent)
+       obs_flags     status of each measurement (valid, missing, rejected by hand, suspect, out of range, inconsistent)
        obs_daily     "clean" view (validated values only)
        ref_station   reference station(s) per city + station_offsets (series splicing)
        city_daily / city_monthly / city_yearly / city_heatwaves / city_dry_spells   (gold)
@@ -281,7 +281,8 @@ To analyse the whole of France (overseas territories included), set `extra_depar
 
 ## Data quality: what the analysis revealed
 
-- Météo-France already validates its data: **204 values rejected out of 58.9 million** measurements present, no duplicates.
+- Météo-France already validates its data: **205 values rejected out of 58.9 million** measurements present, no duplicates.
+- **Two gust records were checked by hand**. Clermont-Ferrand's 169 km/h (5 Nov 1951) holds up: a mean wind of 65 km/h that day, 107 km/h at the Puy de Dôme summit. Nice's 180 km/h (19 Feb 1955) does not: the storm is reported at 105 km/h there, and Cannes measured 68 km/h. It is rejected in [config.yaml](config.yaml) (`rejected_values`), with its source.
 - **The real issue is completeness**: 55% of the rows have no temperature (most stations only measure rainfall), and the network keeps changing (1,100 active rain stations in 1995, 500 today).
 - **ERA5 tracks day-to-day weather very well** (0.987 correlation on TX) **but smooths out local effects**: +4.7 °C on Ajaccio's nights (the grid cell includes the sea), −1.6 °C in Paris (the urban heat island does not exist in the reanalysis), and in Ajaccio 90 days ≥ 30 °C instead of the 456 observed. For local extremes, stations remain essential.
 

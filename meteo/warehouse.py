@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 SQL_DIR = PROJECT_ROOT / "sql"
 SQL_STEPS = ["01_staging.sql", "02_quality.sql", "03_stations.sql", "04_gold.sql"]
 GOLD_TABLES = ["dim_station", "ref_station", "station_offsets", "city_daily", "city_monthly", "city_yearly",
-               "city_heatwaves", "city_dry_spells", "dq_summary", "network_yearly"]
+               "city_heatwaves", "city_dry_spells", "dq_summary", "dq_rejected", "network_yearly"]
 
 
 def render_sql(name: str, params: dict) -> str:
@@ -58,6 +58,21 @@ def load_cities(con: duckdb.DuckDBPyConnection, cfg: Config) -> None:
     )
 
 
+def load_rejected(con: duckdb.DuckDBPyConnection, cfg: Config) -> None:
+    """The values checked by hand and found wrong (config.yaml, rejected_values), read by 02_quality.sql."""
+    con.execute("""
+        CREATE OR REPLACE TABLE rejected_values (
+            station_id VARCHAR, date DATE, variable VARCHAR, value DOUBLE,
+            reason_en VARCHAR, reason_fr VARCHAR, source VARCHAR
+        )""")
+    if cfg.rejected:
+        con.executemany(
+            "INSERT INTO rejected_values VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [(r.station, r.date, r.variable, r.value, r.reason.get("en", ""), r.reason.get("fr", ""), r.source)
+             for r in cfg.rejected],
+        )
+
+
 def build_params(cfg: Config, files: list[Path], last_date: date | None = None) -> dict:
     a, t = cfg.analysis, cfg.thresholds
     period_days = (date(a["end_year"] + 1, 1, 1) - date(a["start_year"], 1, 1)).days
@@ -83,6 +98,7 @@ def build_warehouse(cfg: Config, files: list[Path] | None = None) -> dict:
 
     with duckdb.connect(str(cfg.warehouse)) as con:
         load_cities(con, cfg)
+        load_rejected(con, cfg)
         params = build_params(cfg, files)
         for name in SQL_STEPS:
             t0 = time.perf_counter()

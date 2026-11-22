@@ -100,7 +100,7 @@ def test_empty_cells_keep_the_page_colour(con, monkeypatch):
     import pivot_page
 
     r = run_pivot(con, spec(column="year", years=(1990, 1992)))     # city B has no value for 1992
-    styler = pivot_page._style(r, pivot_page.STRUCTURE["yearly"].measures["tmean"], colour=True)
+    styler = pivot_page._style(r.table, r, pivot_page.STRUCTURE["yearly"].measures["tmean"], colour=True)
     styler._compute()
     cols = list(r.table.columns)
     empty = dict(styler.ctx[(1, cols.index("1992"))])

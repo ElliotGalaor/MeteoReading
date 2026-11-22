@@ -18,7 +18,7 @@ from ui import (
     chart,
     date_text,
     fmt_date,
-    is_phone,
+    is_narrow,
     num,
     number,
     page_header,
@@ -34,6 +34,7 @@ from ui import (
 
 CITIES = [c.name for c in CFG.cities]
 DAYS = 7                       # days of the bulletin, today included
+CARDS_PX = 880                 # main column width from which the bulletin is a row of cards, not a line per day
 MAX, MIN = SERIES[1], SERIES[0]  # orange for the maximum, blue for the minimum (fixed, whatever the city)
 SHOWN_RISK = 0.10              # frost and hot-day chances are shown from 10%
 
@@ -123,6 +124,10 @@ def _temperature_chart(p: Projection, today: pd.Timestamp, city: str) -> None:
                         line=dict(color=colour, width=2), marker=dict(size=6, color=colour),
                         customdata=rec[f"{var}_normal"], meta={"csv": t("pred.csv_measured", name=name)},
                         hovertemplate=t("pred.hover_measured", name=name))
+        # The dashed line joins the last measurement to the first projected day, as the band does (no hover: the
+        # two points have their own; unnamed, so the CSV leaves it out)
+        fig.add_scatter(x=proj["date"].iloc[:2], y=proj[var].iloc[:2], mode="lines", showlegend=False,
+                        legendgroup=var, line=dict(color=colour, width=2, dash="dash"), hoverinfo="skip")
         fig.add_scatter(x=days["date"], y=days[var], mode="lines", showlegend=False, legendgroup=var,
                         line=dict(color=colour, width=2, dash="dash"), meta={"csv": t("pred.csv_projected", name=name)},
                         customdata=np.stack([days[f"{var}_low"], days[f"{var}_high"], days[f"{var}_normal"]], axis=1),
@@ -227,7 +232,7 @@ def page_projection():
         st.info(t("pred.old_data"))
 
     bulletin = p.days[p.days["date"] >= today].head(DAYS)
-    if is_phone():
+    if is_narrow(CARDS_PX):   # seven cards need about 115 px each: a line per day below that (#81)
         _compact(bulletin, today)
     else:
         for col, (_, day) in zip(st.columns(len(bulletin)), bulletin.iterrows(), strict=True):

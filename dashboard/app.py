@@ -56,13 +56,18 @@ from ui import (
     era5,
     fmt_date,
     is_dark,
+    is_narrow,
     is_phone,
+    main_width,
+    measure_layout,
     num,
     number,
     page_header,
     percent,
     plural,
     pvalue,
+    rejected_reason,
+    rejected_values,
     results,
     rolling,
     signed,
@@ -165,9 +170,11 @@ def page_overview():
                                       orientation="h", y=-0.02, yanchor="top")),
             customdata=np.stack([m["city"], m["slope"], m["delta"], m["station_name"]], axis=1),
             hovertemplate=t("overview.map_hover", old=period(OLD), recent=period(RECENT))))
-        # Centred on the cities' bounds and zoomed to fit them all, Ajaccio included (narrower on phones)
+        # Centred on the cities' bounds and zoomed to fit them all, Ajaccio included, in the width the map gets: the
+        # whole main column on a narrow layout (the columns stack), two fifths of it beside the chart (#81)
         lat0, lat1, lon0, lon1 = m["lat"].min(), m["lat"].max(), m["lon"].min(), m["lon"].max()
-        width = 300 if is_phone() else 420
+        main = main_width()
+        width = ((main if is_narrow() else (main - 64) * 0.4) if main else (300 if is_phone() else 420)) - 20
         zoom = min(np.log2(width * 360 / (512 * (lon1 - lon0 + 1))),
                    np.log2(330 * 360 / (512 * (lat1 - lat0 + 1) / np.cos(np.radians((lat0 + lat1) / 2)))))
         fig.update_layout(map=dict(style="carto-positron", center=dict(lat=(lat0 + lat1) / 2, lon=(lon0 + lon1) / 2),
@@ -403,8 +410,15 @@ def page_year():
     k = st.columns(4)
     k[0].metric(t("year.kpi_anomaly"), f"{signed(yr['anom'].mean(), 1)} °C", border=True, help=t("year.kpi_anomaly_help"))
     k[1].metric(t("year.kpi_above"), f"{(yr['anom'] > 0).sum()}", border=True, help=t("year.kpi_above_help", n=len(yr)))
-    k[2].metric(t("year.kpi_records"), t("year.kpi_records_value", high=len(rec_hi), low=len(rec_lo)), border=True,
-                help=t("year.kpi_records_help", variable=variable, start=START, last=year - 1))
+    # Records against the years before this one: none in the first year of the city's data, few just after it
+    first = int(d["date"].dt.year.min())
+    if year <= first:
+        records, records_help = "–", t("year.kpi_records_first", year=year)
+    else:
+        records = t("year.kpi_records_value", high=len(rec_hi), low=len(rec_lo))
+        records_help = t("year.kpi_records_help", variable=variable, start=first, last=year - 1) + (
+            plural("year.kpi_records_few", year - first) if year - first < 10 else "")
+    k[2].metric(t("year.kpi_records"), records, border=True, help=records_help)
     # The day that stands out for the variable: hottest day, coldest night, warmest day on average
     kpi, i_k = {"Maximum": ("kpi_hottest", yr[col].idxmax()), "Minimum": ("kpi_coldest", yr[col].idxmin()),
                 "Mean": ("kpi_warmest", yr[col].idxmax())}[var]
@@ -503,10 +517,13 @@ def _year_rain(city: str, year: int, d: pd.DataFrame) -> None:
     rainy = int(wet.sum())
     dry_runs = np.diff(np.flatnonzero(np.concatenate([[True], wet, [True]]))) - 1
     so_far = last < 364
+    gap = round((total / normal_to_date - 1) * 100) if normal_to_date else 0
     k = st.columns(4)
+    # The arrow comes from the number: Streamlit reads it from the text, where the typographic minus "−" looks
+    # positive (an up arrow on a deficit, #74)
     k[0].metric(t("year.rain_kpi_so_far" if so_far else "year.rain_kpi"), f"{num(total, 0)} mm", border=True,
-                delta=t("year.rain_delta", pct=percent((total / normal_to_date - 1) * 100, 0, sign=True))
-                if normal_to_date else None, delta_color="off",
+                delta=t("year.rain_delta", pct=percent(gap, 0, sign=True)) if normal_to_date else None,
+                delta_color="off", delta_arrow="up" if gap > 0 else "down" if gap < 0 else "off",
                 help=t("year.rain_help", normal=num(normal_to_date, 0), first=REF[0], last=REF[1],
                        measured=int(measured[: last + 1].sum()), days=last + 1))
     k[1].metric(t("year.rainy_days", rain_day=num(TH["rain_day"], 0)), f"{rainy}", border=True)
@@ -647,7 +664,7 @@ def page_extremes():
                          "city": t("common.city"), "start_date": t("common.start"), "end_date": t("common.end"),
                          "n_days": t("common.length"), "tx_peak": t("extremes.col_peak"),
                          "tx_mean": t("extremes.col_mean_tx")})
-        st.caption(t("extremes.episodes_caption", n=num(len(hw), 0)))
+        st.caption(plural("extremes.episodes_caption", len(hw)))
     wind_panel()
     source_note()
 
@@ -661,7 +678,7 @@ def page_quality():
     p = theme()
     st.graphviz_chart(f"""
     digraph {{
-      rankdir={"TB" if is_phone() else "LR"}; bgcolor="transparent"; nodesep=0.35; ranksep=0.45;
+      rankdir={"TB" if is_narrow() else "LR"}; bgcolor="transparent"; nodesep=0.35; ranksep=0.45;
       node [shape=box style="rounded,filled" fillcolor="{p['surface']}" color="{p['grid']}" fontname="Segoe UI" fontsize=11 fontcolor="{p['ink']}" margin="0.18,0.1"];
       edge [color="{p['muted']}" arrowsize=0.7];
       api  [label="{t('quality.g_api')}"];
@@ -685,17 +702,30 @@ def page_quality():
     st.subheader(t("quality.by_variable"))
     dq = pd.DataFrame(r["quality"]["by_variable"])
     dq["variable"] = [t(f"quality.var_{v}") for v in dq["variable"]]
-    for c in ("suspect", "out_of_range", "inconsistent"):
+    counts = ("valid", "missing", "rejected", "suspect", "out_of_range", "inconsistent")
+    for c in counts:
         if c not in dq:
             dq[c] = 0
-    view = dq[["variable", "valid", "missing", "suspect", "out_of_range", "inconsistent", "pct_missing"]]
-    st.dataframe(styled(view, {c: number(0) for c in ("valid", "missing", "suspect", "out_of_range", "inconsistent")}),
+    view = dq[["variable", *counts, "pct_missing"]]
+    st.dataframe(styled(view, {c: number(0) for c in counts}),
                  hide_index=True, column_config={
                      "variable": t("quality.col_variable"), "valid": t("quality.col_valid"),
-                     "missing": t("quality.col_missing"), "suspect": t("quality.col_suspect"),
+                     "missing": t("quality.col_missing"),
+                     "rejected": st.column_config.Column(t("quality.col_rejected"), help=t("quality.col_rejected_help")),
+                     "suspect": t("quality.col_suspect"),
                      "out_of_range": t("quality.col_out"), "inconsistent": "TN > TX",
                      "pct_missing": st.column_config.ProgressColumn(t("quality.col_pct_missing"), min_value=0,
                                                                     max_value=100, format=t("fmt.progress_pct"))})
+    rj = rejected_values()
+    if len(rj):
+        st.markdown(t("quality.rejected_title"))
+        items = []
+        for _, v in rj.iterrows():
+            item = t("quality.rejected_item", where=v["city"] if pd.notna(v["city"]) else v["station_name"],
+                     date=fmt_date(v["date"]), reason=rejected_reason(v))
+            source = f" {t('quality.rejected_source', url=v['source'])}" if v["source"] else ""
+            items.append(f"- {item}{source}")
+        st.markdown(t("quality.rejected_text") + "\n\n" + "\n".join(items))
     st.markdown(t("quality.completeness_text"))
 
     nw = table("network_yearly")
@@ -789,4 +819,5 @@ with st.sidebar:
     st.caption(t("app.tagline", start=START, end=END))
 pause_when_idle()
 chart_gestures(is_phone())
+measure_layout()
 nav.run()
