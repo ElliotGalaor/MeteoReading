@@ -188,10 +188,10 @@
   <h2>Data quality</h2>
   <figure><img src="{{ figs['12_station_network'] }}" alt="Station network over time"></figure>
   <div class="table-wrap"><table>
-    <tr><th>Variable</th><th class="n">Valid</th><th class="n">Missing</th><th class="n">Suspect</th><th class="n">% missing</th></tr>
+    <tr><th>Variable</th><th class="n">Valid</th><th class="n">Missing</th><th class="n">Rejected after a check</th><th class="n">Suspect</th><th class="n">% missing</th></tr>
     {% set vl = {'TN': 'Minimum temperature', 'TX': 'Maximum temperature', 'TM': 'Mean hourly temperature', 'RR': 'Rainfall', 'FFM': 'Mean wind', 'FXI': 'Maximum gust'} %}
     {% for v in q.by_variable %}
-    <tr><td>{{ vl.get(v.variable, v.variable) }}</td><td class="n">{{ v.valid | num(0) }}</td><td class="n">{{ v.missing | num(0) }}</td><td class="n">{{ (v.suspect or 0) | num(0) }}</td><td class="n">{{ v.pct_missing | num(1) }}%</td></tr>
+    <tr><td>{{ vl.get(v.variable, v.variable) }}</td><td class="n">{{ v.valid | num(0) }}</td><td class="n">{{ v.missing | num(0) }}</td><td class="n">{{ (v.rejected or 0) | num(0) }}</td><td class="n">{{ (v.suspect or 0) | num(0) }}</td><td class="n">{{ v.pct_missing | num(1) }}%</td></tr>
     {% endfor %}
   </table></div>
   <h3>Series splicing</h3>

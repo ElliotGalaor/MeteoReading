@@ -290,10 +290,11 @@ def outliers(t, cfg) -> dict:
 # --- Data quality --------------------------------------------------------------
 def data_quality(t, cfg, figs) -> dict:
     dq = t["dq_summary"].pivot_table(index="variable", columns="status", values="n", aggfunc="sum").fillna(0)
-    for status in ("valid", "missing", "suspect", "out_of_range", "inconsistent"):
+    statuses = ["valid", "missing", "rejected", "suspect", "out_of_range", "inconsistent"]
+    for status in statuses:
         if status not in dq:
             dq[status] = 0
-    dq["total"] = dq[["valid", "missing", "suspect", "out_of_range", "inconsistent"]].sum(axis=1)
+    dq["total"] = dq[statuses].sum(axis=1)
     dq["pct_missing"] = dq["missing"] / dq["total"] * 100
     present = dq["total"] - dq["missing"]
     dq["pct_rejected"] = (present - dq["valid"]) / present * 100

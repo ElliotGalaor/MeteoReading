@@ -47,6 +47,23 @@ era5:                              # cross-validation against the ERA5 reanalysi
   end: "2024-12-31"
   max_weighted_calls_per_minute: 400  # free quota = 600/min, keep a safety margin
 
+# Raw values checked by hand against published sources and found wrong. The quality step marks them
+# 'rejected', so they drop out of every analysis and record, while the raw file still holds that value
+# (a correction published by Météo-France takes over). variable: tn, tx, tm, rr, ffm or fxi, in the file's
+# unit (°C, mm, m/s). The reason is shown on the dashboard's quality page.
+# Checked and kept: Clermont-Ferrand, 47 m/s (169 km/h) on 5 Nov 1951. That day the station's mean wind was
+#   65 km/h and the Puy de Dôme summit's 107 km/h, in warm, dry southerly wind; France 3 Auvergne reports it as
+#   the airport's strongest gust, ahead of 158 km/h on 27 Dec 1999.
+rejected_values:
+  - station: "06088001"   # Nice
+    date: 1955-02-19
+    variable: fxi
+    value: 50.0
+    reason:
+      en: "a gust of 180 km/h. The storm of 18-19 February 1955 is reported at 105 km/h in Nice, Cannes measured 68 km/h that day, and Nice's mean wind (30 km/h) was the same as the day before."
+      fr: "une rafale de 180 km/h. La tempête du 18-19 février 1955 est donnée à 105 km/h à Nice, Cannes a mesuré 68 km/h ce jour-là, et le vent moyen à Nice (30 km/h) était le même que la veille."
+    source: https://www.meteo-paris.com/en/chronique/annee/1955
+
 # 20 large cities covering the main French climates.
 # alt: altitude of the city centre (m), used to rule out nearby mountain stations.
 # stations (optional): forces the reference station, or a CHAIN of stations in order of

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 
 import yaml
@@ -19,6 +20,37 @@ class City:
     stations: tuple[str, ...] = ()  # forced station(s), in order of priority
 
 
+# Variables of the daily files that a value can be rejected for (lower case, as in the warehouse)
+VARIABLES = ("tn", "tx", "tm", "rr", "ffm", "fxi")
+
+
+@dataclass(frozen=True)
+class RejectedValue:
+    """A raw value checked by hand and found wrong: the quality step marks it 'rejected'.
+
+    It applies only while the raw file still holds that value, so a correction published by Météo-France
+    takes over.
+    """
+    station: str
+    date: date
+    variable: str
+    value: float
+    reason: dict[str, str]  # language code -> text
+    source: str = ""
+
+
+def _rejected(entries: list[dict]) -> list[RejectedValue]:
+    out = []
+    for e in entries or []:
+        v = RejectedValue(station=str(e["station"]), date=date.fromisoformat(str(e["date"])),
+                          variable=str(e["variable"]).lower(), value=float(e["value"]),
+                          reason=dict(e.get("reason") or {}), source=str(e.get("source") or ""))
+        if v.variable not in VARIABLES:
+            raise ValueError(f"rejected_values: unknown variable {e['variable']!r} (expected one of {VARIABLES})")
+        out.append(v)
+    return out
+
+
 @dataclass(frozen=True)
 class Config:
     dataset_api: str
@@ -32,6 +64,7 @@ class Config:
     thresholds: dict
     era5: dict
     cities: list[City] = field(default_factory=list)
+    rejected: list[RejectedValue] = field(default_factory=list)
 
     @property
     def departments(self) -> list[str] | str:
@@ -76,4 +109,5 @@ def load_config(path: str | Path | None = None) -> Config:
         thresholds=raw["thresholds"],
         era5=raw.get("era5", {}),
         cities=cities,
+        rejected=_rejected(raw.get("rejected_values")),
     )

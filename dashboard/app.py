@@ -66,6 +66,8 @@ from ui import (
     percent,
     plural,
     pvalue,
+    rejected_reason,
+    rejected_values,
     results,
     rolling,
     signed,
@@ -700,17 +702,30 @@ def page_quality():
     st.subheader(t("quality.by_variable"))
     dq = pd.DataFrame(r["quality"]["by_variable"])
     dq["variable"] = [t(f"quality.var_{v}") for v in dq["variable"]]
-    for c in ("suspect", "out_of_range", "inconsistent"):
+    counts = ("valid", "missing", "rejected", "suspect", "out_of_range", "inconsistent")
+    for c in counts:
         if c not in dq:
             dq[c] = 0
-    view = dq[["variable", "valid", "missing", "suspect", "out_of_range", "inconsistent", "pct_missing"]]
-    st.dataframe(styled(view, {c: number(0) for c in ("valid", "missing", "suspect", "out_of_range", "inconsistent")}),
+    view = dq[["variable", *counts, "pct_missing"]]
+    st.dataframe(styled(view, {c: number(0) for c in counts}),
                  hide_index=True, column_config={
                      "variable": t("quality.col_variable"), "valid": t("quality.col_valid"),
-                     "missing": t("quality.col_missing"), "suspect": t("quality.col_suspect"),
+                     "missing": t("quality.col_missing"),
+                     "rejected": st.column_config.Column(t("quality.col_rejected"), help=t("quality.col_rejected_help")),
+                     "suspect": t("quality.col_suspect"),
                      "out_of_range": t("quality.col_out"), "inconsistent": "TN > TX",
                      "pct_missing": st.column_config.ProgressColumn(t("quality.col_pct_missing"), min_value=0,
                                                                     max_value=100, format=t("fmt.progress_pct"))})
+    rj = rejected_values()
+    if len(rj):
+        st.markdown(t("quality.rejected_title"))
+        items = []
+        for _, v in rj.iterrows():
+            item = t("quality.rejected_item", where=v["city"] if pd.notna(v["city"]) else v["station_name"],
+                     date=fmt_date(v["date"]), reason=rejected_reason(v))
+            source = f" {t('quality.rejected_source', url=v['source'])}" if v["source"] else ""
+            items.append(f"- {item}{source}")
+        st.markdown(t("quality.rejected_text") + "\n\n" + "\n".join(items))
     st.markdown(t("quality.completeness_text"))
 
     nw = table("network_yearly")

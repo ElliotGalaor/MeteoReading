@@ -2,7 +2,7 @@
 
 The dataset deliberately contains the pitfalls found in the real data:
 suspect quality code, impossible value, TN > TX, duplicate, ID with a leading zero,
-distant station, incomplete station and a station that moves.
+distant station, incomplete station, a station that moves and a gust rejected by hand.
 """
 from __future__ import annotations
 
@@ -14,20 +14,21 @@ import duckdb
 import pytest
 import yaml
 
-from meteo.config import load_config
+from meteo.config import _rejected, load_config
 from meteo.warehouse import build_warehouse
 
 HEADER = "NUM_POSTE;NOM_USUEL;LAT;LON;ALTI;AAAAMMJJ;RR;QRR;TN;QTN;TX;QTX;TM;QTM;FFM;QFFM;FXI;QFXI"
 START, END = date(2000, 1, 1), date(2003, 12, 31)
 DAY_SUSPECT, DAY_OUT, DAY_INCONSISTENT, DAY_DUP = date(2001, 3, 1), date(2001, 3, 2), date(2001, 3, 3), date(2001, 3, 4)
+DAY_GUST, DAY_FIXED = date(2001, 3, 5), date(2001, 3, 6)   # a wrong gust, and a rejection the raw file no longer matches
 
 
 def base_tx(d: date) -> float:
     return round(20 + 8 * math.sin(2 * math.pi * d.timetuple().tm_yday / 365), 1)
 
 
-def row(sid, name, lat, lon, alt, d, tx, tn, rr=0.0, qtx=1):
-    return f"{sid};{name};{lat};{lon};{alt};{d:%Y%m%d};{rr};1;{tn};1;{tx};{qtx};;;3.0;1;10.0;1"
+def row(sid, name, lat, lon, alt, d, tx, tn, rr=0.0, qtx=1, fxi=10.0):
+    return f"{sid};{name};{lat};{lon};{alt};{d:%Y%m%d};{rr};1;{tn};1;{tx};{qtx};;;3.0;1;{fxi};1"
 
 
 def days(a: date, b: date):
@@ -54,6 +55,8 @@ def warehouse(tmp_path_factory):
             lines.append(row("06000001", "GOOD", 43.70, 7.26, 5, d, 99.0, tn, rr))
         elif d == DAY_INCONSISTENT:
             lines.append(row("06000001", "GOOD", 43.70, 7.26, 5, d, 5.0, 12.0, rr))
+        elif d == DAY_GUST:
+            lines.append(row("06000001", "GOOD", 43.70, 7.26, 5, d, tx, tn, rr, fxi=50.0))
         else:
             lines.append(row("06000001", "GOOD", 43.70, 7.26, 5, d, tx, tn, rr))
         if d == DAY_DUP:
@@ -91,6 +94,11 @@ def warehouse(tmp_path_factory):
             {"name": "Chaintown", "dep": "13", "lat": 43.30, "lon": 5.37, "alt": 10,
              "stations": ["13000002", "13000001"]},
         ],
+        "rejected_values": [
+            {"station": "06000001", "date": DAY_GUST, "variable": "fxi", "value": 50.0,
+             "reason": {"en": "Too strong", "fr": "Trop forte"}, "source": "https://example.invalid"},
+            {"station": "06000001", "date": DAY_FIXED, "variable": "FXI", "value": 45.0, "reason": {"en": "Fixed since"}},
+        ],
     }), encoding="utf-8")
     cfg = load_config(cfg_path)
     stats = build_warehouse(cfg)
@@ -120,6 +128,25 @@ def test_rejected_values(warehouse):
     nulls = one(con, f"""SELECT count(*) FROM obs_daily WHERE station_id = '06000001' AND tx IS NULL
                          AND date IN ('{DAY_SUSPECT}', '{DAY_OUT}', '{DAY_INCONSISTENT}')""")
     assert nulls == 3
+
+
+def test_a_value_rejected_by_hand_drops_out(warehouse):
+    con, _ = warehouse
+    fxi = dict(con.sql("SELECT status, n FROM dq_summary WHERE variable = 'FXI'").fetchall())
+    assert fxi["rejected"] == 1
+    assert one(con, f"SELECT fxi FROM obs_daily WHERE station_id = '06000001' AND date = '{DAY_GUST}'") is None
+    assert one(con, "SELECT max(fxi) FROM city_daily WHERE city = 'Testville'") == 10.0
+
+
+def test_a_rejection_lapses_when_the_raw_file_no_longer_holds_the_value(warehouse):
+    con, _ = warehouse
+    assert dict(con.sql("SELECT date, applied FROM dq_rejected").fetchall()) == {DAY_GUST: True, DAY_FIXED: False}
+    assert one(con, f"SELECT fxi FROM obs_daily WHERE station_id = '06000001' AND date = '{DAY_FIXED}'") == 10.0
+
+
+def test_a_rejected_value_needs_a_known_variable():
+    with pytest.raises(ValueError, match="unknown variable"):
+        _rejected([{"station": "06000001", "date": "2001-03-05", "variable": "gust", "value": 50.0}])
 
 
 def test_station_choice(warehouse):

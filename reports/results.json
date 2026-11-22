@@ -1251,6 +1251,7 @@
       {
         "variable": "FFM",
         "missing": 21664830.0,
+        "rejected": 0.0,
         "suspect": 3.0,
         "valid": 3362637.0,
         "out_of_range": 0.0,
@@ -1262,17 +1263,19 @@
       {
         "variable": "FXI",
         "missing": 21820540.0,
+        "rejected": 1.0,
         "suspect": 16.0,
-        "valid": 3206914.0,
+        "valid": 3206913.0,
         "out_of_range": 0.0,
         "inconsistent": 0.0,
         "total": 25027470.0,
         "pct_missing": 87.186,
-        "pct_rejected": 0.0
+        "pct_rejected": 0.001
       },
       {
         "variable": "RR",
         "missing": 295099.0,
+        "rejected": 0.0,
         "suspect": 151.0,
         "valid": 24732220.0,
         "out_of_range": 0.0,
@@ -1284,6 +1287,7 @@
       {
         "variable": "TM",
         "missing": 20055230.0,
+        "rejected": 0.0,
         "suspect": 0.0,
         "valid": 4972240.0,
         "out_of_range": 0.0,
@@ -1295,6 +1299,7 @@
       {
         "variable": "TN",
         "missing": 13700919.0,
+        "rejected": 0.0,
         "suspect": 20.0,
         "valid": 11326531.0,
         "out_of_range": 0.0,
@@ -1306,6 +1311,7 @@
       {
         "variable": "TX",
         "missing": 13713751.0,
+        "rejected": 0.0,
         "suspect": 14.0,
         "valid": 11313705.0,
         "out_of_range": 0.0,
@@ -2018,7 +2024,7 @@
     "first_date": "1950-01-01",
     "last_date": "2026-11-12",
     "n_measures": 58914451,
-    "n_valid_measures": 58914247,
+    "n_valid_measures": 58914246,
     "n_duplicates": 0,
     "n_cities": 20
   },

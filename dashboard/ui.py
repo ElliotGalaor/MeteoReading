@@ -101,6 +101,23 @@ def table(name: str) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
+def rejected_values() -> pd.DataFrame:
+    """The values rejected after a check by hand (config.yaml) that the current data still holds, with their city."""
+    try:
+        rj = table("dq_rejected")
+    except duckdb.CatalogException:  # a warehouse built before the table existed
+        return pd.DataFrame(columns=["station_id", "station_name", "city", "date", "variable", "value",
+                                     "reason_en", "reason_fr", "source"])
+    cities = table("ref_station")[["station_id", "city"]].drop_duplicates("station_id")
+    return rj[rj["applied"]].merge(cities, on="station_id", how="left").reset_index(drop=True)
+
+
+def rejected_reason(row) -> str:
+    """The reason of a rejected value in the page's language (English when there is no translation)."""
+    return (row["reason_fr"] if lang() == "fr" else "") or row["reason_en"]
+
+
+@st.cache_data(show_spinner=False)
 def results() -> dict:
     return json.loads((CFG.reports_dir / "results.json").read_text(encoding="utf-8"))
 

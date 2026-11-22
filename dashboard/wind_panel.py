@@ -5,8 +5,26 @@ import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
 
-from meteo.wind import MIN_COVERAGE, MIN_YEARS, STORM_KMH, gust_records, storm_trends, storm_years
-from ui import END, HEAT, START, chart, date_text, is_dark, listing, num, number, pct, pvalue, signed, styled, t, table
+from meteo.i18n import fmt_date, plural
+from meteo.wind import MIN_COVERAGE, MIN_YEARS, MS_TO_KMH, STORM_KMH, gust_records, storm_trends, storm_years
+from ui import (
+    END,
+    HEAT,
+    START,
+    chart,
+    date_text,
+    is_dark,
+    listing,
+    num,
+    number,
+    pct,
+    pvalue,
+    rejected_values,
+    signed,
+    styled,
+    t,
+    table,
+)
 
 
 @st.cache_data(show_spinner=False)
@@ -77,3 +95,9 @@ def wind_panel() -> None:
         rec = _records()
         st.dataframe(styled(rec, {"date": date_text(), "gust_kmh": number(0, "km/h")}), hide_index=True, height=400,
                      column_config={"city": t("common.city"), "date": t("common.date"), "gust_kmh": t("wind.col_gust")})
+        left_out = rejected_values()
+        left_out = left_out[(left_out["variable"] == "fxi") & left_out["city"].notna()]
+        if len(left_out):
+            items = [t("wind.left_out_item", city=v["city"], kmh=num(v["value"] * MS_TO_KMH, 0),
+                       date=fmt_date(v["date"], "short")) for _, v in left_out.iterrows()]
+            st.caption(plural("wind.records_left_out", len(items), items=listing(items), page=t("app.nav_quality")))
