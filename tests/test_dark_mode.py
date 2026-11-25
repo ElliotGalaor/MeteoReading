@@ -65,3 +65,13 @@ def test_transparent_fills_take_the_dark_step(ui, monkeypatch):
 def test_css_follows_the_theme(ui):
     assert palette.DARK_SURFACE in ui.css(ui.DARK) and palette.SURFACE not in ui.css(ui.DARK)
     assert palette.SURFACE in ui.css(ui.LIGHT)
+
+
+@pytest.mark.parametrize("dark", [False, True])
+def test_the_drawing_map_needs_no_api_key(ui, dark):
+    from route_page import _draw_map
+
+    html = _draw_map((43.53, 5.45), 12, dark=dark, phone=False).get_root().render()
+    assert "tile.openstreetmap.org" in html
+    assert "cartocdn" not in html      # CARTO's raster tiles now need a key: "API KEY REQUIRED" on every tile
+    assert ("invert(1)" in html) == dark

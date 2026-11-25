@@ -35,6 +35,7 @@ from meteo.gps import (
 )
 from meteo.links import tracks_from_link
 from meteo.osm_routes import nearby_relations, relation_track
+from meteo.palette import DARK_SURFACE
 from meteo.route_scores import (
     AQI_MODERATE,
     DANGER_LEVELS,
@@ -63,7 +64,7 @@ from meteo.route_weather import (
     track_timezone,
     whole,
 )
-from meteo.routing import geocode, track_from_waypoints, waypoints_from_drawings
+from meteo.routing import drawn_name, geocode, track_from_waypoints, waypoints_from_drawings
 from meteo.vigilance import OFFICIAL_PAGE, at_points, departments
 from meteo.vigilance import api_key as vigilance_key
 from meteo.vigilance import covered_until as vigilance_until
@@ -235,9 +236,9 @@ def _stations(points: pd.DataFrame, tz: str) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def _route(waypoints: tuple, activity: str, follow: bool) -> tuple[pd.DataFrame, str, bool]:
+def _route(waypoints: tuple, activity: str, follow: bool) -> tuple[pd.DataFrame, bool]:
     track, routed = track_from_waypoints(list(waypoints), activity, follow)
-    return track.points, track.name, routed
+    return track.points, routed
 
 
 @st.cache_data(show_spinner=False, ttl=86400)
@@ -1008,6 +1009,25 @@ def _scores_chart(scores: Assessment, pts: pd.DataFrame) -> None:
           source=t("source.route_csv", models=t("route.models")))
 
 
+# OpenStreetMap's tiles turned dark for the dark theme: inverted, the hues turned back (water stays blue), softened.
+# The filter is on the tile layer only, so the line drawn keeps its colour. CARTO's dark tiles, used before, now
+# need an API key and showed "API KEY REQUIRED" on every tile
+_DARK_TILES = ("<style>.leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.95) contrast(.9)}"
+               f".leaflet-container{{background:{DARK_SURFACE}}}</style>")
+
+
+def _draw_map(center: tuple[float, float], zoom: int, dark: bool, phone: bool) -> folium.Map:
+    """The map to draw a route on, OpenStreetMap's tiles in both themes."""
+    # On a phone one finger scrolls the page past the map; two fingers move and zoom it (and a tap adds a point)
+    m = folium.Map(location=center, zoom_start=zoom, control_scale=True, dragging=not phone, tiles="OpenStreetMap")
+    if dark:
+        m.get_root().header.add_child(folium.Element(_DARK_TILES))
+    Draw(draw_options={"polyline": {"shapeOptions": {"color": SERIES[0], "weight": 4}, "metric": True},
+                       "polygon": False, "rectangle": False, "circle": False, "circlemarker": False, "marker": False},
+         edit_options={"edit": True, "remove": True}).add_to(m)
+    return m
+
+
 def _draw_track() -> tuple[pd.DataFrame, str] | None:
     """Map where the user clicks waypoints; returns the resulting track (points, name)."""
     c1, c2, c3 = st.columns([2, 1.1, 1.2], vertical_alignment="bottom")
@@ -1027,13 +1047,7 @@ def _draw_track() -> tuple[pd.DataFrame, str] | None:
             c1.caption(t("route.place_found", label=hits[0]["label"]))
         elif hits is not None:
             c1.caption(t("route.place_none"))
-    # On a phone one finger scrolls the page past the map; two fingers move and zoom it (and a tap adds a point)
-    m = folium.Map(location=center, zoom_start=zoom, control_scale=True, dragging=not is_phone(),
-                   tiles="CartoDB dark_matter" if is_dark() else "OpenStreetMap")
-    Draw(draw_options={"polyline": {"shapeOptions": {"color": SERIES[0], "weight": 4}, "metric": True},
-                       "polygon": False, "rectangle": False, "circle": False, "circlemarker": False, "marker": False},
-         edit_options={"edit": True, "remove": True}).add_to(m)
-    out = st_folium(m, key="draw_map", height=460, use_container_width=True, center=center, zoom=zoom,
+    out = st_folium(_draw_map(center, zoom, dark=is_dark(), phone=is_phone()), key="draw_map", height=460, use_container_width=True, center=center, zoom=zoom,
                     returned_objects=["all_drawings"])
     waypoints = waypoints_from_drawings((out or {}).get("all_drawings"))
     if is_phone():
@@ -1043,13 +1057,14 @@ def _draw_track() -> tuple[pd.DataFrame, str] | None:
         return None
     with st.spinner(t("route.draw_spinner")):
         try:
-            points, name, routed = _route(tuple(waypoints), activity, follow)
+            points, routed = _route(tuple(waypoints), activity, follow)
         except ValueError as exc:
             st.error(str(exc))
             return None
     if follow and not routed:
         st.warning(t("route.draw_straight"))
-    return points, name
+    # Named here, not in the cached _route, so the name follows a change of language
+    return points, drawn_name(activity, points["dist_km"].iloc[-1])
 
 
 def _map(track: Track, pts: pd.DataFrame, tz: str) -> None:

@@ -1234,6 +1234,7 @@ draw_phone = "On a phone, move and zoom the map with two fingers: one finger scr
 draw_info = "Pick the line tool (top left of the map), click your waypoints, then click the last point again to finish. The edit and bin tools below it let you move or delete the line."
 draw_spinner = "Building the route…"
 draw_straight = "The routing service did not answer: your points are joined by straight lines."
+drawn_name = "Drawn route ({activity}, {km} km)"
 colour_by = "Colour the route by"
 colour_Temperature = "Temperature"
 colour_Rain = "Rain"

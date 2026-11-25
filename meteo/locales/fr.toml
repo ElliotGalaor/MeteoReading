@@ -1238,6 +1238,7 @@ draw_phone = "Sur téléphone, déplacez et zoomez la carte à deux doigts : un 
 draw_info = "Choisissez l’outil ligne (en haut à gauche de la carte), cliquez vos points de passage, puis cliquez à nouveau le dernier point pour terminer. Les outils modifier et corbeille en dessous permettent de déplacer ou supprimer la ligne."
 draw_spinner = "Construction de l’itinéraire…"
 draw_straight = "Le service d’itinéraire n’a pas répondu : vos points sont reliés par des lignes droites."
+drawn_name = "Itinéraire tracé ({activity}, {km} km)"
 colour_by = "Colorer le trajet selon"
 colour_Temperature = "Température"
 colour_Rain = "Pluie"
