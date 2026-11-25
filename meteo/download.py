@@ -46,6 +46,9 @@ class Resource:
         return self.url.rsplit("/", 1)[-1]
 
 
+USER_AGENT = "meteo-analytics/1.0 (data analyst portfolio project)"
+
+
 def make_session() -> requests.Session:
     """HTTP session with exponential backoff on transient errors."""
     retry = Retry(
@@ -56,7 +59,7 @@ def make_session() -> requests.Session:
     )
     session = requests.Session()
     session.mount("https://", HTTPAdapter(max_retries=retry, pool_maxsize=16))
-    session.headers["User-Agent"] = "meteo-analytics/1.0 (data analyst portfolio project)"
+    session.headers["User-Agent"] = USER_AGENT
     return session
 
 
@@ -66,7 +69,7 @@ def quick_session() -> requests.Session:
     retry = Retry(total=1, backoff_factor=0.5, status_forcelist=(429, 500, 502, 503, 504), allowed_methods=("GET",))
     session = requests.Session()
     session.mount("https://", HTTPAdapter(max_retries=retry, pool_maxsize=16))
-    session.headers["User-Agent"] = "meteo-analytics/1.0 (data analyst portfolio project)"
+    session.headers["User-Agent"] = USER_AGENT
     return session
 
 

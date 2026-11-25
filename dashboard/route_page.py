@@ -5,6 +5,7 @@ import re
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, time, timedelta
+from urllib.parse import urlparse
 
 import folium
 import numpy as np
@@ -257,6 +258,7 @@ def _guess_activity(name: str) -> str:
     walk). Cycling when nothing says otherwise."""
     plain = unicodedata.normalize("NFKD", name.lower()).encode("ascii", "ignore").decode()
     words = set(re.findall(r"[a-z]+", plain))
+    words |= {w[:-1] for w in words if len(w) > 3 and w.endswith("s")}     # "sentiers" is a "sentier"
     if words & DRIVING_WORDS or "road trip" in plain:
         return "Driving"
     if words & WALKING_WORDS:
@@ -389,8 +391,11 @@ def page_route():
         guessed = geo["activity"]
     elif mode == "Draw on the map":
         guessed = st.session_state.get("draw_activity", "Cycling")
-    elif mode == LINK and link_activity:
-        guessed = link_activity
+    elif mode == LINK:
+        # The practice a Geotrek site publishes, else the name and the link's path ("…/les-sentiers-balises/…", #88);
+        # not its host, where "drive" would be Google Drive
+        link = st.session_state.get("route_link", "")
+        guessed = link_activity or _guess_activity(f"{track.name} {urlparse(link.strip()).path}")
     else:
         guessed = _guess_activity(track.name)
     guessed = st.session_state.get("route_link_activity", guessed)

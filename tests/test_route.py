@@ -370,3 +370,5 @@ def test_activity_is_guessed_from_whole_words(monkeypatch):
     assert _guess_activity("Morning run") == "Walking"
     assert _guess_activity("Road trip to Nice") == "Driving"
     assert _guess_activity("Lyon to Marseille by car") == "Driving"
+    assert _guess_activity("Two cars, one van") == "Driving"                                       # plurals too
+    assert _guess_activity("Rouge A/R /les-sentiers-balises/trace-rouge-gpx-et-carte/") == "Walking"  # a link (#88)
