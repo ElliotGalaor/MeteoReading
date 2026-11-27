@@ -4,8 +4,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from meteo import i18n
 from meteo.gps import cumulative_distance, resample_path
-from meteo.routing import parse_osrm, track_from_waypoints, waypoints_from_drawings
+from meteo.routing import drawn_name, parse_osrm, track_from_waypoints, waypoints_from_drawings
 
 WAYPOINTS = [(45.0, 5.0), (45.05, 5.0), (45.05, 5.05)]
 
@@ -78,6 +79,17 @@ def test_falls_back_to_straight_lines_when_routing_fails():
     track, routed = track_from_waypoints(WAYPOINTS, "Walking", True, session=FakeSession(routing_ok=False))
     assert not routed
     assert track.distance_km == pytest.approx(5.56 + 3.93, abs=0.1)   # the two straight legs
+
+
+def test_a_drawn_route_is_named_in_the_page_language():
+    assert drawn_name("Cycling", 7.71) == "Drawn route (cycling, 7.7 km)"
+    previous = i18n._provider
+    i18n.set_provider(lambda: "fr")
+    try:
+        assert drawn_name("Cycling", 7.71) == "Itinéraire tracé (vélo, 7,7 km)"
+        assert drawn_name("Walking", 12.0).startswith("Itinéraire tracé (marche, 12")
+    finally:
+        i18n.set_provider(previous)
 
 
 def test_needs_two_points():

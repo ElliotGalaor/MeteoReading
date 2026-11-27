@@ -182,9 +182,13 @@ Three ways to get a track:
 
 Then the tool:
 
-1. **reads the track** safely (`defusedxml`), from a file, a drawing or a **link** (a Geotrek route page, an
-   OpenStreetMap relation or GPS trace, a GPS file on data.gouv.fr: only these sites are fetched,
-   [meteo/links.py](meteo/links.py)); drops repeated points, computes distances, ascent and the direction of travel;
+1. **reads the track** safely (`defusedxml`), from a file, a drawing or a **link**: a GPS file, a web page that
+   offers one (a club's page, including the WordPress plugin WP Trip Summary), a Geotrek route page, an OpenStreetMap
+   relation or GPS trace ([meteo/links.py](meteo/links.py)). A link to any other site is fetched through a guard
+   against server-side request forgery: only public addresses (not the Cloud Run metadata server), the connection
+   pinned to the address checked, each redirect checked again, 20 MB at most
+   ([meteo/web_fetch.py](meteo/web_fetch.py)). Then it drops repeated points, computes distances, ascent and the
+   direction of travel;
 2. **times each point**: the recorded timestamps for a past activity, or an estimate for a planned trip from the
    departure and the speed on the flat ([meteo/route_timing.py](meteo/route_timing.py)): **Tobler's hiking rule**
    on foot, a **constant effort** on a bike (gravity, rolling resistance and air drag, so descents are faster and a
@@ -318,7 +322,8 @@ MeteoReading/
 │   ├── route_weather.py   # weather reading along a track
 │   ├── geotrek.py         # routes nearby, from the Geotrek APIs of parks and départements
 │   ├── osm_routes.py      # routes nearby from OpenStreetMap (Waymarked Trails), and their line
-│   ├── links.py           # a track from a link (Geotrek, OpenStreetMap, open-data files)
+│   ├── links.py           # a track from a link (any GPS file or page offering one, Geotrek, OSM)
+│   ├── web_fetch.py       # a page or file from any HTTPS site, private addresses refused
 │   ├── route_scores.py    # danger and comfort scores, advice
 │   ├── viz.py, palette.py # static charts
 │   ├── i18n.py, locales/  # the dashboard's two languages: en.toml and fr.toml, numbers and dates

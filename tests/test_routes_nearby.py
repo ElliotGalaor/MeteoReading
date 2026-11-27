@@ -5,8 +5,9 @@ import pandas as pd
 import pytest
 
 from meteo.gps import build_track, passage_times
-from meteo.links import tracks_from_link
+from meteo.links import track_file_name, tracks_from_link
 from meteo.osm_routes import mercator, nearby_relations, relation_track
+from meteo.web_fetch import Fetched
 
 
 class Resp:
@@ -108,22 +109,91 @@ def test_a_geotrek_link_gives_the_practice_the_site_publishes():
     assert tracks_from_link("https://www.openstreetmap.org/relation/7", session=LinkSession())[0].activity is None
 
 
+class Site:
+    """Any other site, as meteo.web_fetch would give it: answers by address, records the addresses asked."""
+
+    def __init__(self, answers: dict[str, Fetched]):
+        self.answers, self.calls = answers, []
+
+    def __call__(self, url, max_bytes=None):
+        self.calls.append(url)
+        if url not in self.answers:
+            raise RuntimeError("The site answered with an error (404)")
+        return self.answers[url]
+
+
+def page(url: str, body: str) -> Fetched:
+    return Fetched(url, body.encode(), "text/html")
+
+
+CLUB = "https://club.example/sentiers/trace-rouge/"
+AJAX = ("https://club.example/wp-admin/admin-ajax.php?action=abp01_download_track&abp01_nonce_download=37866299fd"
+        "&abp01_postId=29630")
+# The script WP Trip Summary writes in a WordPress page (amisdesaintevictoire.asso.fr, #88)
+WP_TRIP_SUMMARY = """<html><head><title>Tracé rouge &#8211; GPX et Carte</title></head><body><script>
+var abp01_imgBase = 'https://club.example/wp-content/plugins/wp-trip-summary/media/img';
+var abp01_ajaxUrl = 'https://club.example/wp-admin/admin-ajax.php';
+var abp01_ajaxGetTrackAction = 'abp01_get_track';
+var abp01_downloadTrackAction = 'abp01_download_track';
+var abp01_hasInfo = true;
+var abp01_hasTrack = true;
+var abp01_postId = '29630';
+var abp01_nonceGet = 'a4eb0b6176';
+var abp01_nonceDownload = '37866299fd';
+</script></body></html>"""
+
+
 def test_osm_and_open_data_links():
     assert tracks_from_link("https://www.openstreetmap.org/relation/7", session=LinkSession())[0].name == "Boucle du lac"
-    t = tracks_from_link("https://static.data.gouv.fr/resources/x/boucle.gpx", session=LinkSession())
+    url = "https://static.data.gouv.fr/resources/x/boucle.gpx"
+    t = tracks_from_link(url, fetcher=Site({url: Fetched(url, GPX, "application/octet-stream")}))
     assert len(t[0].points) == 5
 
 
-@pytest.mark.parametrize(("url", "message"), [
-    ("http://rando.ecrins-parcnational.fr/trek/1", "https://"),
-    ("https://example.com/route.gpx", "not accepted"),
-    ("https://static.data.gouv.fr/resources/x/data.csv", ".gpx, .kml or .geojson"),
-    ("https://rando.ecrins-parcnational.fr/fr/accueil", "does not point to a route"),
-    ("https://www.openstreetmap.org/node/1", "relation"),
+def test_a_wordpress_page_with_wp_trip_summary_gives_its_track():
+    site = Site({CLUB: page(CLUB, WP_TRIP_SUMMARY),
+                 AJAX: Fetched(AJAX, GPX.replace(b"<name>x</name>", b""), "application/gpx", "track-29630.gpx")})
+    tracks = tracks_from_link(CLUB, fetcher=site)
+    assert site.calls == [CLUB, AJAX]
+    assert [t.name for t in tracks] == ["Tracé rouge – GPX et Carte"]   # the file has no name: the page's title
+    assert len(tracks[0].points) == 5
+
+
+def test_a_page_links_its_files_on_its_own_site_only():
+    body = """<a href="/files/boucle.gpx">GPX</a> <a href="https://other.example/x.gpx">elsewhere</a>
+              <script>var t = {"kml": "https:\\/\\/www.club.example\\/f\\/loop.kml?v=2"};</script>
+              <a href="/files/dead.gpx">old</a> <input accept=".gpx,.kml"> <a href="/files/boucle.gpx">again</a>"""
+    gpx = "https://club.example/files/boucle.gpx"
+    site = Site({CLUB: page(CLUB, body), gpx: Fetched(gpx, GPX, "application/octet-stream")})
+    tracks = tracks_from_link(CLUB, fetcher=site)
+    assert site.calls == [CLUB, gpx, "https://www.club.example/f/loop.kml?v=2", "https://club.example/files/dead.gpx"]
+    assert [t.name for t in tracks] == ["x"]          # the dead link and the missing KML are skipped
+
+
+def test_the_file_type_comes_from_the_headers_or_the_first_bytes():
+    def name(**kw):
+        return track_file_name(Fetched(kw.pop("url", "https://s.example/download"), kw.pop("data", b"x"), **kw))
+
+    assert name(content_type="", filename="Boucle.GPX") == "Boucle.GPX"
+    assert name(url="https://s.example/a/route.kml", content_type="text/plain") == "route.kml"
+    assert name(content_type="application/vnd.google-earth.kml+xml") == "download.kml"
+    assert name(content_type="application/octet-stream", data=b"\xef\xbb\xbf <?xml version='1.0'?><gpx>") == "download.gpx"
+    assert name(content_type="", data=b'{"type": "FeatureCollection", "features": []}') == "download.geojson"
+    assert name(content_type="text/html", data=b"<gpx>") is None                        # a page, not a file
+    assert name(content_type="text/csv", data=b"lat,lon") is None
+
+
+@pytest.mark.parametrize(("url", "answers", "message"), [
+    ("http://rando.ecrins-parcnational.fr/trek/1", {}, "https://"),
+    ("https://rando.ecrins-parcnational.fr/fr/accueil", {}, "does not point to a route"),
+    ("https://www.openstreetmap.org/node/1", {}, "relation"),
+    (CLUB, {CLUB: page(CLUB, "<html><p>No map here</p></html>")}, "No GPS track found"),
+    ("https://s.example/data.csv", {"https://s.example/data.csv": Fetched("https://s.example/data.csv", b"a,b",
+                                                                          "text/csv")}, "No GPS track found"),
 ])
-def test_links_refused(url, message):
+def test_links_refused(url, answers, message):
     with pytest.raises(ValueError, match=message):
-        tracks_from_link(url, session=LinkSession())
+        tracks_from_link(url, session=LinkSession(), fetcher=Site(answers))
 
 
 # --- Multi-day plans ---------------------------------------------------------------------------------------------

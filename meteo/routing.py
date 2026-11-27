@@ -11,6 +11,7 @@ from __future__ import annotations
 import numpy as np
 
 from .download import make_session
+from .fmt import num
 from .gps import Track, build_track, resample_path
 from .i18n import t
 
@@ -84,6 +85,11 @@ def geocode(name: str, session=None, count: int = 5) -> list[dict]:
     return out
 
 
+def drawn_name(activity: str, km: float) -> str:
+    """Name of a route drawn on the map, in the page's language: "Drawn route (cycling, 7.7 km)"."""
+    return t("route.drawn_name", activity=t(f"activity.{activity}").lower(), km=num(km, 1))
+
+
 def track_from_waypoints(waypoints: list[tuple[float, float]], activity: str = "Cycling", follow_paths: bool = True,
                          name: str | None = None, session=None) -> tuple[Track, bool]:
     """Track through clicked waypoints. Returns (track, whether roads/paths were followed).
@@ -108,5 +114,5 @@ def track_from_waypoints(waypoints: list[tuple[float, float]], activity: str = "
         ele = [np.nan] * len(lat)
     rows = [(la, lo, e, None) for la, lo, e in zip(lat, lon, ele, strict=True)]
     track = build_track(rows, "route")
-    track.name = name or f"Drawn route ({activity.lower()}, {track.distance_km:.1f} km)"
+    track.name = name or drawn_name(activity, track.distance_km)
     return track, routed
